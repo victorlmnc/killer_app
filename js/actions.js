@@ -235,7 +235,7 @@
         var d = catalog.get(L.norm(w));
         return h('span', { class: 'tag tag-weapon' }, '🔪 ' + w + (d ? ' (' + d + ')' : ''));
       })));
-      if (p.address) body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, 'Adresse : '), p.address,
+      if (p.address) body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, 'Adresse : '), p.address, L.addressType(p.address_type) !== 'normale' ? ' (' + L.ADDRESS_TYPES.find(function (t) { return t.id === L.addressType(p.address_type); }).label.toLowerCase() + ')' : '',
         L.hasCoords(p) ? [' ', h('a', { class: 'linkish', href: '#/map?joueur=' + p.id, onclick: function () { api.close(); } }, 'Voir sur la carte')] : null));
       if (p.notes) body.appendChild(h('p', { class: 'prose notes' }, p.notes));
 
@@ -271,6 +271,7 @@
     ui.dialog({
       title: playerId ? 'Modifier la fiche' : 'Ajouter un joueur',
       render: function (body, api) {
+        var typeTouched = false;
         var f = {
           name: h('input', { type: 'text', value: p.name || '', placeholder: 'NOM Prénom', required: true }),
           year: ui.select([{ value: '', label: '—' }].concat((s.years || []).map(function (y) { return y.name; })), p.year || ''),
@@ -279,7 +280,9 @@
           option: h('input', { type: 'text', value: p.option || '' }), lang_group: h('input', { type: 'text', value: p.lang_group || '', placeholder: 'G2' }),
           weapons: h('input', { type: 'text', value: p.weapons || '', placeholder: 'Banane, Arrosoir' }),
           points: h('input', { type: 'number', min: '0', inputmode: 'numeric', value: String(p.points || 0) }),
-          address: h('input', { type: 'text', value: p.address || '', placeholder: 'ex. 12 rue Moyenne, Bourges', autocomplete: 'off' }),
+          address: h('input', { type: 'text', value: p.address || '', placeholder: 'ex. 12 rue Moyenne, Bourges', autocomplete: 'off',
+            oninput: function () { if (!typeTouched && !p.address) f.address_type.value = L.guessAddressType(f.address.value); } }),
+          address_type: ui.select(L.ADDRESS_TYPES.slice().reverse().map(function (t) { return { value: t.id, label: t.label }; }), L.addressType(p.address_type), { onchange: function () { typeTouched = true; } }),
           notes: h('textarea', { rows: '3', value: p.notes || '', placeholder: 'Habitudes sur le campus, clubs, qui peut le sauver…' })
         };
         body.appendChild(h('div', { class: 'stack' },
@@ -288,7 +291,8 @@
           h('div', { class: 'grid-2' }, ui.field('TD', f.td), ui.field('TP', f.tp)),
           h('div', { class: 'grid-2' }, ui.field('Option', f.option), ui.field('Groupe de langue', f.lang_group)),
           h('div', { class: 'grid-2' }, ui.field('Armes en main', f.weapons, 'Séparées par des virgules'), ui.field('Points', f.points)),
-          ui.field('Adresse', f.address, 'Avec la ville, pour que le point tombe au bon endroit sur la carte.'), ui.field('Notes', f.notes)));
+          ui.field('Adresse', f.address, 'Avec la ville, pour que le point tombe au bon endroit sur la carte.'),
+          ui.field('Type de logement', f.address_type, 'Décide de l\'icône et du calque sur la carte.'), ui.field('Notes', f.notes)));
         var actions = h('div', { class: 'actions' });
         if (playerId) actions.appendChild(h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
           ui.confirm({ title: 'Supprimer ' + p.name + ' ?', text: 'Sa fiche, sa photo, ses liens et son kill éventuel sont effacés.', action: 'Supprimer', danger: true })
@@ -321,7 +325,7 @@
         var area = h('textarea', { rows: '8', placeholder: 'Nom\tAnnée\tDépartement\tTD\tTP\nDUPONT Léa\t3A\tSTI\tTD1\tTP2', oninput: preview });
         var out = h('p', { class: 'muted' }), go = h('button', { type: 'button', class: 'btn btn-primary', disabled: true, onclick: run }, 'Importer');
         var parsed = { rows: [] };
-        body.appendChild(h('p', { class: 'prose' }, 'Sélectionne les lignes dans Excel, en-têtes compris, copie, puis colle ici. Colonnes reconnues : Nom, Année, Département, TD, TP, Option, Groupe langue, Adresse, Notes, Armes, Points.'));
+        body.appendChild(h('p', { class: 'prose' }, 'Sélectionne les lignes dans Excel, en-têtes compris, copie, puis colle ici. Colonnes reconnues : Nom, Année, Département, TD, TP, Option, Groupe langue, Adresse, Type (normale, coloc, immeuble, résidence), Notes, Armes, Points.'));
         body.appendChild(h('p', { class: 'prose' }, 'S\'il y a une colonne « Joue au Killer ? », seules les lignes à OUI sont importées : la base ne contient que des inscrits.'));
         body.appendChild(area); body.appendChild(out);
         body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, 'Annuler'), go));
@@ -336,7 +340,7 @@
           go.disabled = !rows.length;
         }
         function run() {
-          var rows = fresh().map(function (r) { return Object.assign({ year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', lat: null, lng: null, notes: '', weapons: '', points: 0, is_ally: false, photo_path: null }, r); });
+          var rows = fresh().map(function (r) { return Object.assign({ year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: null, lng: null, notes: '', weapons: '', points: 0, is_ally: false, photo_path: null }, r); });
           store.insertMany('players', rows); store.log(rows.length + ' joueurs importés');
           var toPlace = rows.filter(L.hasAddress).length;
           api.close(); ui.toast(rows.length + ' joueurs importés.' + (toPlace ? ' Ouvre l\'onglet Map pour localiser les ' + toPlace + ' adresses.' : ''));

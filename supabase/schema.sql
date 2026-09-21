@@ -10,7 +10,7 @@ create table if not exists public.allowed_emails (
 );
 
 insert into public.allowed_emails (email, role)
-values ('victor.lemanceau02@gmail.com', 'admin')          -- <<< À MODIFIER
+values ('ton.adresse@exemple.fr', 'admin')          -- <<< À MODIFIER
 on conflict (email) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -56,6 +56,7 @@ create table if not exists public.players (
   address     text default '',
   lat         double precision,
   lng         double precision,
+  address_type text not null default 'normale',
   notes       text default '',
   weapons     text default '',
   points      integer not null default 0,
@@ -72,6 +73,23 @@ do $$ begin
 end $$;
 alter table public.players add column if not exists lat double precision;
 alter table public.players add column if not exists lng double precision;
+alter table public.players add column if not exists address_type text not null default 'normale';
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'players_address_type_check') then
+    alter table public.players add constraint players_address_type_check check (address_type in ('normale', 'residence', 'coloc', 'immeuble'));
+  end if;
+end $$;
+
+-- Lieux stratégiques : des endroits, pas des personnes (RU, salle de sport, bar du jeudi…). Conservés d'une année sur l'autre.
+create table if not exists public.spots (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  note       text default '',
+  address    text default '',
+  lat        double precision,
+  lng        double precision,
+  created_at timestamptz not null default now()
+);
 
 create table if not exists public.rounds (
   id         uuid primary key default gen_random_uuid(),
@@ -131,7 +149,7 @@ create table if not exists public.events (
 do $$
 declare t text;
 begin
-  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'settings', 'events'] loop
+  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'settings', 'events', 'spots'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "membres" on public.%I', t);
     execute format('create policy "membres" on public.%I for all to authenticated using (public.is_member()) with check (public.is_member())', t);
@@ -166,7 +184,7 @@ create policy "photos suppression" on storage.objects for delete to authenticate
 do $$
 declare t text;
 begin
-  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'settings', 'events', 'allowed_emails'] loop
+  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'settings', 'events', 'spots', 'allowed_emails'] loop
     if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
       execute format('alter publication supabase_realtime add table public.%I', t);
     end if;

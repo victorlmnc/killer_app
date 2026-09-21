@@ -69,6 +69,14 @@ L'onglet **Map** affiche un point par joueur qui a une adresse ; les joueurs san
 partagent une résidence sont regroupés sous un même point (le chiffre indique combien). Toucher un point donne le nom,
 l'adresse et un bouton vers la fiche. Filtres : tous, vivants, cibles de l'alliance, killers de l'alliance.
 
+- **Calques**, comme sur uMap : adresses normales, colocs, immeubles, résidences étudiantes, lieux stratégiques. Chacun a son
+  pictogramme et s'affiche ou se masque d'un toucher ; le choix est retenu sur l'appareil. Le type de logement se règle sur la
+  fiche du joueur (ou via une colonne « Type » à l'import) ; une adresse contenant « résidence » est classée toute seule.
+- **Lieux stratégiques** : des endroits, pas des personnes (RU, salle de sport, arrêt de bus…). « Ajouter un lieu stratégique »,
+  puis une adresse ou un toucher sur la carte. Ils survivent à l'effacement de fin de partie.
+- **Lignes de bus** : lance une fois `python3 tools/build_bus.py` à la racine du dépôt, puis pousse `data/bus.js`. Le script
+  télécharge le GTFS officiel AggloBus (transport.data.gouv.fr, licence ODbL) et en tire les tracés, les couleurs officielles
+  et les arrêts. Chaque ligne s'affiche ou se masque séparément. À relancer quand le réseau change, en général à la rentrée.
 - Quand on saisit ou modifie une adresse sur une fiche, elle est localisée automatiquement. Après un import, le bouton
   « Localiser ces adresses » de l'onglet Map traite tout le lot.
 - Une adresse introuvable (résidence sans numéro, faute de frappe) se corrige sur la fiche, ou se place à la main :
@@ -91,7 +99,8 @@ js/ui.js              petits helpers d'interface (dialogues, toasts, avatars)
 js/geo.js             géocodage des adresses, chargement de Leaflet
 js/actions.js         lier, kill, reroll, fiche joueur, import
 js/views/*.js         une vue par onglet
-supabase/schema.sql   tables, RLS, bucket photos, temps réel
+supabase/schema.sql   tables, RLS, bucket photos, temps réel (relançable : il migre une base existante)
+tools/build_bus.py    GTFS AggloBus -> data/bus.js (calque des lignes de bus)
 tests/logic.test.js   node tests/logic.test.js
 ```
 

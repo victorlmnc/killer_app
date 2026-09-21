@@ -58,6 +58,20 @@
     return next();
   };
 
+  /* Calque bus : data/bus.js est fabriqué par tools/build_bus.py. Absent → null, la carte marche sans. */
+  var bus;
+  geo.loadBus = function () {
+    if (window.KILLER_BUS) return Promise.resolve(window.KILLER_BUS);
+    if (bus) return bus;
+    bus = new Promise(function (resolve) {
+      var js = document.createElement('script'); js.src = 'data/bus.js';
+      js.onload = function () { resolve(window.KILLER_BUS || null); };
+      js.onerror = function () { resolve(null); };
+      document.head.appendChild(js);
+    });
+    return bus;
+  };
+
   var leaflet = null;
   geo.loadLeaflet = function () {
     if (window.L && window.L.map) return Promise.resolve(window.L);

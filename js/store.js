@@ -4,14 +4,14 @@
 (function () {
   'use strict';
   var K = (window.K = window.K || {});
-  var TABLES = ['players', 'rounds', 'links', 'kills', 'weapons', 'events'];
-  var LOCAL_KEY = 'killer-qg-local-v2'; // v2 : adresses + coordonnées
+  var TABLES = ['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots'];
+  var LOCAL_KEY = 'killer-qg-local-v3'; // v3 : types de logement + lieux stratégiques
   var PHOTO_BUCKET = 'photos';
 
   var listeners = [];
   var store = K.store = {
     mode: 'local',
-    state: { players: [], rounds: [], links: [], kills: [], weapons: [], events: [], settings: {}, members: [] },
+    state: { players: [], rounds: [], links: [], kills: [], weapons: [], events: [], spots: [], settings: {}, members: [] },
     user: null, isMember: false, isAdmin: false,
     on: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
     emit: function () { listeners.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } }); }

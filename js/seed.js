@@ -171,10 +171,11 @@
     var years = ['2A', '3A', '4A', '5A'], depts = ['MRI', 'STI'], streets = ['rue Moyenne', 'avenue de Dun', 'rue de Turly', 'boulevard Lahitolle', 'rue Jean Baffier', 'avenue Ernest Renan', 'rue Barbès', 'rue d\'Auron'];
     // Adresses inventées pour des personnages de roman ; deux résidences partagées pour montrer le regroupement des points.
     function home(i) {
-      if (i % 5 === 4) return { address: '', lat: null, lng: null };
-      if (i % 7 === 3) return { address: 'Résidence des Tanneurs, Bourges', lat: 47.08712, lng: 2.39105 };
-      if (i % 9 === 5) return { address: 'Résidence du Lac, Bourges', lat: 47.06655, lng: 2.41240 };
-      var a = { address: (3 + (i * 7) % 90) + ' ' + streets[i % streets.length] + ', Bourges' };
+      if (i % 5 === 4) return { address: '', lat: null, lng: null, address_type: 'normale' };
+      if (i % 7 === 3) return { address: 'Résidence des Tanneurs, Bourges', lat: 47.08712, lng: 2.39105, address_type: 'residence' };
+      if (i % 9 === 5) return { address: 'Résidence du Lac, Bourges', lat: 47.06655, lng: 2.41240, address_type: 'residence' };
+      if (i % 8 === 0) return { address: '14 rue Barbès, Bourges', lat: 47.07410, lng: 2.39520, address_type: 'coloc' };
+      var a = { address: (3 + (i * 7) % 90) + ' ' + streets[i % streets.length] + ', Bourges', address_type: i % 6 === 1 ? 'immeuble' : 'normale' };
       if (i % 11 === 6) { a.lat = null; a.lng = null; return a; } // pas encore localisée
       a.lat = +(47.0833 + Math.sin(i * 2.4) * 0.016).toFixed(5); a.lng = +(2.4 + Math.cos(i * 1.7) * 0.026).toFixed(5);
       return a;
@@ -182,7 +183,7 @@
     var players = CAST.map(function (name, i) {
       var y = years[i % 4];
       var hm = home(i);
-      return { id: uid(), name: name, address: hm.address, lat: hm.lat, lng: hm.lng, year: y, dept: depts[(i >> 1) % 2], td: 'TD' + (1 + (i % 3)), tp: y === '5A' ? '' : 'TP' + (1 + (i % 5)),
+      return { id: uid(), name: name, address: hm.address, address_type: hm.address_type, lat: hm.lat, lng: hm.lng, year: y, dept: depts[(i >> 1) % 2], td: 'TD' + (1 + (i % 3)), tp: y === '5A' ? '' : 'TP' + (1 + (i % 5)),
         option: '', lang_group: 'G' + (1 + (i % 6)), notes: '', weapons: '', points: 0,
         is_ally: i === 7 || i === 8 || i === 10 || i === 12, photo_path: null };
     });
@@ -217,6 +218,8 @@
     var settings = JSON.parse(JSON.stringify(K.seed.settings));
     settings.game_name = 'Killer (démo)'; settings.official_players = 48;
     return { players: players, rounds: [r0, r1], links: links, kills: kills, events: events, settings: settings,
+      spots: [{ id: uid(), name: 'Entrée du campus', note: 'Passage obligé entre deux cours.', address: '', lat: 47.0822, lng: 2.4163 },
+        { id: uid(), name: 'Resto U', note: 'Tout le monde y passe entre 12 h et 13 h.', address: '', lat: 47.0809, lng: 2.4149 }],
       weapons: WEAPONS.map(function (w) { return { id: uid(), name: w[0], difficulty: w[1] }; }), members: [] };
   };
 })();

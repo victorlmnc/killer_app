@@ -86,4 +86,12 @@ t('carte : sans adresse ou sans coordonnées on est ignoré, même point = un se
   assert.deepEqual(pl[0].players.map(p => p.name), ['A', 'B']); assert.equal(pl[1].players[0].id, 'e');
   assert.equal(L.parseImport('Nom\tAdresse\nDUPONT Léa\t12 rue Moyenne, Bourges').rows[0].address, '12 rue Moyenne, Bourges');
 });
+t('carte : types de logement, le point partagé prend le type le plus collectif, import du type', () => {
+  const ps = [{ id: 'a', name: 'A', address: 'x', address_type: 'coloc', lat: 1, lng: 1 }, { id: 'b', name: 'B', address: 'x', address_type: 'immeuble', lat: 1, lng: 1 },
+    { id: 'c', name: 'C', address: 'y', lat: 2, lng: 2 }];
+  const pl = L.places(ps); assert.equal(pl[0].type, 'immeuble'); assert.equal(pl[1].type, 'normale');
+  assert.equal(L.addressType('Résidences étudiantes'), 'residence'); assert.equal(L.addressType('COLOC'), 'coloc'); assert.equal(L.addressType('n importe quoi'), 'normale');
+  const r = L.parseImport('Nom\tAdresse\tType\nA\t3 rue X\tColoc\nB\tRésidence du Lac\t\nC\t\tImmeuble').rows;
+  assert.deepEqual(r.map(x => x.address_type), ['coloc', 'residence', undefined]);
+});
 console.log(`\n${n} tests OK`);

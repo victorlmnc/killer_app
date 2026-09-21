@@ -234,6 +234,7 @@
     [/^(nom|joueur|nomprenom|nometprenom)$/, 'name'], [/^(annee|promo)$/, 'year'],
     [/^(departement|dept|dep|filiere)$/, 'dept'], [/^td$/, 'td'], [/^tp$/, 'tp'], [/^option$/, 'option'],
     [/^(groupelangue|langue|groupedelangue)$/, 'lang_group'], [/^(adresse|adressepostale|secteur|lieu|residence)$/, 'address'],
+    [/^(type|typedelogement|typedadresse|typeadresse|logement|categorie)$/, 'address_type'],
     [/^(informationscomplementaires|infos|notes|informations)$/, 'notes'], [/^armes?$/, 'weapons'],
     [/^points?$/, 'points'], [/^(joueaukiller|joue|inscrit)$/, 'plays']
   ];
@@ -257,6 +258,7 @@
       // Seules les personnes inscrites au jeu entrent dans la base.
       if (head.indexOf('plays') >= 0 && norm(row.plays) !== 'oui') { skipped++; return; }
       delete row.plays;
+      if (row.address) row.address_type = row.address_type ? addressType(row.address_type) : guessAddressType(row.address); else delete row.address_type;
       if (row.points != null) { var n = parseInt(row.points, 10); row.points = isFinite(n) && n >= 0 && n < 1000 ? n : 0; }
       rows.push(row);
     });
@@ -264,23 +266,41 @@
   }
 
   /* ---------- Carte ---------- */
+  // Types de logement, du plus « collectif » au plus simple : un point partagé prend le type le plus collectif.
+  var ADDRESS_TYPES = [
+    { id: 'residence', label: 'Résidence étudiante', plural: 'Résidences étudiantes' },
+    { id: 'immeuble', label: 'Immeuble', plural: 'Immeubles' },
+    { id: 'coloc', label: 'Coloc', plural: 'Colocs' },
+    { id: 'normale', label: 'Adresse normale', plural: 'Adresses normales' }
+  ];
+  function addressType(v) {
+    var n = norm(v);
+    if (/^(residence|res|crous|residenceetudiante|residencesetudiantes)/.test(n)) return 'residence';
+    if (/^(immeuble|immeubles|appartement|appart)/.test(n)) return 'immeuble';
+    if (/^(coloc|colocs|colocation)/.test(n)) return 'coloc';
+    return 'normale';
+  }
+  function guessAddressType(address) { return /r[ée]sidence|crous/i.test(String(address || '')) ? 'residence' : 'normale'; }
   function hasCoords(p) { return !!p && typeof p.lat === 'number' && typeof p.lng === 'number' && isFinite(p.lat) && isFinite(p.lng); }
   function hasAddress(p) { return !!p && String(p.address || '').trim() !== ''; }
   /* Joueurs à afficher : une adresse ET des coordonnées. Les colocataires et voisins de résidence partagent un même point. */
+  function typeRank(id) { for (var i = 0; i < ADDRESS_TYPES.length; i++) if (ADDRESS_TYPES[i].id === id) return i; return ADDRESS_TYPES.length; }
   function places(players) {
     var byKey = new Map();
     players.forEach(function (p) {
       if (!hasAddress(p) || !hasCoords(p)) return;
       var key = p.lat.toFixed(5) + ',' + p.lng.toFixed(5);
-      if (!byKey.has(key)) byKey.set(key, { key: key, lat: p.lat, lng: p.lng, players: [] });
-      byKey.get(key).players.push(p);
+      if (!byKey.has(key)) byKey.set(key, { key: key, lat: p.lat, lng: p.lng, players: [], type: 'normale' });
+      var pl = byKey.get(key), t = addressType(p.address_type);
+      pl.players.push(p);
+      if (typeRank(t) < typeRank(pl.type)) pl.type = t;
     });
     var out = []; byKey.forEach(function (v) { v.players.sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', 'fr'); }); out.push(v); });
     return out;
   }
 
   return {
-    hasCoords: hasCoords, hasAddress: hasAddress, places: places,
+    hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
     planSetTarget: planSetTarget, killPoints: killPoints, weaponList: weaponList, rankLabel: rankLabel,
