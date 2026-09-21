@@ -5,7 +5,7 @@
   'use strict';
   var K = (window.K = window.K || {});
   var TABLES = ['players', 'rounds', 'links', 'kills', 'weapons', 'events'];
-  var LOCAL_KEY = 'killer-qg-local-v1';
+  var LOCAL_KEY = 'killer-qg-local-v2'; // v2 : adresses + coordonnées
   var PHOTO_BUCKET = 'photos';
 
   var listeners = [];
@@ -37,6 +37,7 @@
       var saved = null;
       try { saved = JSON.parse(localStorage.getItem(LOCAL_KEY)); } catch (e) { /* stockage indisponible */ }
       var data = saved && saved.players ? saved : K.seed.demo();
+      data.players.forEach(function (p) { if (p.sector != null) { if (!p.address) p.address = p.sector; delete p.sector; } }); // ancien nom du champ
       TABLES.concat(['members']).forEach(function (t) { store.state[t] = data[t] || []; });
       store.state.settings = withDefaults(data.settings);
       store.user = { email: 'demo@local' }; store.isMember = true; store.isAdmin = true;

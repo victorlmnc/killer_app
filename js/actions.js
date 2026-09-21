@@ -235,7 +235,8 @@
         var d = catalog.get(L.norm(w));
         return h('span', { class: 'tag tag-weapon' }, '🔪 ' + w + (d ? ' (' + d + ')' : ''));
       })));
-      if (p.sector) body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, 'Secteur : '), p.sector));
+      if (p.address) body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, 'Adresse : '), p.address,
+        L.hasCoords(p) ? [' ', h('a', { class: 'linkish', href: '#/map?joueur=' + p.id, onclick: function () { api.close(); } }, 'Voir sur la carte')] : null));
       if (p.notes) body.appendChild(h('p', { class: 'prose notes' }, p.notes));
 
       var mine = st.kills.filter(function (k) { return k.killer_id === p.id; });
@@ -278,7 +279,7 @@
           option: h('input', { type: 'text', value: p.option || '' }), lang_group: h('input', { type: 'text', value: p.lang_group || '', placeholder: 'G2' }),
           weapons: h('input', { type: 'text', value: p.weapons || '', placeholder: 'Banane, Arrosoir' }),
           points: h('input', { type: 'number', min: '0', inputmode: 'numeric', value: String(p.points || 0) }),
-          sector: h('input', { type: 'text', value: p.sector || '', placeholder: 'ex. Résidence Student, quartier gare' }),
+          address: h('input', { type: 'text', value: p.address || '', placeholder: 'ex. 12 rue Moyenne, Bourges', autocomplete: 'off' }),
           notes: h('textarea', { rows: '3', value: p.notes || '', placeholder: 'Habitudes sur le campus, clubs, qui peut le sauver…' })
         };
         body.appendChild(h('div', { class: 'stack' },
@@ -287,7 +288,7 @@
           h('div', { class: 'grid-2' }, ui.field('TD', f.td), ui.field('TP', f.tp)),
           h('div', { class: 'grid-2' }, ui.field('Option', f.option), ui.field('Groupe de langue', f.lang_group)),
           h('div', { class: 'grid-2' }, ui.field('Armes en main', f.weapons, 'Séparées par des virgules'), ui.field('Points', f.points)),
-          ui.field('Secteur', f.sector), ui.field('Notes', f.notes)));
+          ui.field('Adresse', f.address, 'Avec la ville, pour que le point tombe au bon endroit sur la carte.'), ui.field('Notes', f.notes)));
         var actions = h('div', { class: 'actions' });
         if (playerId) actions.appendChild(h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
           ui.confirm({ title: 'Supprimer ' + p.name + ' ?', text: 'Sa fiche, sa photo, ses liens et son kill éventuel sont effacés.', action: 'Supprimer', danger: true })
@@ -298,7 +299,13 @@
           var row = {}; Object.keys(f).forEach(function (k) { row[k] = f[k].value.trim(); });
           if (!row.name) { f.name.focus(); return ui.toast('Il faut au moins un nom.', 'error'); }
           row.points = Math.max(0, parseInt(row.points, 10) || 0);
-          if (playerId) store.update('players', playerId, row); else store.insert('players', Object.assign({ is_ally: false, photo_path: null }, row));
+          var moved = (p.address || '') !== row.address;
+          if (moved) { row.lat = null; row.lng = null; }
+          var saved = playerId ? store.update('players', playerId, row).then(function () { return playerId; })
+            : store.insert('players', Object.assign({ is_ally: false, photo_path: null, lat: null, lng: null }, row)).then(function (r) { return r.id; });
+          if (moved && row.address) saved.then(function (id) { return K.geo.locatePlayer(id); }).then(function (hit) {
+            if (!hit) ui.toast('Adresse introuvable : tu peux placer le point à la main depuis l\'onglet Map.', 'error');
+          });
           api.close(); ui.toast(playerId ? 'Fiche enregistrée.' : row.name + ' ajouté.');
         } }, playerId ? 'Enregistrer' : 'Ajouter le joueur'));
         body.appendChild(actions);
@@ -314,7 +321,7 @@
         var area = h('textarea', { rows: '8', placeholder: 'Nom\tAnnée\tDépartement\tTD\tTP\nDUPONT Léa\t3A\tSTI\tTD1\tTP2', oninput: preview });
         var out = h('p', { class: 'muted' }), go = h('button', { type: 'button', class: 'btn btn-primary', disabled: true, onclick: run }, 'Importer');
         var parsed = { rows: [] };
-        body.appendChild(h('p', { class: 'prose' }, 'Sélectionne les lignes dans Excel, en-têtes compris, copie, puis colle ici. Colonnes reconnues : Nom, Année, Département, TD, TP, Option, Groupe langue, Secteur, Notes, Armes, Points.'));
+        body.appendChild(h('p', { class: 'prose' }, 'Sélectionne les lignes dans Excel, en-têtes compris, copie, puis colle ici. Colonnes reconnues : Nom, Année, Département, TD, TP, Option, Groupe langue, Adresse, Notes, Armes, Points.'));
         body.appendChild(h('p', { class: 'prose' }, 'S\'il y a une colonne « Joue au Killer ? », seules les lignes à OUI sont importées : la base ne contient que des inscrits.'));
         body.appendChild(area); body.appendChild(out);
         body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, 'Annuler'), go));
@@ -329,9 +336,10 @@
           go.disabled = !rows.length;
         }
         function run() {
-          var rows = fresh().map(function (r) { return Object.assign({ year: '', dept: '', td: '', tp: '', option: '', lang_group: '', sector: '', notes: '', weapons: '', points: 0, is_ally: false, photo_path: null }, r); });
+          var rows = fresh().map(function (r) { return Object.assign({ year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', lat: null, lng: null, notes: '', weapons: '', points: 0, is_ally: false, photo_path: null }, r); });
           store.insertMany('players', rows); store.log(rows.length + ' joueurs importés');
-          api.close(); ui.toast(rows.length + ' joueurs importés.');
+          var toPlace = rows.filter(L.hasAddress).length;
+          api.close(); ui.toast(rows.length + ' joueurs importés.' + (toPlace ? ' Ouvre l\'onglet Map pour localiser les ' + toPlace + ' adresses.' : ''));
         }
       }
     });

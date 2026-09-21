@@ -1,7 +1,7 @@
 # QG Killer
 
 Le tableur de l'alliance, en version web : un dashboard, la chaîne qui se met à jour toute seule,
-les fiches joueurs avec photo, les armes, le shop, les classes. Pensé pour le téléphone, partagé en temps réel.
+les fiches joueurs avec photo, la carte des adresses, les armes, le shop, les classes. Pensé pour le téléphone, partagé en temps réel.
 
 Site 100 % statique (HTML, CSS, JS sans étape de build) + Supabase pour la base, le login et les photos.
 
@@ -56,12 +56,27 @@ Tout le reste est calculé :
 ## Ce qui entre dans la base
 
 La base contient les **inscrits au jeu**, pas l'annuaire de l'école : l'import ignore les lignes dont la colonne
-« Joue au Killer ? » n'est pas à OUI. Le champ « Secteur » est fait pour une zone (résidence, quartier), pas pour un numéro d'appartement.
+« Joue au Killer ? » n'est pas à OUI.
 Les photos sont recadrées et recompressées dans le navigateur avant envoi (les métadonnées EXIF, dont le GPS, disparaissent),
 stockées dans un bucket privé et affichées via des liens signés d'une heure.
 
 **Paramètres > Fin de partie > Effacer la partie** supprime fiches, photos, chaînes, kills et journal pour tout le monde.
 À faire le jour où le jeu se termine ; le catalogue d'armes, le shop et les réglages restent pour l'année suivante.
+
+## La carte
+
+L'onglet **Map** affiche un point par joueur qui a une adresse ; les joueurs sans adresse n'y figurent pas, et ceux qui
+partagent une résidence sont regroupés sous un même point (le chiffre indique combien). Toucher un point donne le nom,
+l'adresse et un bouton vers la fiche. Filtres : tous, vivants, cibles de l'alliance, killers de l'alliance.
+
+- Quand on saisit ou modifie une adresse sur une fiche, elle est localisée automatiquement. Après un import, le bouton
+  « Localiser ces adresses » de l'onglet Map traite tout le lot.
+- Une adresse introuvable (résidence sans numéro, faute de frappe) se corrige sur la fiche, ou se place à la main :
+  « Placer sur la carte », puis un toucher à l'endroit voulu.
+- Le géocodage passe par le service public de la Géoplateforme IGN (`data.geopf.fr`, successeur de l'API Adresse).
+  Seul le texte de l'adresse lui est envoyé, jamais le nom du joueur. Le fond de carte vient d'OpenStreetMap, et Leaflet
+  est chargé depuis cdnjs à l'ouverture de l'onglet.
+- Pour une autre ville, change `map_center` dans `js/seed.js` (centre de la carte et priorité du géocodage).
 
 ## Code
 
@@ -73,6 +88,7 @@ js/seed.js            armes, shop, barème, partie fictive de démo
 js/logic.js           logique pure : chaîne dérivée, fragments, stats, import
 js/store.js           données : adaptateur Supabase + adaptateur local, temps réel, photos
 js/ui.js              petits helpers d'interface (dialogues, toasts, avatars)
+js/geo.js             géocodage des adresses, chargement de Leaflet
 js/actions.js         lier, kill, reroll, fiche joueur, import
 js/views/*.js         une vue par onglet
 supabase/schema.sql   tables, RLS, bucket photos, temps réel

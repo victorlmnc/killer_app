@@ -150,6 +150,7 @@
       official_players: 0,
       years: [{ name: '2A', color: '#5B9BD5' }, { name: '3A', color: '#6FAE5A' }, { name: '4A', color: '#D9A520' }, { name: '5A', color: '#D9605F' }],
       depts: ['MRI', 'STI', 'ERE'],
+      map_center: { lat: 47.0833, lng: 2.4 }, // Bourges : centre de la carte et priorité du géocodage
       links: [{ label: 'Règles du jeu', url: 'https://killer-insa.github.io/public/regles/index.html' }],
       shop: SHOP,
       point_rules: POINT_RULES
@@ -167,11 +168,22 @@
 
   K.seed.demo = function () {
     var n = 0, uid = function () { return 'demo-' + (++n); };
-    var years = ['2A', '3A', '4A', '5A'], depts = ['MRI', 'STI'], sectors = ['Résidence Student', 'Centre-ville', 'Quartier gare', 'Val d\'Auron', 'Résidence Amaryllis', ''];
+    var years = ['2A', '3A', '4A', '5A'], depts = ['MRI', 'STI'], streets = ['rue Moyenne', 'avenue de Dun', 'rue de Turly', 'boulevard Lahitolle', 'rue Jean Baffier', 'avenue Ernest Renan', 'rue Barbès', 'rue d\'Auron'];
+    // Adresses inventées pour des personnages de roman ; deux résidences partagées pour montrer le regroupement des points.
+    function home(i) {
+      if (i % 5 === 4) return { address: '', lat: null, lng: null };
+      if (i % 7 === 3) return { address: 'Résidence des Tanneurs, Bourges', lat: 47.08712, lng: 2.39105 };
+      if (i % 9 === 5) return { address: 'Résidence du Lac, Bourges', lat: 47.06655, lng: 2.41240 };
+      var a = { address: (3 + (i * 7) % 90) + ' ' + streets[i % streets.length] + ', Bourges' };
+      if (i % 11 === 6) { a.lat = null; a.lng = null; return a; } // pas encore localisée
+      a.lat = +(47.0833 + Math.sin(i * 2.4) * 0.016).toFixed(5); a.lng = +(2.4 + Math.cos(i * 1.7) * 0.026).toFixed(5);
+      return a;
+    }
     var players = CAST.map(function (name, i) {
       var y = years[i % 4];
-      return { id: uid(), name: name, year: y, dept: depts[(i >> 1) % 2], td: 'TD' + (1 + (i % 3)), tp: y === '5A' ? '' : 'TP' + (1 + (i % 5)),
-        option: '', lang_group: 'G' + (1 + (i % 6)), sector: sectors[i % sectors.length], notes: '', weapons: '', points: 0,
+      var hm = home(i);
+      return { id: uid(), name: name, address: hm.address, lat: hm.lat, lng: hm.lng, year: y, dept: depts[(i >> 1) % 2], td: 'TD' + (1 + (i % 3)), tp: y === '5A' ? '' : 'TP' + (1 + (i % 5)),
+        option: '', lang_group: 'G' + (1 + (i % 6)), notes: '', weapons: '', points: 0,
         is_ally: i === 7 || i === 8 || i === 10 || i === 12, photo_path: null };
     });
     var easy = WEAPONS.filter(function (w) { return w[1] === 'facile'; }), hard = WEAPONS.filter(function (w) { return w[1] === 'difficile'; });

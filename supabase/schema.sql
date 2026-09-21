@@ -53,7 +53,9 @@ create table if not exists public.players (
   tp          text default '',
   option      text default '',
   lang_group  text default '',
-  sector      text default '',
+  address     text default '',
+  lat         double precision,
+  lng         double precision,
   notes       text default '',
   weapons     text default '',
   points      integer not null default 0,
@@ -61,6 +63,15 @@ create table if not exists public.players (
   photo_path  text,
   created_at  timestamptz not null default now()
 );
+
+-- Migration depuis la première version du schéma (champ « secteur », pas de coordonnées)
+do $$ begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'players' and column_name = 'sector') then
+    alter table public.players rename column sector to address;
+  end if;
+end $$;
+alter table public.players add column if not exists lat double precision;
+alter table public.players add column if not exists lng double precision;
 
 create table if not exists public.rounds (
   id         uuid primary key default gen_random_uuid(),

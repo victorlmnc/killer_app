@@ -79,4 +79,11 @@ t("import : collage Excel, seuls les inscrits sont gardés", () => {
   const csv = L.parseImport('Nom;Année\n"LE GALL; Yann";5A'); assert.equal(csv.rows[0].name, 'LE GALL; Yann');
   assert.equal(L.parseImport('VALJEAN Jean\nJAVERT Paul').rows.length, 2);
 });
+t('carte : sans adresse ou sans coordonnées on est ignoré, même point = un seul repère', () => {
+  const ps = [{ id: 'a', name: 'B', address: 'Résidence X', lat: 47.1, lng: 2.4 }, { id: 'b', name: 'A', address: 'Résidence X', lat: 47.1, lng: 2.4 },
+    { id: 'c', name: 'C', address: '', lat: 47.2, lng: 2.5 }, { id: 'd', name: 'D', address: '3 rue Y', lat: null, lng: null }, { id: 'e', name: 'E', address: '5 rue Z', lat: 47.3, lng: 2.6 }];
+  const pl = L.places(ps); assert.equal(pl.length, 2);
+  assert.deepEqual(pl[0].players.map(p => p.name), ['A', 'B']); assert.equal(pl[1].players[0].id, 'e');
+  assert.equal(L.parseImport('Nom\tAdresse\nDUPONT Léa\t12 rue Moyenne, Bourges').rows[0].address, '12 rue Moyenne, Bourges');
+});
 console.log(`\n${n} tests OK`);

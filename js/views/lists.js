@@ -9,7 +9,7 @@
     render: function (root) {
       var view = { q: '', list: 'vivants', year: '', dept: '', sort: 'nom' };
       var LISTS = [['tous', 'Tous'], ['vivants', 'Vivants'], ['morts', 'Morts'], ['allies', 'Alliance'], ['sanscible', 'Cible inconnue'], ['armes', 'Armes connues']];
-      var search = h('input', { type: 'search', placeholder: 'Chercher un nom, une note, un secteur', 'aria-label': 'Chercher un joueur', oninput: function (e) { view.q = e.target.value; paint(); } });
+      var search = h('input', { type: 'search', placeholder: 'Chercher un nom, une note, une adresse', 'aria-label': 'Chercher un joueur', oninput: function (e) { view.q = e.target.value; paint(); } });
       var chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Liste affichée' }), filters = h('div', { class: 'toolbar' }), count = h('p', { class: 'muted small' }), list = h('div', { class: 'list' });
       root.appendChild(h('div', { class: 'toolbar' }, search,
         h('button', { type: 'button', class: 'btn', onclick: K.actions.importDialog }, 'Importer'),
@@ -43,7 +43,7 @@
           if (view.list === 'armes' && (d || !p.weapons)) return false;
           if (view.year && p.year !== view.year) return false;
           if (view.dept && p.dept !== view.dept) return false;
-          return !q || L.norm([p.name, p.notes, p.sector, p.weapons, p.option].join(' ')).indexOf(q) >= 0;
+          return !q || L.norm([p.name, p.notes, p.address, p.weapons, p.option].join(' ')).indexOf(q) >= 0;
         });
         var by = { nom: function (a, b) { return 0; }, points: function (a, b) { return (b.points || 0) - (a.points || 0); },
           kills: function (a, b) { return (kills.get(b.id) || 0) - (kills.get(a.id) || 0); },

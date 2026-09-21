@@ -233,7 +233,7 @@
   var HEADER_MAP = [
     [/^(nom|joueur|nomprenom|nometprenom)$/, 'name'], [/^(annee|promo)$/, 'year'],
     [/^(departement|dept|dep|filiere)$/, 'dept'], [/^td$/, 'td'], [/^tp$/, 'tp'], [/^option$/, 'option'],
-    [/^(groupelangue|langue|groupedelangue)$/, 'lang_group'], [/^(secteur|adresse|lieu|residence)$/, 'sector'],
+    [/^(groupelangue|langue|groupedelangue)$/, 'lang_group'], [/^(adresse|adressepostale|secteur|lieu|residence)$/, 'address'],
     [/^(informationscomplementaires|infos|notes|informations)$/, 'notes'], [/^armes?$/, 'weapons'],
     [/^points?$/, 'points'], [/^(joueaukiller|joue|inscrit)$/, 'plays']
   ];
@@ -263,7 +263,24 @@
     return { rows: rows, skipped: skipped, columns: head.filter(Boolean) };
   }
 
+  /* ---------- Carte ---------- */
+  function hasCoords(p) { return !!p && typeof p.lat === 'number' && typeof p.lng === 'number' && isFinite(p.lat) && isFinite(p.lng); }
+  function hasAddress(p) { return !!p && String(p.address || '').trim() !== ''; }
+  /* Joueurs à afficher : une adresse ET des coordonnées. Les colocataires et voisins de résidence partagent un même point. */
+  function places(players) {
+    var byKey = new Map();
+    players.forEach(function (p) {
+      if (!hasAddress(p) || !hasCoords(p)) return;
+      var key = p.lat.toFixed(5) + ',' + p.lng.toFixed(5);
+      if (!byKey.has(key)) byKey.set(key, { key: key, lat: p.lat, lng: p.lng, players: [] });
+      byKey.get(key).players.push(p);
+    });
+    var out = []; byKey.forEach(function (v) { v.players.sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', 'fr'); }); out.push(v); });
+    return out;
+  }
+
   return {
+    hasCoords: hasCoords, hasAddress: hasAddress, places: places,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
     planSetTarget: planSetTarget, killPoints: killPoints, weaponList: weaponList, rankLabel: rankLabel,

@@ -2,7 +2,7 @@
   'use strict';
   var K = window.K, ui = K.ui, h = ui.h, store = K.store;
   var app = document.getElementById('app');
-  var NAV = [['dashboard', '📊', 'Dashboard'], ['chaine', '🕵️', 'Chaîne'], ['joueurs', '🗂️', 'Joueurs'], ['armes', '🔪', 'Armes'],
+  var NAV = [['dashboard', '📊', 'Dashboard'], ['chaine', '🕵️', 'Chaîne'], ['joueurs', '🗂️', 'Joueurs'], ['map', '🗺️', 'Map'], ['armes', '🔪', 'Armes'],
     ['shop', '🛒', 'Shop'], ['classes', '🎓', 'Classes'], ['parametres', '⚙️', 'Paramètres']];
   var refreshView = null, shell = null;
 
@@ -78,6 +78,7 @@
       var on = a.getAttribute('data-route') === name; a.classList.toggle('is-on', on);
       if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
+    if (refreshView && refreshView.destroy) refreshView.destroy(); // la carte libère ses écouteurs en quittant l'onglet
     ui.clear(shell.main); shell.main.className = 'view view-' + name;
     refreshView = view.render(shell.main);
     window.scrollTo(0, 0);
