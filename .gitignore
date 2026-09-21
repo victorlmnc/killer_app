@@ -1,0 +1,7 @@
+# Aucune donnée de la partie ne doit arriver dans le dépôt : tout vit dans Supabase.
+*.xlsx
+*.xls
+*.csv
+killer-qg-*.json
+.DS_Store
+node_modules/
