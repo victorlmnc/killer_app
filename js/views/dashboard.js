@@ -45,6 +45,7 @@
   K.views.dashboard = {
     title: 'Dashboard',
     render: function (root) {
+      var showAll = false;
       function refresh() {
         var st = store.state, set = st.settings, stats = L.stats(st), round = L.currentRound(st);
         ui.clear(root);
@@ -121,7 +122,13 @@
         /* Activité + liens */
         var feed = h('section', { class: 'panel' }, h('h2', {}, 'Dernières infos'));
         if (!st.events.length) feed.appendChild(h('p', { class: 'empty' }, 'Les kills, liens et rerolls saisis par l\'équipe apparaîtront ici.'));
-        st.events.slice(0, 10).forEach(function (e) { feed.appendChild(h('p', { class: 'event' }, e.text, h('span', { class: 'muted small' }, ' ' + [e.actor, ui.ago(e.created_at)].filter(Boolean).join(', ')))); });
+        st.events.slice(0, showAll ? 60 : 8).forEach(function (e) {
+          var d = e.details || {}, has = (d.type === 'kill' && d.note) || (d.type === 'link' && d.source);
+          feed.appendChild(h('button', { type: 'button', class: 'event event-' + (d.type || 'other'), title: K.actions.eventSummary(e), onclick: function () { K.actions.eventDetails(e); } },
+            h('span', { class: 'event-text' }, e.text, has ? h('span', { class: 'has-note', 'aria-label': 'avec une note' }, '✎') : null),
+            h('span', { class: 'muted small' }, [e.actor, ui.ago(e.created_at)].filter(Boolean).join(', '))));
+        });
+        if (st.events.length > 8) feed.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAll = !showAll; refresh(); } }, showAll ? 'Réduire' : 'Voir les ' + (Math.min(st.events.length, 60) - 8) + ' infos précédentes'));
         grid.appendChild(feed);
 
         var links = (set.links || []).filter(function (l) { return ui.safeUrl(l.url); });

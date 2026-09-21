@@ -184,7 +184,7 @@
       var y = years[i % 4];
       var hm = home(i);
       return { id: uid(), name: name, address: hm.address, address_type: hm.address_type, lat: hm.lat, lng: hm.lng, year: y, dept: depts[(i >> 1) % 2], td: 'TD' + (1 + (i % 3)), tp: y === '5A' ? '' : 'TP' + (1 + (i % 5)),
-        option: '', lang_group: 'G' + (1 + (i % 6)), notes: '', weapons: '', points: 0,
+        option: i % 4 >= 2 ? ['Option A', 'Option B', 'Option C'][i % 3] : '', lang_group: 'G' + (1 + (i % 6)), notes: '', weapons: '', points: 0,
         is_ally: i === 7 || i === 8 || i === 10 || i === 12, photo_path: null };
     });
     var easy = WEAPONS.filter(function (w) { return w[1] === 'facile'; }), hard = WEAPONS.filter(function (w) { return w[1] === 'difficile'; });
@@ -212,8 +212,15 @@
     X(r1, 7, 20, 'Écocup', 2, 3); X(r1, 40, 41, 'Tronçonneuse', 5, 2); X(r1, null, 19, '', 0, 1);
 
     var now = Date.now();
-    var events = ['LUPIN Arsène a éliminé LANTIER Étienne (Écocup)', 'Lien ajouté : BERGERAC Cyrano chasse POQUELIN Agnès', 'Nouvelle boucle : Reroll 1']
-      .map(function (t, i) { return { id: uid(), text: t, actor: 'démo', created_at: new Date(now - (i + 1) * 36e5 * 7).toISOString() }; });
+    function X2(round, a, b, weapon, pts, daysAgo, note) { X(round, a, b, weapon, pts, daysAgo); kills[kills.length - 1].note = note; return kills[kills.length - 1]; }
+    var k1 = kills.filter(function (k) { return k.victim_id === P[20].id; })[0]; k1.note = 'Devant le RU à 12 h 40, il sortait seul. Vidéo envoyée à Orion.';
+    links.filter(function (l) { return l.hunter_id === P[10].id; })[0].source = 'Vu sur le téléphone de Cyrano en amphi';
+    links.filter(function (l) { return l.hunter_id === P[12].id; })[0].source = 'Dit par une 3A, pas vérifié';
+    var events = [
+      { text: 'LUPIN Arsène a éliminé LANTIER Étienne (Écocup)', details: { type: 'kill', kill_id: k1.id, killer_id: P[7].id, victim_id: P[20].id, killer: P[7].name, victim: P[20].name, weapon: 'Écocup', points: 2, note: k1.note } },
+      { text: 'Lien ajouté : BERGERAC Cyrano chasse POQUELIN Agnès', details: { type: 'link', hunter_id: P[10].id, target_id: P[35].id, hunter: P[10].name, target: P[35].name, confidence: 'sur', source: 'Vu sur le téléphone de Cyrano en amphi' } },
+      { text: 'Nouvelle boucle : Reroll 1', details: null }
+    ].map(function (e, i) { return { id: uid(), text: e.text, details: e.details, actor: 'Arsène', created_at: new Date(now - (i + 1) * 36e5 * 7).toISOString() }; });
 
     var settings = JSON.parse(JSON.stringify(K.seed.settings));
     settings.game_name = 'Killer (démo)'; settings.official_players = 48;

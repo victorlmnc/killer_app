@@ -52,18 +52,18 @@
     dead = dead || deadSet(state, roundId);
     var map = dir === 'hunter' ? maps.hunterOf : maps.targetOf;
     var key = dir === 'hunter' ? 'hunter_id' : 'target_id';
-    var cur = playerId, via = [], conf = 'sur', guard = 0;
+    var cur = playerId, via = [], links = [], conf = 'sur', guard = 0;
     while (guard++ < 10000) {
       var link = map.get(cur);
-      if (!link) return { id: null, via: via, lastId: cur, confidence: conf, closed: false };
-      conf = weakest(conf, link.confidence);
+      if (!link) return { id: null, via: via, links: links, lastId: cur, confidence: conf, closed: false };
+      conf = weakest(conf, link.confidence); links.push(link);
       var nxt = link[key];
-      if (nxt === playerId) return { id: null, via: via, lastId: cur, confidence: conf, closed: true };
-      if (!dead.has(nxt)) return { id: nxt, via: via, lastId: cur, confidence: conf, closed: false };
+      if (nxt === playerId) return { id: null, via: via, links: links, lastId: cur, confidence: conf, closed: true };
+      if (!dead.has(nxt)) return { id: nxt, via: via, links: links, lastId: cur, confidence: conf, closed: false };
       via.push(nxt);
       cur = nxt;
     }
-    return { id: null, via: via, lastId: cur, confidence: conf, closed: false };
+    return { id: null, via: via, links: links, lastId: cur, confidence: conf, closed: false };
   }
   function resolveTarget(state, roundId, id, maps, dead) { return resolve(state, roundId, id, 'target', maps, dead); }
   function resolveHunter(state, roundId, id, maps, dead) { return resolve(state, roundId, id, 'hunter', maps, dead); }
@@ -87,13 +87,13 @@
         var l = maps.targetOf.get(id);
         if (l && nodeSet.has(l.target_id)) {
           next.set(id, l.target_id);
-          edge.set(id, { from: id, to: l.target_id, confidence: l.confidence, via: [], linkId: l.id, source: l.source });
+          edge.set(id, { from: id, to: l.target_id, confidence: l.confidence, via: [], links: [l] });
         }
       } else {
         var r = resolveTarget(state, roundId, id, maps, dead);
         if (r.id && nodeSet.has(r.id)) {
           next.set(id, r.id);
-          edge.set(id, { from: id, to: r.id, confidence: r.confidence, via: r.via });
+          edge.set(id, { from: id, to: r.id, confidence: r.confidence, via: r.via, links: r.links });
         } else if (r.via.length) {
           tail.set(id, { via: r.via, closed: r.closed });
         }
@@ -153,6 +153,53 @@
       }
     }
     return { remove: remove, add: add, anchorId: anchor, viaDead: anchor !== hunterId };
+  }
+
+  /* Glisser-déposer dans la chaîne. On raisonne comme sur une liste :
+     - retirer le segment de sa place referme le trou (son chasseur hérite de sa cible) ;
+     - le déposer entre A et B donne A → segment → B ; en bout de fragment, il s'y accroche ; dans le bac, il reste seul.
+     seg : ids consécutifs d'un même fragment. dest : { after, before } (l'un des deux peut manquer) ou { tray: true }.
+     Ne modifie rien : renvoie { remove: [liens existants], add: [nouveaux liens] }. */
+  function planMove(state, roundId, mode, seg, dest) {
+    var raw = mode === 'complete';
+    var work = { players: state.players, rounds: state.rounds, kills: state.kills, links: state.links.filter(function (l) { return l.round_id === roundId; }) };
+    var original = new Set(work.links), removed = [], inSeg = new Set(seg);
+    var first = seg[0], last = seg[seg.length - 1];
+    if (!seg.length) return { error: 'Rien à déplacer.' };
+    if ((dest.after && inSeg.has(dest.after)) || (dest.before && inSeg.has(dest.before))) return { noop: true, remove: [], add: [] };
+
+    function maps() { return linkMaps(work, roundId); }
+    function drop(link) { if (!link) return; work.links = work.links.filter(function (l) { return l !== link; }); if (original.has(link)) removed.push(link); }
+    function hunterOfId(id) { if (raw) { var l = maps().hunterOf.get(id); return l ? l.hunter_id : null; } return resolveHunter(work, roundId, id).id; }
+    function targetOfId(id) { if (raw) { var l = maps().targetOf.get(id); return l ? l.target_id : null; } return resolveTarget(work, roundId, id).id; }
+    function link(a, b, conf) {
+      var plan = planSetTarget(work, roundId, a, b, conf || 'sur', '', { raw: raw });
+      if (plan.error || plan.noop) return;
+      plan.remove.forEach(drop);
+      plan.add.forEach(function (l) { work.links.push(l); });
+    }
+
+    var H = hunterOfId(first), N0 = targetOfId(last);
+    var closing = !!(N0 && inSeg.has(N0));          // boucle fermée déplacée en entier : on l'ouvre
+    var N = closing ? null : N0;
+    if (H && inSeg.has(H)) H = null;
+    var A = dest.tray ? null : (dest.after || null), B = dest.tray ? null : (dest.before || null);
+    if (!dest.tray && !closing && A === H && B === N) return { noop: true, remove: [], add: [] };
+    if (dest.tray && !H && !N && !closing) return { noop: true, remove: [], add: [] };
+
+    // 1. sortir le segment : on coupe le lien qui y entre et celui qui en sort, puis on referme le trou
+    var inLink = maps().hunterOf.get(first), inConf = inLink ? inLink.confidence : 'sur', outConf = 'sur';
+    if (N0) { var outLink = maps().hunterOf.get(N0); if (outLink) outConf = outLink.confidence; drop(outLink); }
+    drop(maps().hunterOf.get(first));
+    if (H && N) link(H, N, weakest(inConf, outConf));
+
+    // 2. le poser à sa nouvelle place
+    if (A && B) { drop(maps().hunterOf.get(B)); link(A, first); link(last, B); }
+    else if (A) link(A, first);
+    else if (B) link(last, B);
+
+    var add = work.links.filter(function (l) { return !original.has(l); });
+    return { remove: removed, add: add };
   }
 
   function killPoints(o) {
@@ -303,7 +350,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, killPoints: killPoints, weaponList: weaponList, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, killPoints: killPoints, weaponList: weaponList, rankLabel: rankLabel,
     leaderboard: leaderboard, stats: stats, classesTree: classesTree, parseImport: parseImport
   };
 });

@@ -102,18 +102,24 @@
         var inPlay = [];
         st.players.forEach(function (p) { if (!dead.has(p.id)) L.weaponList(p.weapons).forEach(function (w) { inPlay.push({ name: w, holder: p, difficulty: catalog.get(L.norm(w)) }); }); });
         inPlay = inPlay.filter(function (w) { return !nq || L.norm(w.name).indexOf(nq) >= 0; }).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); });
-        var sec = h('section', { class: 'panel panel-cols' }, h('h2', {}, 'En jeu en ce moment'));
-        if (!inPlay.length) sec.appendChild(h('p', { class: 'empty' }, 'Renseigne les armes sur les fiches des joueurs : elles apparaîtront ici avec leur porteur.'));
-        inPlay.forEach(function (w) {
-          sec.appendChild(h('button', { type: 'button', class: 'row row-btn', onclick: function () { K.actions.openPlayer(w.holder.id); } }, h('span', { class: 'row-main' }, w.name),
-            w.difficulty ? h('span', { class: 'tag tag-' + w.difficulty }, w.difficulty) : h('span', { class: 'tag' }, 'hors catalogue'), h('span', { class: 'muted small' }, w.holder.name)));
-        });
+        var sec = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, 'En jeu en ce moment', h('small', { class: 'muted' }, ' ' + inPlay.length)),
+          h('span', { class: 'muted small' }, 'D\'après les armes notées sur les fiches des joueurs vivants')));
+        if (!inPlay.length) sec.appendChild(h('p', { class: 'empty' }, nq ? 'Aucune arme en jeu ne correspond à cette recherche.' : 'Renseigne les armes sur les fiches des joueurs : elles apparaîtront ici avec leur porteur.'));
+        else sec.appendChild(h('div', { class: 'weapon-grid' }, inPlay.map(function (w) {
+          return h('button', { type: 'button', class: 'weapon-card weapon-' + (w.difficulty || 'inconnue'), onclick: function () { K.actions.openPlayer(w.holder.id); } },
+            h('span', { class: 'weapon-name' }, w.name),
+            h('span', { class: 'weapon-meta' }, h('span', { class: 'tag tag-' + (w.difficulty || 'none') }, w.difficulty ? (w.difficulty === 'difficile' ? 'Difficile, 3 pts' : 'Facile, 1 pt') : 'Hors catalogue'),
+              h('span', { class: 'weapon-holder' }, ui.avatar(w.holder, 'sm'), h('span', {}, w.holder.name))));
+        })));
         body.appendChild(sec);
         var cols = h('div', { class: 'cols-2' });
-        [['facile', 'Faciles, 1 point'], ['difficile', 'Difficiles, 3 points']].forEach(function (d) {
+        var held = new Set(inPlay.map(function (w) { return L.norm(w.name); }));
+        [['facile', 'Faciles', '1 point'], ['difficile', 'Difficiles', '3 points']].forEach(function (d) {
           var items = st.weapons.filter(function (w) { return w.difficulty === d[0] && (!nq || L.norm(w.name).indexOf(nq) >= 0); }).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); });
-          cols.appendChild(h('section', { class: 'panel' }, h('h2', {}, d[1], h('small', { class: 'muted' }, ' ' + items.length)),
-            h('div', { class: 'weapon-cloud' }, items.map(function (w) { return h('button', { type: 'button', class: 'chip chip-' + d[0], onclick: function () { edit(w); } }, w.name); }))));
+          cols.appendChild(h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, d[1], h('small', { class: 'muted' }, ' ' + items.length)), h('span', { class: 'tag tag-' + d[0] }, d[2])),
+            items.length ? h('div', { class: 'weapon-cloud' }, items.map(function (w) {
+              return h('button', { type: 'button', class: 'chip chip-' + d[0] + (held.has(L.norm(w.name)) ? ' is-held' : ''), title: held.has(L.norm(w.name)) ? 'En jeu en ce moment. Cliquer pour modifier.' : 'Cliquer pour modifier', onclick: function () { edit(w); } }, w.name);
+            })) : h('p', { class: 'empty' }, 'Rien ne correspond.')));
         });
         body.appendChild(cols);
       }
@@ -171,22 +177,63 @@
   K.views.classes = {
     title: 'Classes',
     render: function (root) {
+      var GROUPS = [
+        { id: 'td', label: 'TD', key: function (p) { return p.td ? [p.dept, p.td].filter(Boolean).join(' ') : ''; }, others: ['tp', 'option', 'lang_group'] },
+        { id: 'tp', label: 'TP', key: function (p) { return p.tp ? [p.dept, p.tp].filter(Boolean).join(' ') : ''; }, others: ['td', 'option', 'lang_group'] },
+        { id: 'option', label: 'Option', key: function (p) { return p.option || ''; }, others: ['td', 'tp'] },
+        { id: 'lang_group', label: 'Groupe de langue', key: function (p) { return p.lang_group || ''; }, others: ['td', 'tp'] },
+        { id: 'dept', label: 'Département', key: function (p) { return p.dept || ''; }, others: ['td', 'tp'] }
+      ];
+      var view = { group: 'td', year: '', alive: false, q: '' };
+      var bar = h('div', { class: 'toolbar' }), chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Année' }), body = h('div', { class: 'classes' });
+      root.appendChild(bar); root.appendChild(chips); root.appendChild(body);
+
       function refresh() {
-        var st = store.state, tree = L.classesTree(st), dead = L.deadSet(st);
-        ui.clear(root);
-        if (!st.players.length) { root.appendChild(h('p', { class: 'empty' }, 'Les classes se remplissent toutes seules à partir des fiches joueurs (année, département, TD).')); return; }
-        Object.keys(tree).sort().forEach(function (y) {
-          var all = [].concat.apply([], Object.keys(tree[y]).map(function (d) { return [].concat.apply([], Object.keys(tree[y][d]).map(function (t) { return tree[y][d][t]; })); }));
-          var alive = all.filter(function (p) { return !dead.has(p.id); }).length;
-          var sec = h('section', { class: 'panel year-block', style: { '--year': ui.yearColor(y) } }, h('h2', {}, y, h('small', { class: 'muted' }, ' ' + all.length + ' inscrits, ' + alive + ' vivants')));
-          var grid = sec.appendChild(h('div', { class: 'class-grid' }));
-          Object.keys(tree[y]).sort().forEach(function (d) { Object.keys(tree[y][d]).sort().forEach(function (t) {
-            var ps = tree[y][d][t];
-            grid.appendChild(h('div', { class: 'class-col' }, h('h3', {}, d + ' ' + t, h('small', { class: 'muted' }, ' ' + ps.filter(function (p) { return !dead.has(p.id); }).length + '/' + ps.length)),
-              ps.map(function (p) { return h('button', { type: 'button', class: 'class-name' + (dead.has(p.id) ? ' is-dead' : '') + (p.is_ally ? ' is-ally' : ''), onclick: function () { K.actions.openPlayer(p.id); } }, p.name); })));
-          }); });
-          root.appendChild(sec);
+        var st = store.state, dead = L.deadSet(st), g = GROUPS.find(function (x) { return x.id === view.group; });
+        ui.clear(bar);
+        bar.appendChild(h('div', { class: 'segmented segmented-wrap', role: 'group', 'aria-label': 'Regrouper par' }, GROUPS.map(function (x) {
+          return h('button', { type: 'button', class: view.group === x.id ? 'is-on' : '', 'aria-pressed': String(view.group === x.id), onclick: function () { view.group = x.id; refresh(); } }, x.label);
+        })));
+        bar.appendChild(h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: view.alive, onchange: function (e) { view.alive = e.target.checked; refresh(); } }), 'Vivants seulement'));
+        bar.appendChild(h('input', { type: 'search', placeholder: 'Repérer quelqu\'un', value: view.q, 'aria-label': 'Repérer un joueur', oninput: function (e) { view.q = e.target.value; paint(); } }));
+        ui.clear(chips);
+        [''].concat((st.settings.years || []).map(function (y) { return y.name; })).forEach(function (y) {
+          chips.appendChild(h('button', { type: 'button', class: 'chip' + (view.year === y ? ' is-on' : ''), 'aria-pressed': String(view.year === y), onclick: function () { view.year = y; refresh(); } }, y || 'Toutes les années'));
         });
+        paint();
+
+        function paint() {
+          ui.clear(body);
+          if (!st.players.length) { body.appendChild(h('p', { class: 'empty' }, 'Les classes se remplissent toutes seules à partir des fiches joueurs (année, département, TD, TP, option, groupe de langue).')); return; }
+          var q = L.norm(view.q), years = {};
+          st.players.forEach(function (p) {
+            if (view.year && p.year !== view.year) return;
+            if (view.alive && dead.has(p.id)) return;
+            var y = p.year || 'Année inconnue', k = g.key(p) || 'Non renseigné';
+            years[y] = years[y] || {}; (years[y][k] = years[y][k] || []).push(p);
+          });
+          if (!Object.keys(years).length) body.appendChild(h('p', { class: 'empty' }, 'Personne avec ces filtres.'));
+          Object.keys(years).sort().forEach(function (y) {
+            var groups = years[y], all = [].concat.apply([], Object.keys(groups).map(function (k) { return groups[k]; }));
+            var alive = all.filter(function (p) { return !dead.has(p.id); }).length;
+            var sec = h('section', { class: 'panel year-block', style: { '--year': ui.yearColor(y) } },
+              h('div', { class: 'panel-head' }, h('h2', {}, y), h('span', { class: 'muted small' }, all.length + ' joueurs, ' + alive + ' vivants, regroupés par ' + g.label.toLowerCase())));
+            var grid = sec.appendChild(h('div', { class: 'class-grid' }));
+            Object.keys(groups).sort(function (a, b) { return (a === 'Non renseigné') - (b === 'Non renseigné') || a.localeCompare(b, 'fr', { numeric: true }); }).forEach(function (k) {
+              var ps = groups[k].sort(function (a, b) { return dead.has(a.id) - dead.has(b.id) || a.name.localeCompare(b.name, 'fr'); });
+              var n = ps.filter(function (p) { return !dead.has(p.id); }).length;
+              grid.appendChild(h('div', { class: 'class-col' + (k === 'Non renseigné' ? ' class-unknown' : '') },
+                h('div', { class: 'class-head' }, h('h3', {}, k), h('span', { class: 'class-count' + (n ? '' : ' is-zero') }, n + ' / ' + ps.length)),
+                ps.map(function (p) {
+                  var match = q && L.norm(p.name).indexOf(q) >= 0;
+                  var extra = g.others.map(function (f) { return p[f]; }).filter(Boolean).join(' ');
+                  return h('button', { type: 'button', class: 'class-name' + (dead.has(p.id) ? ' is-dead' : '') + (p.is_ally ? ' is-ally' : '') + (match ? ' is-match' : '') + (q && !match ? ' is-dim' : ''),
+                    onclick: function () { K.actions.openPlayer(p.id); } }, h('span', { class: 'class-who' }, p.name), extra ? h('span', { class: 'class-extra' }, extra) : null);
+                })));
+            });
+            body.appendChild(sec);
+          });
+        }
       }
       refresh();
       return refresh;

@@ -5,7 +5,7 @@
   'use strict';
   var K = (window.K = window.K || {});
   var TABLES = ['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots'];
-  var LOCAL_KEY = 'killer-qg-local-v3'; // v3 : types de logement + lieux stratégiques
+  var LOCAL_KEY = 'killer-qg-local-v4'; // v4 : journal détaillé, noms d'utilisateurs
   var PHOTO_BUCKET = 'photos';
 
   var listeners = [];
@@ -41,6 +41,7 @@
       TABLES.concat(['members']).forEach(function (t) { store.state[t] = data[t] || []; });
       store.state.settings = withDefaults(data.settings);
       store.user = { email: 'demo@local' }; store.isMember = true; store.isAdmin = true;
+      if (!store.state.members.length) store.state.members = [{ email: 'demo@local', name: '', role: 'admin' }];
       return Promise.resolve();
     },
     persist: function () { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(store.state)); } catch (e) { /* quota ou mode privé */ } },
@@ -140,18 +141,36 @@
     store.emit();
     return guard(backend().setSetting(key, value));
   };
-  store.log = function (text) {
-    var actor = store.user && store.user.email ? store.user.email.split('@')[0] : '';
-    return store.insert('events', { text: text, actor: actor, created_at: new Date().toISOString() });
+  /* Nom affiché d'un utilisateur : celui qu'il s'est choisi dans Paramètres, sinon le début de son e-mail. */
+  store.displayName = function (email) {
+    email = String(email || (store.user && store.user.email) || '').toLowerCase();
+    var m = store.state.members.find(function (x) { return String(x.email).toLowerCase() === email; });
+    return (m && m.name) || email.split('@')[0] || '';
+  };
+  /* Journal : un texte court + les détails de l'évènement (ids, note, source…) pour pouvoir les rouvrir depuis le dashboard. */
+  store.log = function (text, details) {
+    return store.insert('events', { text: text, actor: store.displayName(), details: details || null, created_at: new Date().toISOString() });
+  };
+  store.clearEvents = function () {
+    store.state.events = []; store.emit();
+    if (store.mode !== 'supabase') { local.persist(); return Promise.resolve(); }
+    return guard(sb.from('events').delete().neq('id', '00000000-0000-0000-0000-000000000000').then(check), 'Remise à zéro');
   };
   store.player = function (id) { return store.state.players.find(function (p) { return p.id === id; }) || null; };
 
   /* ----- accès (liste blanche d'e-mails) ----- */
-  store.addMember = function (email, role) {
-    var row = { email: email.trim().toLowerCase(), role: role || 'member' };
+  // Un seul niveau d'accès : tout membre de l'alliance peut tout faire.
+  store.addMember = function (email, name) {
+    var row = { email: email.trim().toLowerCase(), name: (name || '').trim(), role: 'admin' };
     store.state.members.push(row); store.emit();
-    if (store.mode !== 'supabase') return Promise.resolve();
+    if (store.mode !== 'supabase') { local.persist(); return Promise.resolve(); }
     return guard(sb.from('allowed_emails').insert(row).then(check), 'Ajout');
+  };
+  store.renameMember = function (email, name) {
+    var m = store.state.members.find(function (x) { return x.email === email; });
+    if (m) m.name = name; store.emit();
+    if (store.mode !== 'supabase') { local.persist(); return Promise.resolve(); }
+    return guard(sb.from('allowed_emails').update({ name: name }).eq('email', email).then(check), 'Renommage');
   };
   store.removeMember = function (email) {
     store.state.members = store.state.members.filter(function (m) { return m.email !== email; }); store.emit();
@@ -277,8 +296,8 @@
           return handlers.onSignedOut();
         }
         if (started) return; started = true;
-        return Promise.all([sb.rpc('is_member').then(check), sb.rpc('is_admin').then(check)]).then(function (r) {
-          store.isMember = !!r[0]; store.isAdmin = !!r[1];
+        return sb.rpc('is_member').then(check).then(function (ok) {
+          store.isMember = store.isAdmin = !!ok;
           if (!store.isMember) return handlers.onNotMember();
           return supa.loadAll().then(function () { supa.subscribe(); handlers.onReady(); });
         }).catch(function (err) { started = false; console.error(err); handlers.onError(err); });

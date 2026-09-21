@@ -21,7 +21,8 @@ une partie fictive (personnages de romans), stockée uniquement dans ton navigat
 5. **Project Settings > API** : copie *Project URL* et la clé *anon public* dans `js/config.js`.
 
 La clé `anon` est publique par nature, ce sont les règles RLS du schéma qui protègent les données :
-sans compte confirmé **et** présent dans la liste d'accès, on ne lit rien. Ne mets jamais la clé `service_role` dans le dépôt.
+sans compte confirmé **et** présent dans la liste d'accès, on ne lit rien. Après une mise à jour de l'app, relance `supabase/schema.sql` :
+il est fait pour ça et ne touche pas aux données. Ne mets jamais la clé `service_role` dans le dépôt.
 
 ### 2. GitHub
 Pousse ce dossier à la racine du dépôt. Le `.gitignore` bloque les Excel, CSV et sauvegardes : aucune donnée
@@ -34,7 +35,8 @@ aussi : le code ne contient aucune donnée. Netlify, Vercel ou Cloudflare Pages 
 
 ### 4. Premier lancement
 1. Crée ton compte sur le site avec l'adresse admin, confirme l'e-mail, connecte-toi.
-2. **Paramètres > Qui a accès** : ajoute les adresses de tes coéquipiers. Ils créent ensuite leur compte eux-mêmes.
+2. **Paramètres > L'équipe** : ajoute les adresses et les noms de tes coéquipiers. Ils créent ensuite leur compte eux-mêmes.
+   Il n'y a qu'un niveau d'accès : chaque membre peut tout faire, y compris changer son nom affiché.
 3. **Armes > Charger la liste** : les 120 armes des années précédentes, triées facile / difficile.
 4. **Joueurs > Importer** : copie-colle les lignes depuis Excel (en-têtes compris).
 5. Ouvre la fiche de chaque membre de l'alliance et touche « Membre de l'alliance ».
@@ -50,7 +52,13 @@ Tout le reste est calculé :
 - Enregistrer un kill donne les points au killer, lui transmet les armes de la victime et affiche sa nouvelle cible.
   Si on ne savait pas que X chassait Y, le kill complète la chaîne.
 - Un **reroll** archive la boucle telle qu'elle était (vivants et morts de l'époque) et en ouvre une nouvelle.
-- Un lien qui en contredit un autre demande confirmation avant de le remplacer.
+- Sur la page **Chaîne**, tout se fait au glisser-déposer (souris, ou appui long sur téléphone) : une bulle déposée à droite d'un
+  joueur devient sa cible, à gauche son chasseur, entre deux joueurs elle s'insère. « Avec la suite » (ou la touche Maj) emmène
+  tout le bout de chaîne, la poignée ⠿ le fragment entier, le bac en bas sort un joueur de la chaîne. La chaîne se comporte
+  comme une liste : retirer un joueur referme le trou. Les nouveaux liens sont « sûrs » par défaut.
+- Cliquer une **flèche** (ou l'étiquette Sûr / Probable / Rumeur d'une fiche) règle la fiabilité et la source, ou coupe le lien.
+  La source s'affiche au survol.
+- Sur une fiche, « Sa cible » et « Son killer » sont des menus déroulants qui ne proposent que les joueurs encore libres.
 - Le dashboard montre qui chasse chaque membre de l'alliance, et le shop qui a assez de points pour un coupe-gorge.
 
 ## Ce qui entre dans la base

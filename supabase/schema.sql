@@ -9,8 +9,11 @@ create table if not exists public.allowed_emails (
   created_at timestamptz not null default now()
 );
 
+alter table public.allowed_emails add column if not exists name text not null default '';   -- nom affiché dans l'app
+alter table public.allowed_emails alter column role set default 'admin';
+
 insert into public.allowed_emails (email, role)
-values ('ton.adresse@exemple.fr', 'admin')          -- <<< À MODIFIER
+values ('victor.lemanceau02@gmail.com', 'admin')          -- <<< À MODIFIER
 on conflict (email) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -140,8 +143,11 @@ create table if not exists public.events (
   id         uuid primary key default gen_random_uuid(),
   text       text not null,
   actor      text default '',
+  details    jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table public.events add column if not exists details jsonb;   -- détails rouvrables depuis « Dernières infos »
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security : sans être membre, on ne lit RIEN, même avec la clé anon.
@@ -160,7 +166,9 @@ alter table public.allowed_emails enable row level security;
 drop policy if exists "membres lisent" on public.allowed_emails;
 drop policy if exists "admins gèrent"  on public.allowed_emails;
 create policy "membres lisent" on public.allowed_emails for select to authenticated using (public.is_member());
-create policy "admins gèrent"  on public.allowed_emails for all    to authenticated using (public.is_admin()) with check (public.is_admin());
+-- Un seul niveau d'accès : chaque membre de l'alliance gère la liste (et son nom affiché).
+create policy "admins gèrent"  on public.allowed_emails for all    to authenticated using (public.is_member()) with check (public.is_member());
+update public.allowed_emails set role = 'admin' where role <> 'admin';
 
 -- ---------------------------------------------------------------------------
 -- Photos : bucket PRIVÉ. L'app n'affiche les images que via des URL signées d'une heure.

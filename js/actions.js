@@ -26,7 +26,7 @@
       var plan = L.planSetTarget(store.state, roundId, hunterId, targetId, o.confidence, o.source, { raw: o.raw });
       if (plan.error) { ui.toast(plan.error, 'error'); return false; }
       if (plan.noop) { if (!o.silent) ui.toast('Ce lien est déjà connu.'); return true; }
-      var ask = plan.remove.length && !o.silent
+      var ask = plan.remove.length && !o.silent && !o.noConfirm
         ? ui.confirm({
           title: 'Remplacer ce qu\'on savait ?',
           text: ['Ce lien contredit :'].concat(plan.remove.map(function (l) { return name(l.hunter_id) + ' chasse ' + name(l.target_id); })),
@@ -36,7 +36,7 @@
         if (!ok) return false;
         return applyPlan(plan).then(function () {
           if (!o.silent) {
-            store.log('Lien ajouté : ' + name(hunterId) + ' chasse ' + name(targetId));
+            store.log('Lien ajouté : ' + name(hunterId) + ' chasse ' + name(targetId), { type: 'link', hunter_id: hunterId, target_id: targetId, hunter: name(hunterId), target: name(targetId), confidence: o.confidence || 'sur', source: o.source || '' });
             ui.toast(plan.viaDead ? 'Lien ajouté, raccordé derrière ' + name(plan.anchorId) + ' (mort).' : 'Lien ajouté.');
           }
           return true;
@@ -86,16 +86,14 @@
         var options = h('datalist', { id: 'kill-weapons' });
         var diff = ui.select([{ value: 'facile', label: 'Facile (1 pt)' }, { value: 'difficile', label: 'Difficile (3 pts)' }], 'facile', { onchange: total });
         var bonus = ui.select([{ value: '0', label: 'Aucun' }, { value: '1', label: 'Vidéo +1' }, { value: '2', label: 'Vidéo ou Orion +2' }, { value: '3', label: 'Vidéo ou Orion +3' }, { value: '4', label: 'Orion +4' }], '0', { onchange: total });
-        var fb = h('input', { type: 'checkbox', checked: st.kills.length === 0, onchange: total });
+        var fb = h('input', { type: 'checkbox', checked: false, onchange: total });
         var mates = h('input', { type: 'number', min: '0', max: '20', value: '0', inputmode: 'numeric', oninput: total });
-        var inherit = h('input', { type: 'checkbox', checked: true });
-        var note = h('input', { type: 'text', placeholder: 'Lieu, circonstances…' });
+        var note = h('textarea', { rows: '2', placeholder: 'Lieu, circonstances, qui était là…' });
         var sum = h('strong', {});
         var scoring = h('div', { class: 'stack' },
           ui.field('Arme', weapon), options,
           h('div', { class: 'grid-2' }, ui.field('Difficulté', diff), ui.field('Bonus', bonus)),
           h('div', { class: 'grid-2' }, ui.field('Coéquipiers (multi-kill)', mates), h('label', { class: 'check' }, fb, 'First blood (+5)')),
-          h('label', { class: 'check' }, inherit, 'Le killer récupère les armes de la victime'),
           h('p', { class: 'muted' }, 'Points gagnés : ', sum));
 
         function refreshKiller() {
@@ -120,7 +118,7 @@
           h('button', { type: 'button', class: 'btn', onclick: api.close }, 'Annuler'),
           h('button', { type: 'button', class: 'btn btn-danger', onclick: function () {
             api.close();
-            act.recordKill({ victimId: victimId, killerId: killerId, weapon: weapon.value.trim(), note: note.value.trim(), inherit: inherit.checked,
+            act.recordKill({ victimId: victimId, killerId: killerId, weapon: weapon.value.trim(), note: note.value.trim(),
               points: killerId ? L.killPoints({ difficulty: diff.value, bonus: bonus.value, firstBlood: fb.checked, mates: mates.value }) : 0 });
           } }, 'Enregistrer le kill')));
         refreshKiller(); total();
@@ -137,13 +135,15 @@
       }
       return pre.then(function () {
         var victim = store.player(k.victimId), killer = k.killerId && store.player(k.killerId);
-        var jobs = [store.insert('kills', { round_id: roundId, killer_id: k.killerId || null, victim_id: k.victimId, weapon: k.weapon || '', points: k.points || 0, note: k.note || '', happened_at: new Date().toISOString() })];
+        var killId = store.uuid();
+        var jobs = [store.insert('kills', { id: killId, round_id: roundId, killer_id: k.killerId || null, victim_id: k.victimId, weapon: k.weapon || '', points: k.points || 0, note: k.note || '', happened_at: new Date().toISOString() })];
         if (killer) {
           var patch = { points: (killer.points || 0) + (k.points || 0) };
-          if (k.inherit && victim.weapons) patch.weapons = victim.weapons;
+          if (victim.weapons) patch.weapons = victim.weapons;   // le contrat de la victime passe toujours à son killer
           jobs.push(store.update('players', killer.id, patch));
         }
-        store.log(killer ? killer.name + ' a éliminé ' + victim.name + (k.weapon ? ' (' + k.weapon + ')' : '') : victim.name + ' est mort');
+        store.log(killer ? killer.name + ' a éliminé ' + victim.name + (k.weapon ? ' (' + k.weapon + ')' : '') : victim.name + ' est mort',
+          { type: 'kill', kill_id: killId, killer_id: k.killerId || null, victim_id: k.victimId, killer: killer ? killer.name : '', victim: victim.name, weapon: k.weapon || '', points: k.points || 0, note: k.note || '' });
         return Promise.all(jobs);
       }).then(function () {
         var next = k.killerId ? L.resolveTarget(store.state, roundId, k.killerId) : null;
@@ -162,6 +162,126 @@
   act.editKill = function (kill) {
     ui.pickPlayer({ title: 'Qui a tué ' + name(kill.victim_id) + ' ?', filter: function (p) { return p.id !== kill.victim_id; }, extra: [{ label: 'Killer inconnu', value: null }] })
       .then(function (v) { if (v !== undefined) store.update('kills', kill.id, { killer_id: v }); });
+  };
+
+  /* ---------------------------------------------- fiabilité et source d'un lien */
+  var CONF_OPTIONS = [{ value: 'sur', label: 'Sûr' }, { value: 'probable', label: 'Probable' }, { value: 'rumeur', label: 'Rumeur' }];
+  act.edgeTitle = function (links, confidence) {
+    var src = (links || []).map(function (l) { return l.source; }).filter(Boolean);
+    return ui.confLabel[confidence || 'sur'] + (src.length ? '. Source : ' + src.join(' ; ') : '. Source non renseignée') + '. Clique pour modifier.';
+  };
+  /* links : les liens bruts derrière une flèche (plusieurs quand des morts séparent les deux vivants) */
+  act.editEdge = function (links) {
+    links = (links || []).filter(function (l) { return store.state.links.some(function (x) { return x.id === l.id; }); });
+    if (!links.length) return;
+    ui.dialog({
+      title: 'Fiabilité du lien',
+      render: function (body, api) {
+        var rows = links.map(function (l) {
+          var conf = ui.select(CONF_OPTIONS, l.confidence || 'sur', { 'aria-label': 'Fiabilité' });
+          var src = h('input', { type: 'text', value: l.source || '', placeholder: 'ex. vu sur son téléphone, dit par Emma' });
+          body.appendChild(h('div', { class: 'edge-edit' },
+            h('p', { class: 'link-preview' }, h('strong', {}, name(l.hunter_id)), h('span', { class: 'thread-arrow' }, ' chasse '), h('strong', {}, name(l.target_id)), act.isDead(l.target_id) ? ' (mort)' : ''),
+            h('div', { class: 'grid-2' }, ui.field('Fiabilité', conf), ui.field('D\'où vient l\'info', src)),
+            h('button', { type: 'button', class: 'linkish danger small', onclick: function () {
+              ui.confirm({ title: 'Supprimer ce lien ?', text: name(l.hunter_id) + ' ne chassera plus ' + name(l.target_id) + ' : la chaîne est coupée à cet endroit.', action: 'Supprimer le lien', danger: true })
+                .then(function (ok) { if (ok) { api.close(); store.remove('links', l.id); store.log('Lien supprimé : ' + name(l.hunter_id) + ' ne chasse plus ' + name(l.target_id)); } });
+            } }, 'Supprimer ce lien')));
+          return { link: l, conf: conf, src: src };
+        });
+        if (links.length > 1) body.insertBefore(h('p', { class: 'prose muted small' }, 'Des morts séparent ces deux joueurs : la flèche affiche la fiabilité la plus faible de ces ' + links.length + ' liens.'), body.firstChild);
+        body.appendChild(h('div', { class: 'actions' },
+          h('button', { type: 'button', class: 'btn', onclick: api.close }, 'Annuler'),
+          h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+            rows.forEach(function (r) {
+              var patch = { confidence: r.conf.value, source: r.src.value.trim() };
+              if (patch.confidence !== (r.link.confidence || 'sur') || patch.source !== (r.link.source || '')) {
+                store.update('links', r.link.id, patch);
+                store.log('Lien mis à jour : ' + name(r.link.hunter_id) + ' chasse ' + name(r.link.target_id) + ' (' + ui.confLabel[patch.confidence].toLowerCase() + ')',
+                  { type: 'link', hunter_id: r.link.hunter_id, target_id: r.link.target_id, hunter: name(r.link.hunter_id), target: name(r.link.target_id), confidence: patch.confidence, source: patch.source });
+              }
+            });
+            api.close();
+          } }, 'Enregistrer')));
+      }
+    });
+  };
+
+  /* ------------------------------------------------ déplacement dans la chaîne */
+  act.applyMove = function (roundId, mode, seg, dest) {
+    return (roundId ? Promise.resolve(roundId) : ensureRound()).then(function (rid) {
+      var plan = L.planMove(store.state, rid, mode, seg, dest);
+      if (plan.error) { ui.toast(plan.error, 'error'); return false; }
+      if (plan.noop || (!plan.remove.length && !plan.add.length)) return false;
+      return applyPlan(plan).then(function () {
+        var who = seg.length === 1 ? name(seg[0]) : name(seg[0]) + ' et ' + (seg.length - 1) + ' autre' + (seg.length > 2 ? 's' : '');
+        var where = dest.tray ? 'sorti de la chaîne' : dest.after && dest.before ? 'placé entre ' + name(dest.after) + ' et ' + name(dest.before)
+          : dest.after ? 'placé après ' + name(dest.after) : 'placé avant ' + name(dest.before);
+        store.log('Chaîne : ' + who + ' ' + where, { type: 'move', players: seg.map(name), after: dest.after ? name(dest.after) : '', before: dest.before ? name(dest.before) : '',
+          added: plan.add.map(function (l) { return name(l.hunter_id) + ' chasse ' + name(l.target_id); }), removed: plan.remove.map(function (l) { return name(l.hunter_id) + ' chasse ' + name(l.target_id); }) });
+        return true;
+      });
+    });
+  };
+
+  /* ------------------------------------------------------ détails d'un kill */
+  act.killSummary = function (k) {
+    return [k.weapon ? 'Arme : ' + k.weapon : null, (k.points || 0) + ' pt' + ((k.points || 0) > 1 ? 's' : ''), k.note ? 'Note : ' + k.note : 'Pas de note', ui.ago(k.happened_at)].filter(Boolean).join('. ') + '.';
+  };
+  act.killDetails = function (killId) {
+    var k = store.state.kills.find(function (x) { return x.id === killId; });
+    if (!k) return ui.toast('Ce kill a été annulé depuis.', 'error');
+    ui.dialog({
+      title: 'Détails du kill',
+      render: function (body, api) {
+        var killer = k.killer_id && store.player(k.killer_id), victim = store.player(k.victim_id), round = store.state.rounds.find(function (r) { return r.id === k.round_id; });
+        var weapon = h('input', { type: 'text', value: k.weapon || '' }), note = h('textarea', { rows: '3', value: k.note || '', placeholder: 'Lieu, circonstances, qui était là…' });
+        function who(label, p) { return h('div', { class: 'relation' }, h('span', { class: 'relation-label' }, label), p ? h('button', { type: 'button', class: 'row row-btn', onclick: function () { api.close(); act.openPlayer(p.id); } }, ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, p.name)) : h('p', { class: 'muted' }, 'Inconnu')); }
+        body.appendChild(h('div', { class: 'relations' }, who('Killer', killer), who('Victime', victim)));
+        body.appendChild(h('dl', { class: 'facts' },
+          h('div', {}, h('dt', {}, 'Quand'), h('dd', {}, new Date(k.happened_at).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }))),
+          h('div', {}, h('dt', {}, 'Boucle'), h('dd', {}, round ? round.name : 'Inconnue')),
+          h('div', {}, h('dt', {}, 'Points'), h('dd', {}, String(k.points || 0)))));
+        body.appendChild(h('div', { class: 'stack' }, ui.field('Arme', weapon), ui.field('Note', note)));
+        body.appendChild(h('div', { class: 'actions' },
+          h('button', { type: 'button', class: 'btn', onclick: api.close }, 'Fermer'),
+          h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { store.update('kills', k.id, { weapon: weapon.value.trim(), note: note.value.trim() }); api.close(); ui.toast('Kill mis à jour.'); } }, 'Enregistrer')));
+      }
+    });
+  };
+
+  /* ----------------------------------------- détails d'une ligne du journal */
+  act.eventSummary = function (e) {
+    var d = e.details || {};
+    if (d.type === 'kill') return [d.weapon ? 'Arme : ' + d.weapon : null, (d.points || 0) + ' pts', d.note ? 'Note : ' + d.note : 'Pas de note'].filter(Boolean).join('. ') + '.';
+    if (d.type === 'link') return ui.confLabel[d.confidence || 'sur'] + (d.source ? '. Source : ' + d.source : '. Source non renseignée') + '.';
+    if (d.type === 'move') return (d.added || []).join(' ; ') || 'Aucun nouveau lien.';
+    return e.text;
+  };
+  act.eventDetails = function (e) {
+    var d = e.details || {};
+    if (d.type === 'kill' && store.state.kills.some(function (k) { return k.id === d.kill_id; })) return act.killDetails(d.kill_id);
+    ui.dialog({
+      title: 'Détail de l\'info',
+      render: function (body, api) {
+        body.appendChild(h('p', { class: 'prose' }, h('strong', {}, e.text)));
+        var facts = [['Par', e.actor || 'inconnu'], ['Quand', new Date(e.created_at).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })]];
+        if (d.type === 'link') facts.push(['Fiabilité', ui.confLabel[d.confidence || 'sur']], ['Source', d.source || 'Non renseignée']);
+        if (d.type === 'kill') facts.push(['Arme', d.weapon || 'Non renseignée'], ['Points', String(d.points || 0)], ['Note', d.note || 'Aucune'], ['État', 'Ce kill a été annulé depuis']);
+        if (d.type === 'move') facts.push(['Liens créés', (d.added || []).join(' ; ') || 'Aucun'], ['Liens retirés', (d.removed || []).join(' ; ') || 'Aucun']);
+        body.appendChild(h('dl', { class: 'facts facts-wide' }, facts.map(function (f) { return h('div', {}, h('dt', {}, f[0]), h('dd', {}, f[1])); })));
+        var actions = h('div', { class: 'actions' });
+        if (d.type === 'link') {
+          var live = store.state.links.filter(function (l) { return l.hunter_id === d.hunter_id && l.target_id === d.target_id; });
+          if (live.length) actions.appendChild(h('button', { type: 'button', class: 'btn', onclick: function () { api.close(); act.editEdge(live.slice(-1)); } }, 'Modifier ce lien'));
+        }
+        [d.hunter_id, d.target_id, d.killer_id, d.victim_id].filter(function (id) { return id && store.player(id); }).forEach(function (id) {
+          actions.appendChild(h('button', { type: 'button', class: 'btn', onclick: function () { api.close(); act.openPlayer(id); } }, 'Fiche de ' + name(id)));
+        });
+        actions.appendChild(h('button', { type: 'button', class: 'btn btn-primary', onclick: api.close }, 'Fermer'));
+        body.appendChild(actions);
+      }
+    });
   };
 
   /* ------------------------------------------------------------- reroll */
@@ -206,13 +326,28 @@
       api.setTitle(p.name);
       ui.clear(body);
 
-      function person(label, res, emptyText) {
+      var deadNow = L.deadSet(st);
+      /* dir 'target' : qui p chasse ; dir 'hunter' : qui chasse p. Le menu ne propose que les joueurs encore « libres » de ce côté. */
+      function person(label, res, dir) {
         var other = res && res.id && store.player(res.id);
+        var free = st.players.filter(function (x) {
+          if (x.id === p.id || deadNow.has(x.id)) return false;
+          if (other && x.id === other.id) return true;
+          return dir === 'target' ? !maps.hunterOf.has(x.id) : !L.resolveTarget(st, roundId, x.id, maps, deadNow).id;
+        }).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); });
+        var select = ui.select([{ value: '', label: dir === 'target' ? 'Cible inconnue' : 'Killer inconnu' }].concat(free.map(function (x) { return { value: x.id, label: x.name }; })), other ? other.id : '', {
+          'aria-label': label, disabled: !isCurrent, onchange: function (e) {
+            var id = e.target.value;
+            if (!id) { var cut = dir === 'target' ? (other && maps.hunterOf.get(other.id)) : maps.hunterOf.get(p.id); if (cut) store.remove('links', cut.id); return; }
+            if (dir === 'target') act.setTarget(p.id, id, { roundId: roundId, confidence: 'sur', noConfirm: true });
+            else act.setTarget(id, p.id, { roundId: roundId, confidence: 'sur', noConfirm: true });
+          } });
         return h('div', { class: 'relation' }, h('span', { class: 'relation-label' }, label),
-          other ? h('button', { type: 'button', class: 'row row-btn', onclick: function () { api.close(); act.openPlayer(other.id, ctx); } },
-            ui.avatar(other, 'sm'), h('span', { class: 'row-main' }, other.name),
-            res.confidence !== 'sur' ? h('span', { class: 'tag tag-' + res.confidence }, ui.confLabel[res.confidence]) : null)
-            : h('p', { class: 'muted' }, res && res.via.length ? 'Piste perdue après ' + name(res.via[res.via.length - 1]) + ' (mort).' : emptyText));
+          h('div', { class: 'relation-pick' }, other ? ui.avatar(other, 'sm') : h('span', { class: 'avatar avatar-sm avatar-empty', 'aria-hidden': 'true' }, '?'), select),
+          other ? h('div', { class: 'relation-meta' },
+            h('button', { type: 'button', class: 'tag tag-conf tag-' + res.confidence, title: act.edgeTitle(res.links, res.confidence), onclick: function () { act.editEdge(res.links); } }, ui.confLabel[res.confidence]),
+            h('button', { type: 'button', class: 'linkish small', onclick: function () { api.close(); act.openPlayer(other.id, ctx); } }, 'Voir sa fiche'))
+            : res && res.via.length ? h('p', { class: 'muted small' }, 'Piste perdue après ' + name(res.via[res.via.length - 1]) + ' (mort).') : null);
       }
 
       var file = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: function () { if (file.files[0]) store.setPhoto(p.id, file.files[0]); } });
@@ -225,9 +360,11 @@
             p.is_ally ? h('span', { class: 'tag tag-ally' }, 'Alliance') : null, h('span', { class: 'tag tag-points' }, (p.points || 0) + ' pts')))));
 
       if (dead && kill) {
-        body.appendChild(h('p', { class: 'prose' }, 'Tué ' + (kill.killer_id ? 'par ' + name(kill.killer_id) : 'par un killer inconnu') + (kill.weapon ? ' avec « ' + kill.weapon + ' »' : '') + ', ' + ui.ago(kill.happened_at) + '.'));
+        body.appendChild(h('button', { type: 'button', class: 'death', title: act.killSummary(kill), onclick: function () { act.killDetails(kill.id); } }, h('span', { class: 'stamp', 'aria-hidden': 'true' }, 'Éliminé'),
+          h('span', {}, 'Tué ' + (kill.killer_id ? 'par ' + name(kill.killer_id) : 'par un killer inconnu') + (kill.weapon ? ' avec « ' + kill.weapon + ' »' : '') + ', ' + ui.ago(kill.happened_at) + '.')));
       } else {
-        body.appendChild(h('div', { class: 'relations' }, person('Sa cible', target, 'Cible inconnue.'), person('Son killer', hunter, 'Killer inconnu.')));
+        body.appendChild(roundId ? h('div', { class: 'relations' }, person('Sa cible', target, 'target'), person('Son killer', hunter, 'hunter'))
+          : h('p', { class: 'muted' }, 'Démarre la boucle depuis l\'onglet Chaîne pour renseigner sa cible et son killer.'));
       }
 
       var weapons = L.weaponList(p.weapons);
@@ -240,25 +377,13 @@
       if (p.notes) body.appendChild(h('p', { class: 'prose notes' }, p.notes));
 
       var mine = st.kills.filter(function (k) { return k.killer_id === p.id; });
-      if (mine.length) body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, mine.length + ' kill' + (mine.length > 1 ? 's' : '') + ' : '),
-        mine.map(function (k) { return name(k.victim_id); }).join(', ')));
+      if (mine.length) body.appendChild(h('div', { class: 'victims' }, h('span', { class: 'muted' }, mine.length + ' kill' + (mine.length > 1 ? 's' : '')),
+        mine.map(function (k) { return h('button', { type: 'button', class: 'tag tag-victim', title: act.killSummary(k), onclick: function () { act.killDetails(k.id); } }, name(k.victim_id), k.note ? h('span', { class: 'has-note', 'aria-label': 'avec une note' }, '✎') : null); })));
 
       var A = h('div', { class: 'action-grid' });
       function add(label, fn, cls) { A.appendChild(h('button', { type: 'button', class: 'btn ' + (cls || ''), onclick: fn }, label)); }
-      if (!dead && isCurrent) {
-        add('Définir sa cible', function () {
-          ui.pickPlayer({ title: 'Qui est la cible de ' + p.name + ' ?', filter: function (x) { return x.id !== p.id && !act.isDead(x.id); } })
-            .then(function (id) { if (id) act.askLink(p.id, id); });
-        });
-        add('Définir son killer', function () {
-          ui.pickPlayer({ title: 'Qui chasse ' + p.name + ' ?', filter: function (x) { return x.id !== p.id && !act.isDead(x.id); } })
-            .then(function (id) { if (id) act.askLink(id, p.id); });
-        });
-        add('Il est mort', function () { api.close(); act.killDialog(p.id); }, 'btn-danger');
-      }
+      if (!dead && isCurrent) add('Il est mort', function () { api.close(); act.killDialog(p.id); }, 'btn-danger');
       if (dead && kill) { add(kill.killer_id ? 'Changer le killer' : 'Indiquer le killer', function () { act.editKill(kill); }); add('Annuler le kill', function () { act.revive(p.id); }); }
-      if (maps && maps.targetOf.get(p.id)) add('Retirer le lien vers sa cible', function () { act.removeLink(maps.targetOf.get(p.id)); });
-      if (maps && maps.hunterOf.get(p.id)) add('Retirer le lien vers son killer', function () { act.removeLink(maps.hunterOf.get(p.id)); });
       add(p.is_ally ? 'Retirer de l\'alliance' : 'Membre de l\'alliance', function () { store.update('players', p.id, { is_ally: !p.is_ally }); });
       add('Modifier la fiche', function () { act.editPlayer(p.id); });
       if (p.photo_path) add('Retirer la photo', function () { store.removePhoto(p.id); });

@@ -94,4 +94,50 @@ t('carte : types de logement, le point partagé prend le type le plus collectif,
   const r = L.parseImport('Nom\tAdresse\tType\nA\t3 rue X\tColoc\nB\tRésidence du Lac\t\nC\t\tImmeuble').rows;
   assert.deepEqual(r.map(x => x.address_type), ['coloc', 'residence', undefined]);
 });
+const chain = (s, mode = 'current') => L.fragments(s, 'r0', mode).fragments.map(f => f.ids.join('') + (f.closed ? '*' : '')).sort().join(' ');
+const move = (s, seg, dest, mode = 'current') => { const plan = L.planMove(s, 'r0', mode, seg, dest); if (!plan.noop) apply(s, plan); return plan; };
+t('glisser : réordonner dans un fragment se comporte comme une liste', () => {
+  const s = base(); s.links = [link('r0', 'a', 'b'), link('r0', 'b', 'c'), link('r0', 'c', 'd')];
+  move(s, ['c'], { after: 'a', before: 'b' }); assert.equal(chain(s), 'acbd');
+  move(s, ['d'], { before: 'a' }); assert.equal(chain(s), 'dacb');
+  assert.ok(move(s, ['a'], { after: 'd', before: 'c' }).noop, 'reposer au même endroit ne fait rien');
+  assert.ok(move(s, ['a', 'c'], { after: 'a' }).noop);
+});
+t('glisser : un bout de fragment vers un autre, un fragment entier, le bac', () => {
+  const s = base(); s.links = [link('r0', 'a', 'b'), link('r0', 'b', 'c'), link('r0', 'd', 'e')];
+  move(s, ['b', 'c'], { after: 'd', before: 'e' }); assert.equal(chain(s), 'dbce');     // a se retrouve seul
+  assert.deepEqual(L.fragments(s, 'r0', 'current').unplaced.sort(), ['a', 'f']);
+  move(s, ['d', 'b', 'c', 'e'], { after: 'a' }); assert.equal(chain(s), 'adbce');       // fragment entier accroché derrière a
+  move(s, ['f'], { after: 'e' }); assert.equal(chain(s), 'adbcef');                     // depuis le bac
+  move(s, ['b'], { tray: true }); assert.equal(chain(s), 'adcef');                       // vers le bac : le trou se referme
+  assert.ok(L.fragments(s, 'r0', 'current').unplaced.includes('b'));
+  assert.ok(move(s, ['b'], { tray: true }).noop);
+  const rumeur = base(); rumeur.links = [link('r0', 'a', 'b', 'rumeur'), link('r0', 'b', 'c')];
+  move(rumeur, ['b'], { tray: true }); assert.equal(rumeur.links[0].confidence, 'rumeur', 'le pont garde la fiabilité la plus faible');
+  const two = base(); move(two, ['a'], { before: 'b' }); assert.equal(chain(two), 'ab'); // deux joueurs du bac
+  assert.equal(two.links[0].confidence, 'sur');
+});
+t('glisser : les morts intermédiaires suivent la logique des contrats', () => {
+  const s = base(); s.links = [link('r0', 'a', 'b'), link('r0', 'b', 'c'), link('r0', 'd', 'e')];
+  s.kills = [{ round_id: 'r0', killer_id: 'a', victim_id: 'b' }];
+  assert.equal(chain(s), 'ac de');
+  move(s, ['f'], { after: 'a', before: 'c' });                                          // a → b† → f → c
+  assert.equal(chain(s), 'afc de'); assert.deepEqual(L.resolveTarget(s, 'r0', 'a').via, ['b']);
+  assert.equal(chain(s, 'complete'), 'abfc de', 'la chaîne complète garde le mort à sa place');
+  move(s, ['c'], { after: 'e' }); assert.equal(chain(s), 'af dec');
+});
+t('glisser : boucle fermée, et mode chaîne complète', () => {
+  const s = base(); s.links = [link('r0', 'a', 'b'), link('r0', 'b', 'c'), link('r0', 'c', 'a')];
+  assert.equal(chain(s), 'abc*');
+  move(s, ['b'], { tray: true }); assert.equal(chain(s), 'ac*');
+  move(s, ['a', 'c'], { after: 'd' }); assert.equal(chain(s), 'dac');                   // la boucle s'ouvre quand on la déplace
+  const c = base(); c.links = [link('r0', 'a', 'b'), link('r0', 'b', 'c')]; c.kills = [{ round_id: 'r0', victim_id: 'b' }];
+  move(c, ['b'], { after: 'c' }, 'complete'); assert.equal(chain(c, 'complete'), 'acb');
+});
+t('flèche : les liens bruts derrière une arête dérivée sont accessibles', () => {
+  const s = base(); s.links = [link('r0', 'a', 'b', 'probable'), link('r0', 'b', 'c')]; s.kills = [{ round_id: 'r0', victim_id: 'b' }];
+  const e = L.fragments(s, 'r0', 'current').fragments[0].edges[0];
+  assert.deepEqual(e.links.map(l => l.id), ['r0:a>b', 'r0:b>c']); assert.equal(e.confidence, 'probable');
+  assert.equal(L.fragments(s, 'r0', 'complete').fragments[0].edges[0].links.length, 1);
+});
 console.log(`\n${n} tests OK`);

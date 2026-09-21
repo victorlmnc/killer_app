@@ -61,22 +61,28 @@
         root.appendChild(ls);
 
         /* Accès */
-        var acc = h('section', { class: 'panel' }, h('h2', {}, 'Qui a accès'));
-        if (store.mode !== 'supabase') acc.appendChild(h('p', { class: 'prose' }, 'Mode démo : les données restent dans ce navigateur, personne d\'autre ne les voit. Une fois Supabase branché, seules les adresses e-mail listées ici pourront entrer.'));
-        else {
-          st.members.forEach(function (m) {
-            acc.appendChild(h('div', { class: 'row' }, h('span', { class: 'row-main' }, m.email), h('span', { class: 'tag' }, m.role === 'admin' ? 'Admin' : 'Membre'),
-              store.isAdmin && m.email !== (store.user.email || '').toLowerCase() ? h('button', { type: 'button', class: 'btn btn-danger', onclick: function () {
-                ui.confirm({ title: 'Retirer l\'accès ?', text: m.email + ' ne pourra plus rien lire ni modifier.', action: 'Retirer', danger: true }).then(function (ok) { if (ok) store.removeMember(m.email); });
-              } }, 'Retirer') : null));
-          });
-          if (store.isAdmin) {
-            var mail = h('input', { type: 'email', placeholder: 'prenom.nom@insa-cvl.fr', 'aria-label': 'E-mail à autoriser' }), role = ui.select([{ value: 'member', label: 'Membre' }, { value: 'admin', label: 'Admin' }], 'member', { 'aria-label': 'Rôle' });
-            acc.appendChild(h('div', { class: 'row row-wrap' }, mail, role, h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
-              if (!/^\S+@\S+\.\S+$/.test(mail.value.trim())) return ui.toast('Adresse e-mail invalide.', 'error');
-              store.addMember(mail.value, role.value); ui.toast('Accès ajouté. La personne peut créer son compte avec cette adresse.');
-            } }, 'Autoriser')));
-          } else acc.appendChild(h('p', { class: 'muted small' }, 'Seuls les admins ajoutent ou retirent des accès.'));
+        var acc = h('section', { class: 'panel' }, h('h2', {}, 'L\'équipe'));
+        var me = String((store.user && store.user.email) || '').toLowerCase();
+        acc.appendChild(h('p', { class: 'prose muted small' }, store.mode === 'supabase'
+          ? 'Seules ces adresses peuvent entrer, et chacune a tous les droits. Le nom est celui qui signe les infos du journal.'
+          : 'Mode démo : les données restent dans ce navigateur. Une fois Supabase branché, seules les adresses listées ici pourront entrer.'));
+        st.members.forEach(function (m) {
+          acc.appendChild(h('div', { class: 'row row-wrap member' },
+            h('input', { type: 'text', value: m.name || '', placeholder: m.email.split('@')[0], 'aria-label': 'Nom affiché de ' + m.email, maxlength: '40',
+              onchange: function (e) { store.renameMember(m.email, e.target.value.trim()); ui.toast('Nom enregistré.'); } }),
+            h('span', { class: 'row-main muted small' }, m.email + (m.email === me ? ' (toi)' : '')),
+            store.mode === 'supabase' && m.email !== me ? h('button', { type: 'button', class: 'btn btn-danger', onclick: function () {
+              ui.confirm({ title: 'Retirer l\'accès ?', text: m.email + ' ne pourra plus rien lire ni modifier.', action: 'Retirer', danger: true }).then(function (ok) { if (ok) store.removeMember(m.email); });
+            } }, 'Retirer') : null));
+        });
+        if (store.mode === 'supabase') {
+          var mail = h('input', { type: 'email', placeholder: 'prenom.nom@insa-cvl.fr', 'aria-label': 'E-mail à autoriser' }), who = h('input', { type: 'text', placeholder: 'Son nom', 'aria-label': 'Nom affiché', maxlength: '40' });
+          acc.appendChild(h('div', { class: 'row row-wrap' }, who, mail, h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+            var email = mail.value.trim().toLowerCase();
+            if (!/^\S+@\S+\.\S+$/.test(email)) return ui.toast('Adresse e-mail invalide.', 'error');
+            if (st.members.some(function (x) { return x.email === email; })) return ui.toast('Cette adresse a déjà accès.', 'error');
+            store.addMember(email, who.value); ui.toast('Accès ajouté. La personne peut créer son compte avec cette adresse.');
+          } }, 'Autoriser')));
         }
         root.appendChild(acc);
 
@@ -89,9 +95,15 @@
               download('killer-qg-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(copy, null, 2));
             } }, 'Télécharger une sauvegarde'),
             store.mode !== 'supabase' ? h('button', { type: 'button', class: 'btn', onclick: function () { store.resetDemo().then(function () { ui.toast('Partie de démo rechargée.'); }); } }, 'Recharger la démo') : null),
+          h('h3', {}, 'Journal'),
+          h('p', { class: 'prose' }, 'Vide la liste « Dernières infos » du dashboard (' + st.events.length + ' lignes). Les kills, les liens et les fiches ne bougent pas.'),
+          h('div', { class: 'actions actions-start' }, h('button', { type: 'button', class: 'btn', disabled: !st.events.length, onclick: function () {
+            ui.confirm({ title: 'Vider le journal ?', text: 'Les ' + st.events.length + ' dernières infos disparaissent pour toute l\'équipe. Rien d\'autre n\'est touché.', action: 'Vider le journal', danger: true })
+              .then(function (ok) { if (ok) store.clearEvents().then(function () { ui.toast('Journal vidé.'); }); });
+          } }, 'Vider le journal')),
           h('h3', {}, 'Fin de partie'),
           h('p', { class: 'prose' }, 'Efface les fiches, les photos, les chaînes, les kills et le journal. Le catalogue d\'armes, le shop et les réglages restent pour l\'an prochain.'),
-          h('div', { class: 'actions actions-start' }, h('button', { type: 'button', class: 'btn btn-danger', disabled: store.mode === 'supabase' && !store.isAdmin, onclick: function () {
+          h('div', { class: 'actions actions-start' }, h('button', { type: 'button', class: 'btn btn-danger', onclick: function () {
             ui.confirm({ title: 'Tout effacer ?', text: ['Les ' + st.players.length + ' fiches et leurs photos seront supprimées pour toute l\'équipe. C\'est irréversible.', 'Télécharge une sauvegarde avant si tu veux garder les statistiques.'], action: 'Effacer la partie', danger: true })
               .then(function (ok) { if (ok) store.purge().then(function () { ui.toast('Partie effacée.'); }); });
           } }, 'Effacer la partie')));
