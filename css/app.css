@@ -71,6 +71,8 @@ button, input, select, textarea { font: inherit; color: var(--ink); }
 .whoami-name { display: block; font-weight: 700; font-size: .92rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; } .whoami-sub { display: block; font-size: .76rem; color: var(--side-muted); }
 .demo-flag { font-size: .78rem; color: var(--side-muted); padding: 0 .5rem; }
 .content { min-width: 0; padding: 1.6rem clamp(1rem, 3vw, 2.6rem) 3rem; }
+.page-heading { display: flex; align-items: center; gap: .7rem; min-width: 0; }
+.page-heading .logo { color: var(--ink); }
 .topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem 2rem; flex-wrap: wrap; margin-bottom: 1.3rem; max-width: 1180px; }
 .status { display: flex; margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: .35rem .4rem; box-shadow: var(--shadow); }
 .status > div { padding: 0 1rem; border-left: 1px solid var(--line); display: flex; flex-direction: column-reverse; } .status > div:first-child { border-left: 0; }

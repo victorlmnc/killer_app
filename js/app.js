@@ -73,7 +73,7 @@
     app.appendChild(h('div', { class: 'shell' },
       h('aside', { class: 'side' }, brand('a', { href: '#/dashboard' }), game, nav, whoami,
         store.mode !== 'supabase' ? h('p', { class: 'demo-flag' }, 'Données fictives, stockées dans ce navigateur.') : null),
-      h('div', { class: 'content' }, h('header', { class: 'topbar' }, title, status), main)));
+      h('div', { class: 'content' }, h('header', { class: 'topbar' }, h('div', { class: 'page-heading' }, logo(36), title), status), main)));
     shell = { nav: nav, title: title, main: main, game: game, status: status, whoami: whoami };
   }
 
