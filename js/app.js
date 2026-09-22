@@ -106,7 +106,9 @@
     });
     ui.clear(shell.whoami);
     var me = store.displayName();
-    shell.whoami.appendChild(h('span', { class: 'whoami-badge', 'aria-hidden': 'true' }, ui.initials(me)));
+    var member = store.member();
+    var memberPhoto = member && store.memberPhotoUrl(member);
+    shell.whoami.appendChild(h('span', { class: 'whoami-badge', 'aria-hidden': 'true' }, memberPhoto ? h('img', { src: memberPhoto, alt: '' }) : ui.initials(me)));
     shell.whoami.appendChild(h('span', {}, h('span', { class: 'whoami-name' }, me || 'Invité'), h('span', { class: 'whoami-sub' }, store.mode === 'supabase' ? 'Membre de l\'alliance' : 'Mode démo')));
   }
   window.addEventListener('hashchange', route);

@@ -10,6 +10,7 @@ create table if not exists public.allowed_emails (
 );
 
 alter table public.allowed_emails add column if not exists name text not null default '';   -- nom affiché dans l'app
+alter table public.allowed_emails add column if not exists photo_path text;             -- photo de profil du membre
 alter table public.allowed_emails alter column role set default 'admin';
 
 insert into public.allowed_emails (email, role)

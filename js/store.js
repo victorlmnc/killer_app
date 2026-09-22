@@ -147,6 +147,10 @@
     var m = store.state.members.find(function (x) { return String(x.email).toLowerCase() === email; });
     return (m && m.name) || email.split('@')[0] || '';
   };
+  store.member = function (email) {
+    email = String(email || (store.user && store.user.email) || '').toLowerCase();
+    return store.state.members.find(function (m) { return String(m.email).toLowerCase() === email; }) || null;
+  };
   /* Journal : un texte court + les détails de l'évènement (ids, note, source…) pour pouvoir les rouvrir depuis le dashboard. */
   store.log = function (text, details) {
     return store.insert('events', { text: text, actor: store.displayName(), details: details || null, created_at: new Date().toISOString() });
@@ -187,9 +191,12 @@
     refreshSigned();
     return null;
   };
+  store.memberPhotoUrl = function (m) {
+    return store.photoUrl(m);
+  };
   function refreshSigned() {
     if (signing || store.mode !== 'supabase') return;
-    var paths = store.state.players.map(function (p) { return p.photo_path; }).filter(function (path) {
+    var paths = store.state.players.concat(store.state.members).map(function (p) { return p.photo_path; }).filter(function (path) {
       if (!path || path.indexOf('data:') === 0) return false;
       var hit = signed.get(path); return !hit || hit.exp <= Date.now();
     });
@@ -237,6 +244,31 @@
     var p = store.player(playerId); if (!p || !p.photo_path) return Promise.resolve();
     if (store.mode === 'supabase' && p.photo_path.indexOf('data:') !== 0) sb.storage.from(PHOTO_BUCKET).remove([p.photo_path]);
     return store.update('players', playerId, { photo_path: null });
+  };
+  store.setMemberPhoto = function (email, file) {
+    var m = store.member(email); if (!m) return Promise.resolve();
+    if (store.mode !== 'supabase') {
+      return shrink(file, 240).then(function (c) {
+        m.photo_path = c.toDataURL('image/jpeg', 0.8); local.persist(); store.emit();
+      });
+    }
+    var old = m.photo_path, path = 'members/' + uuid() + '.jpg';
+    return guard(shrink(file, 640).then(function (c) {
+      return new Promise(function (res) { c.toBlob(res, 'image/jpeg', 0.85); });
+    }).then(function (blob) {
+      return sb.storage.from(PHOTO_BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+    }).then(check).then(function () {
+      if (old) sb.storage.from(PHOTO_BUCKET).remove([old]);
+      m.photo_path = path; store.emit();
+      return sb.from('allowed_emails').update({ photo_path: path }).eq('email', m.email).then(check);
+    }), 'Envoi de la photo');
+  };
+  store.removeMemberPhoto = function (email) {
+    var m = store.member(email); if (!m || !m.photo_path) return Promise.resolve();
+    var old = m.photo_path;
+    m.photo_path = null; store.emit();
+    if (store.mode !== 'supabase') { local.persist(); return Promise.resolve(); }
+    return guard(Promise.all([sb.storage.from(PHOTO_BUCKET).remove([old]), sb.from('allowed_emails').update({ photo_path: null }).eq('email', m.email).then(check)]), 'Suppression de la photo');
   };
 
   /* ----- fin de partie : tout ce qui est personnel disparaît, le catalogue d'armes et les réglages restent ----- */

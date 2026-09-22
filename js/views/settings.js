@@ -63,6 +63,19 @@
         /* Accès */
         var acc = h('section', { class: 'panel' }, h('h2', {}, 'L\'équipe'));
         var me = String((store.user && store.user.email) || '').toLowerCase();
+        var currentMember = store.member(me);
+        if (currentMember) {
+          var profileFile = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: function () {
+            if (profileFile.files[0]) store.setMemberPhoto(me, profileFile.files[0]);
+          } });
+          var profilePreview = h('button', { type: 'button', class: 'profile-photo profile-photo-member', 'aria-label': 'Changer ma photo de profil', onclick: function () { profileFile.click(); } },
+            currentMember.photo_path ? h('img', { src: store.memberPhotoUrl(currentMember) || '', alt: '' }) : h('span', { class: 'whoami-badge' }, ui.initials(store.displayName(me))));
+          var profileActions = h('div', { class: 'toolbar' },
+            h('button', { type: 'button', class: 'btn', onclick: function () { profileFile.click(); } }, currentMember.photo_path ? 'Changer la photo' : 'Ajouter une photo'),
+            currentMember.photo_path ? h('button', { type: 'button', class: 'btn btn-danger', onclick: function () { store.removeMemberPhoto(me); } }, 'Retirer') : null);
+          acc.appendChild(h('div', { class: 'profile-row' }, profilePreview,
+            h('div', { class: 'profile-meta' }, h('strong', {}, 'Ma photo de profil'), h('span', { class: 'muted small' }, 'Visible par les membres de l\'alliance.'), profileActions), profileFile));
+        }
         acc.appendChild(h('p', { class: 'prose muted small' }, store.mode === 'supabase'
           ? 'Seules ces adresses peuvent entrer, et chacune a tous les droits. Le nom est celui qui signe les infos du journal.'
           : 'Mode démo : les données restent dans ce navigateur. Une fois Supabase branché, seules les adresses listées ici pourront entrer.'));
