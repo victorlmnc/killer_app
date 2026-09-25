@@ -547,7 +547,7 @@
           ui.field(t('Language'), lang),
           store.mode === 'supabase' ? ui.field(t('New password'), pass, t('Leave empty to keep the current one.')) : null));
         body.appendChild(h('div', { class: 'actions' },
-          store.mode === 'supabase' ? h('button', { type: 'button', class: 'btn btn-push', onclick: function () { store.auth.signOut(); } }, K.icon('logout'), t('Sign out')) : null,
+          store.mode === 'supabase' ? h('button', { type: 'button', class: 'btn btn-push', onclick: function () { api.close(); store.auth.signOut(); } }, K.icon('logout'), t('Sign out')) : null,
           h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
           h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
             var jobs = [];
