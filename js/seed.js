@@ -1,5 +1,5 @@
-/* Données de départ : tout ce qui n'est PAS personnel (armes, shop, barème, couleurs).
-   Aucun nom d'élève ici : les joueurs ne vivent que dans la base Supabase, derrière le login. */
+/* Seed data: everything that is not personal (weapon catalogue, shop, scoring, colours) and a fictional demo game.
+   Player names only exist in the database, behind the login; the demo uses characters from 19th-century novels. */
 (function () {
   'use strict';
   var K = (window.K = window.K || {});
@@ -128,36 +128,57 @@
   ];
 
   var SHOP = [
-    {"name": "Super Coupe Gorge", "price": 8, "description": "Le super coupe-gorge vous permet de tuer votre cible sans qu'elle ne puisse être sauvée par d’autres joueurs ou par l’immunité. La seule chose qui peut sauver votre victime est son intelligence et sa capacité à courir vite. Attention : Ce bonus ne permet pas de passer outre les trêves applicables à votre cible. Ce bonus est activé le lendemain de l’achat à 00:10 et est valable pendant 24h."},
-    {"name": "Coupe Gorge", "price": 6, "description": "Le coupe-gorge vous permet de tuer votre cible sans qu'elle ne puisse être sauvée par d’autres joueurs, sauf si votre victime possède une immunité active en même temps. Attention : Ce bonus ne permet pas de passer outre les trêves applicables à votre cible. Ce bonus est activé le lendemain de l’achat à 00:10 et est valable pendant 24h."},
-    {"name": "Révélation", "price": 3, "description": "La révélation permet de connaître votre killer actuel. Attention : Une fois la fenêtre montrant votre killer fermée dans l’application, il ne sera plus possible de le revoir à moins de repayer le bonus. Ce bonus est actif immédiatement après l’achat."},
-    {"name": "Brouilleur", "price": 1, "description": "Le brouilleur permet à un joueur de désactiver les notifications et messages (kills et bonus) pour tous les joueurs pendant 2 heures. Le brouilleur est cumulable : si un autre brouilleur est activé pendant qu'un autre est déjà en cours, le minuteur est remis à zéro, et toutes les notifications (y compris celle signalant l’achat du brouilleur) seront libérées à la fin du dernier brouilleur. Ce bonus prend effet immédiatement après l’achat. La seule limite est qu’il ne peut pas être activé entre le moment où un kill est effectué et le scan de la carte par le joueur ayant réalisé le kill (aucun problème si des coéquipiers avec lui l’activent à ce moment-là)."},
-    {"name": "Immunité", "price": 3, "description": "L’immunité vous permet d’être protégé contre les kills pendant 24 heures. Vous pourrez continuer à jouer normalement, mais vous ne pourrez pas être tué, à moins que votre killer n'achète un super Coupe-Gorge. Ce bonus est activé le lendemain de l’achat à 00:10 et est valable pendant 24h."}
+      {
+          "name": "Super Coupe-Gorge",
+          "price": 8,
+          "description": "Your target cannot be saved by other players or by an immunity. Active from 00:10 the day after purchase, for 24 hours. Does not override truces."
+      },
+      {
+          "name": "Coupe-Gorge",
+          "price": 6,
+          "description": "Your target cannot be saved by other players, unless they have an active immunity. Active from 00:10 the day after purchase, for 24 hours. Does not override truces."
+      },
+      {
+          "name": "Révélation",
+          "price": 3,
+          "description": "Reveals who is currently hunting you. Once the window is closed it cannot be reopened without buying the bonus again. Active immediately."
+      },
+      {
+          "name": "Brouilleur",
+          "price": 1,
+          "description": "Disables kill and bonus notifications for every player for 2 hours. Stacks: a new jammer resets the timer. Active immediately."
+      },
+      {
+          "name": "Immunité",
+          "price": 3,
+          "description": "You cannot be killed for 24 hours, except by a Super Coupe-Gorge. Active from 00:10 the day after purchase."
+      }
   ];
 
   var POINT_RULES = [
-    { label: 'Arme facile', points: '1' }, { label: 'Arme difficile', points: '3' },
-    { label: 'Arme facile + vidéo', points: '2 à 4' }, { label: 'Arme difficile + vidéo', points: '4 à 6' },
-    { label: 'Arme facile + kill avec Orion', points: '3 à 5' }, { label: 'Arme difficile + kill avec Orion', points: '5 à 7' },
-    { label: 'First blood', points: '+5' }, { label: 'Multi-kill', points: '+1 par coéquipier' }
+    { label: 'Easy weapon', points: '1' }, { label: 'Hard weapon', points: '3' },
+    { label: 'Easy weapon + video', points: '2 to 4' }, { label: 'Hard weapon + video', points: '4 to 6' },
+    { label: 'Easy weapon + kill witnessed by the organiser', points: '3 to 5' }, { label: 'Hard weapon + kill witnessed by the organiser', points: '5 to 7' },
+    { label: 'First blood', points: '+5' }, { label: 'Multi-kill', points: '+1 per teammate' }
   ];
 
   K.seed = {
     weapons: WEAPONS,
     settings: {
-      game_name: 'Killer 2027',
-      school_total: 441,
+      game_name: 'Killer',
+      school_total: 0,
       official_players: 0,
-      years: [{ name: '2A', color: '#5B9BD5' }, { name: '3A', color: '#6FAE5A' }, { name: '4A', color: '#D9A520' }, { name: '5A', color: '#D9605F' }],
-      depts: ['MRI', 'STI', 'ERE'],
-      map_center: { lat: 47.0833, lng: 2.4 }, // Bourges : centre de la carte et priorité du géocodage
-      links: [{ label: 'Règles du jeu', url: 'https://killer-insa.github.io/public/regles/index.html' }],
+      years: [{ name: '1', color: '#5B9BD5' }, { name: '2', color: '#6FAE5A' }, { name: '3', color: '#D9A520' }, { name: '4', color: '#D9605F' }, { name: '5', color: '#9B6BD9' }],
+      depts: [],
+      map_center: { lat: 48.8566, lng: 2.3522 },
+      geocoder_url: '',
+      links: [],
       shop: SHOP,
       point_rules: POINT_RULES
     }
   };
 
-  /* ---------- Partie fictive pour le mode démo (personnages de romans, aucun élève réel) ---------- */
+  /* ---------- Demo game ---------- */
   var CAST = ['VALJEAN Jean', 'JAVERT Émile', 'THÉNARDIER Éponine', 'PONTMERCY Marius', 'RASTIGNAC Eugène', 'BOVARY Emma',
     'SOREL Julien', 'LUPIN Arsène', 'DANTÈS Edmond', 'DE WINTER Milady', 'BERGERAC Cyrano', 'ROBIN Roxane', 'NEMO Pierre',
     'PASSEPARTOUT Jean', 'AROUET Candide', 'ALMAVIVA Figaro', 'LESCAUT Manon', 'DUROY Georges', 'RAQUIN Thérèse',
@@ -168,43 +189,40 @@
 
   K.seed.demo = function () {
     var n = 0, uid = function () { return 'demo-' + (++n); };
-    var years = ['2A', '3A', '4A', '5A'], depts = ['MRI', 'STI'], streets = ['rue Moyenne', 'avenue de Dun', 'rue de Turly', 'boulevard Lahitolle', 'rue Jean Baffier', 'avenue Ernest Renan', 'rue Barbès', 'rue d\'Auron'];
-    // Adresses inventées pour des personnages de roman ; deux résidences partagées pour montrer le regroupement des points.
+    var years = ['2', '3', '4', '5'], depts = ['A', 'B'];
+    var streets = ['rue de la Paix', 'avenue de la République', 'rue des Écoles', 'boulevard Voltaire', 'rue Pasteur', 'avenue Jean Jaurès', 'rue Victor Hugo', 'rue du Port'];
+    // Made-up addresses; two shared residences show how markers are grouped.
     function home(i) {
       if (i % 5 === 4) return { address: '', lat: null, lng: null, address_type: 'normale' };
-      if (i % 7 === 3) return { address: 'Résidence des Tanneurs, Bourges', lat: 47.08712, lng: 2.39105, address_type: 'residence' };
-      if (i % 9 === 5) return { address: 'Résidence du Lac, Bourges', lat: 47.06655, lng: 2.41240, address_type: 'residence' };
-      if (i % 8 === 0) return { address: '14 rue Barbès, Bourges', lat: 47.07410, lng: 2.39520, address_type: 'coloc' };
-      var a = { address: (3 + (i * 7) % 90) + ' ' + streets[i % streets.length] + ', Bourges', address_type: i % 6 === 1 ? 'immeuble' : 'normale' };
-      if (i % 11 === 6) { a.lat = null; a.lng = null; return a; } // pas encore localisée
+      if (i % 7 === 3) return { address: 'Résidence des Tanneurs', lat: 47.08712, lng: 2.39105, address_type: 'residence' };
+      if (i % 9 === 5) return { address: 'Résidence du Lac', lat: 47.06655, lng: 2.41240, address_type: 'residence' };
+      if (i % 8 === 0) return { address: '14 rue du Port', lat: 47.07410, lng: 2.39520, address_type: 'coloc' };
+      var a = { address: (3 + (i * 7) % 90) + ' ' + streets[i % streets.length], address_type: i % 6 === 1 ? 'immeuble' : 'normale' };
+      if (i % 11 === 6) { a.lat = null; a.lng = null; return a; }
       a.lat = +(47.0833 + Math.sin(i * 2.4) * 0.016).toFixed(5); a.lng = +(2.4 + Math.cos(i * 1.7) * 0.026).toFixed(5);
       return a;
     }
     var players = CAST.map(function (name, i) {
-      var y = years[i % 4];
-      var hm = home(i);
-      return { id: uid(), name: name, address: hm.address, address_type: hm.address_type, lat: hm.lat, lng: hm.lng, year: y, dept: depts[(i >> 1) % 2], td: 'TD' + (1 + (i % 3)), tp: y === '5A' ? '' : 'TP' + (1 + (i % 5)),
+      var y = years[i % 4], hm = home(i);
+      return { id: uid(), name: name, address: hm.address, address_type: hm.address_type, lat: hm.lat, lng: hm.lng, year: y, dept: depts[(i >> 1) % 2], td: 'TD' + (1 + (i % 3)), tp: y === '5' ? '' : 'TP' + (1 + (i % 5)),
         option: i % 4 >= 2 ? ['Option A', 'Option B', 'Option C'][i % 3] : '', lang_group: 'G' + (1 + (i % 6)), notes: '', weapons: '', points: 0,
         is_ally: i === 7 || i === 8 || i === 10 || i === 12, photo_path: null };
     });
     var easy = WEAPONS.filter(function (w) { return w[1] === 'facile'; }), hard = WEAPONS.filter(function (w) { return w[1] === 'difficile'; });
     players.forEach(function (p, i) { if (i % 3 !== 1) p.weapons = easy[(i * 7) % easy.length][0] + ', ' + hard[(i * 5) % hard.length][0]; });
 
-    var r0 = { id: uid(), name: 'Boucle initiale', position: 0 }, r1 = { id: uid(), name: 'Reroll 1', position: 1 };
+    var r0 = { id: uid(), name: 'Initial loop', position: 0 }, r1 = { id: uid(), name: 'Reroll 1', position: 1 };
     var links = [], kills = [], P = players, conf = ['sur', 'sur', 'probable', 'sur', 'rumeur'];
     function L(round, a, b, c) { links.push({ id: uid(), round_id: round.id, hunter_id: P[a].id, target_id: P[b].id, confidence: c || 'sur', source: '' }); }
     function X(round, a, b, weapon, pts, daysAgo) {
-      kills.push({ id: uid(), round_id: round.id, killer_id: a == null ? null : P[a].id, victim_id: P[b].id, weapon: weapon, points: pts, note: '',
-        happened_at: new Date(Date.now() - daysAgo * 864e5).toISOString() });
+      kills.push({ id: uid(), round_id: round.id, killer_id: a == null ? null : P[a].id, victim_id: P[b].id, weapon: weapon, points: pts, note: '', happened_at: new Date(Date.now() - daysAgo * 864e5).toISOString() });
       if (a != null) P[a].points += pts;
     }
-    // Boucle initiale : trois fragments connus
     [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8]].forEach(function (e, i) { L(r0, e[0], e[1], conf[i % 5]); });
     [[14, 15], [15, 16], [16, 17], [17, 18]].forEach(function (e) { L(r0, e[0], e[1]); });
     [[25, 26], [26, 27]].forEach(function (e) { L(r0, e[0], e[1], 'probable'); });
     X(r0, 0, 1, 'Banane', 6, 12); X(r0, 0, 2, 'Arrosoir', 3, 11); X(r0, 14, 15, 'Lacet', 1, 11); X(r0, null, 30, '', 0, 10);
     X(r0, 5, 6, 'Chaise', 4, 9); X(r0, 25, 26, 'Briquet', 1, 9); X(r0, null, 33, '', 0, 8); X(r0, 16, 17, 'Cravate', 1, 8);
-    // Reroll 1 : la boucle actuelle
     [[7, 20], [20, 8], [8, 0], [0, 22]].forEach(function (e) { L(r1, e[0], e[1]); });
     [[10, 35], [35, 12], [12, 28]].forEach(function (e, i) { L(r1, e[0], e[1], i === 2 ? 'rumeur' : 'sur'); });
     [[38, 3], [3, 10]].forEach(function (e) { L(r1, e[0], e[1], 'probable'); });
@@ -212,21 +230,22 @@
     X(r1, 7, 20, 'Écocup', 2, 3); X(r1, 40, 41, 'Tronçonneuse', 5, 2); X(r1, null, 19, '', 0, 1);
 
     var now = Date.now();
-    function X2(round, a, b, weapon, pts, daysAgo, note) { X(round, a, b, weapon, pts, daysAgo); kills[kills.length - 1].note = note; return kills[kills.length - 1]; }
-    var k1 = kills.filter(function (k) { return k.victim_id === P[20].id; })[0]; k1.note = 'Devant le RU à 12 h 40, il sortait seul. Vidéo envoyée à Orion.';
-    links.filter(function (l) { return l.hunter_id === P[10].id; })[0].source = 'Vu sur le téléphone de Cyrano en amphi';
-    links.filter(function (l) { return l.hunter_id === P[12].id; })[0].source = 'Dit par une 3A, pas vérifié';
+    var k1 = kills.filter(function (k) { return k.victim_id === P[20].id; })[0]; k1.note = 'Outside the canteen at 12:40, he was alone. Video sent to the organiser.';
+    links.filter(function (l) { return l.hunter_id === P[10].id; })[0].source = 'Seen on his phone during a lecture';
+    links.filter(function (l) { return l.hunter_id === P[12].id; })[0].source = 'Heard from a 3rd year, unverified';
     var events = [
-      { text: 'LUPIN Arsène a éliminé LANTIER Étienne (Écocup)', details: { type: 'kill', kill_id: k1.id, killer_id: P[7].id, victim_id: P[20].id, killer: P[7].name, victim: P[20].name, weapon: 'Écocup', points: 2, note: k1.note } },
-      { text: 'Lien ajouté : BERGERAC Cyrano chasse POQUELIN Agnès', details: { type: 'link', hunter_id: P[10].id, target_id: P[35].id, hunter: P[10].name, target: P[35].name, confidence: 'sur', source: 'Vu sur le téléphone de Cyrano en amphi' } },
-      { text: 'Nouvelle boucle : Reroll 1', details: null }
+      { text: 'LUPIN Arsène eliminated LANTIER Étienne (Écocup)', details: { type: 'kill', kill_id: k1.id, killer_id: P[7].id, victim_id: P[20].id, killer: P[7].name, victim: P[20].name, weapon: 'Écocup', points: 2, note: k1.note } },
+      { text: 'Link added: BERGERAC Cyrano hunts POQUELIN Agnès', details: { type: 'link', hunter_id: P[10].id, target_id: P[35].id, hunter: P[10].name, target: P[35].name, confidence: 'sur', source: 'Seen on his phone during a lecture' } },
+      { text: 'New round: Reroll 1', details: null }
     ].map(function (e, i) { return { id: uid(), text: e.text, details: e.details, actor: 'Arsène', created_at: new Date(now - (i + 1) * 36e5 * 7).toISOString() }; });
 
     var settings = JSON.parse(JSON.stringify(K.seed.settings));
-    settings.game_name = 'Killer (démo)'; settings.official_players = 48;
+    settings.game_name = 'Killer (demo)'; settings.official_players = 48; settings.school_total = 440; settings.depts = ['A', 'B'];
+    settings.map_center = { lat: 47.0833, lng: 2.4 };
     return { players: players, rounds: [r0, r1], links: links, kills: kills, events: events, settings: settings,
-      spots: [{ id: uid(), name: 'Entrée du campus', note: 'Passage obligé entre deux cours.', address: '', lat: 47.0822, lng: 2.4163 },
-        { id: uid(), name: 'Resto U', note: 'Tout le monde y passe entre 12 h et 13 h.', address: '', lat: 47.0809, lng: 2.4149 }],
-      weapons: WEAPONS.map(function (w) { return { id: uid(), name: w[0], difficulty: w[1] }; }), members: [] };
+      spots: [{ id: uid(), name: 'Campus gate', note: 'Everybody walks through it between classes.', address: '', lat: 47.0822, lng: 2.4163 },
+        { id: uid(), name: 'Canteen', note: 'Busy between 12:00 and 13:00.', address: '', lat: 47.0809, lng: 2.4149 }],
+      weapons: WEAPONS.map(function (w) { return { id: uid(), name: w[0], difficulty: w[1] }; }),
+      members: [{ email: 'demo@local', name: 'Demo', role: 'admin', tabs: null, avatar_path: null }] };
   };
 })();

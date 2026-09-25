@@ -1,10 +1,10 @@
 (function () {
   'use strict';
-  var K = window.K, ui = K.ui, h = ui.h, L = K.logic, store = K.store;
+  var K = window.K, ui = K.ui, h = ui.h, L = K.logic, store = K.store, t = K.t;
 
   K.views = K.views || {};
-  K.views.chaine = {
-    title: 'Chaîne',
+  K.views.chain = {
+    title: t('Chain'),
     render: function (root) {
       var view = { roundId: null, mode: 'current', scope: 'one', q: '' };
       var frags = [], trayIds = [], drag = null, pending = false, justDragged = false, gone = false;
@@ -16,17 +16,17 @@
       function bubble(p, dead, fi, pos) {
         var q = L.norm(view.q), match = q && L.norm(p.name).indexOf(q) >= 0;
         var el = h('button', { type: 'button', class: 'bubble' + (dead ? ' is-dead' : '') + (p.is_ally ? ' is-ally' : '') + (match ? ' is-match' : '') + (q && !match ? ' is-dim' : ''),
-          'data-drag': 'bubble', 'data-id': p.id, 'data-frag': String(fi), 'data-pos': String(pos), title: 'Glisser pour déplacer, cliquer pour ouvrir la fiche',
+          'data-drag': store.canEdit() ? 'bubble' : null, 'data-id': p.id, 'data-frag': String(fi), 'data-pos': String(pos), title: store.canEdit() ? t('Drag to move, click to open the sheet') : null,
           onclick: function () { if (!justDragged) K.actions.openPlayer(p.id, { roundId: view.roundId }); } }, ui.avatar(p, 'lg'), h('span', { class: 'bubble-name' }, p.name));
         return el;
       }
       function arrow(edge) {
-        var title = K.actions.edgeTitle(edge.links, edge.confidence) + (edge.via && edge.via.length ? ' Morts entre les deux : ' + names(edge.via) + '.' : '');
-        return h('button', { type: 'button', class: 'thread thread-' + edge.confidence, title: title, 'aria-label': 'Lien, ' + title, onclick: function () { K.actions.editEdge(edge.links); } },
+        var title = K.actions.edgeTitle(edge.links, edge.confidence) + (edge.via && edge.via.length ? ' ' + t('Dead players in between: {names}.', { names: names(edge.via) }) : '');
+        return h('button', { type: 'button', class: 'thread thread-' + edge.confidence, title: title, 'aria-label': t('Link') + ', ' + title, onclick: function () { K.actions.editEdge(edge.links); } },
           h('span', { class: 'thread-line', 'aria-hidden': 'true' }), edge.via && edge.via.length ? h('span', { class: 'thread-badge' }, '†' + edge.via.length) : null);
       }
 
-      /* ------------------------------------------------------------ glisser-déposer (souris, stylet, doigt) */
+      /* ------------------------------------------------------------ drag and drop (mouse, pen, touch) */
       function segmentFor(el, shift) {
         if (el.getAttribute('data-drag') === 'fragment') return frags[Number(el.getAttribute('data-frag'))].ids.slice();
         var fi = Number(el.getAttribute('data-frag')), pos = Number(el.getAttribute('data-pos')), id = el.getAttribute('data-id');
@@ -82,7 +82,7 @@
         var el = e.target.closest ? e.target.closest('[data-drag]') : null;
         if (!el || (e.pointerType === 'mouse' && e.button !== 0) || drag) return;
         drag = { el: el, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, touch: e.pointerType === 'touch', shift: e.shiftKey, active: false, hit: null };
-        if (drag.touch) drag.timer = setTimeout(function () { if (drag && !drag.active) { activate(); if (navigator.vibrate) navigator.vibrate(12); } }, 320); // appui long : un simple glissé du doigt fait défiler la page
+        if (drag.touch) drag.timer = setTimeout(function () { if (drag && !drag.active) { activate(); if (navigator.vibrate) navigator.vibrate(12); } }, 320); // long press: a plain swipe still scrolls the page
         window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onCancel);
       }
       function onMove(e) {
@@ -102,35 +102,35 @@
       body.addEventListener('contextmenu', function (e) { if (e.target.closest && e.target.closest('[data-drag]')) e.preventDefault(); });
       body.addEventListener('dragstart', function (e) { e.preventDefault(); });
 
-      /* ---------------------------------------------------------------------------------------- affichage */
+      /* ---------------------------------------------------------------------------------------- render */
       function refresh() {
-        if (drag && drag.active) { pending = true; return; }   // une mise à jour d'un coéquipier attend la fin du geste
+        if (drag && drag.active) { pending = true; return; }   // a teammate's update waits until the gesture ends
         pending = false;
         var st = store.state, rounds = L.sortedRounds(st), current = L.currentRound(st);
         var currentId = current ? current.id : null;
-        // nouvelle boucle créée (par moi ou par un coéquipier) : on y bascule, l'ancienne devient une archive
+        // a new round (mine or a teammate's) becomes the displayed one; the old one turns into an archive
         if (currentId !== view.knownCurrent) { view.roundId = currentId; view.knownCurrent = currentId; }
         if (!view.roundId || !rounds.some(function (r) { return r.id === view.roundId; })) view.roundId = currentId;
         var archived = current && view.roundId !== current.id;
 
         ui.clear(bar);
-        if (rounds.length) bar.appendChild(ui.select(rounds.map(function (r) { return { value: r.id, label: r.name + (r.id === current.id ? ' (en cours)' : '') }; }), view.roundId,
-          { class: 'tb-round', 'aria-label': 'Boucle affichée', onchange: function (e) { view.roundId = e.target.value; refresh(); } }));
+        if (rounds.length) bar.appendChild(ui.select(rounds.map(function (r) { return { value: r.id, label: r.name + (r.id === current.id ? ' (' + t('current') + ')' : '') }; }), view.roundId,
+          { class: 'tb-round', 'aria-label': t('Displayed round'), onchange: function (e) { view.roundId = e.target.value; refresh(); } }));
         function seg(label, key, options) {
           return h('div', { class: 'segmented', role: 'group', 'aria-label': label }, options.map(function (m) {
             return h('button', { type: 'button', class: view[key] === m[0] ? 'is-on' : '', 'aria-pressed': String(view[key] === m[0]), title: m[2] || null, onclick: function () { view[key] = m[0]; refresh(); } }, m[1]);
           }));
         }
-        bar.appendChild(seg('Affichage', 'mode', [['current', 'Actuelle'], ['complete', 'Complète']]));
-        bar.appendChild(seg('Ce qu\'on déplace', 'scope', [['one', 'Un joueur', 'Glisser une bulle ne déplace qu\'elle'], ['tail', 'Avec la suite', 'Glisser une bulle emmène aussi tous ceux qui la suivent (ou maintiens Maj)']]));
-        bar.appendChild(h('input', { type: 'search', class: 'tb-search', placeholder: 'Repérer quelqu\'un', value: view.q, 'aria-label': 'Repérer un joueur dans la chaîne', oninput: function (e) { view.q = e.target.value; paint(); } }));
-        bar.appendChild(h('button', { type: 'button', class: 'btn btn-push tb-reroll', onclick: K.actions.newRound }, rounds.length ? 'Nouveau reroll' : 'Démarrer la boucle'));
-        help.textContent = 'Glisse une bulle pour la placer avant ou après un joueur (appui long sur téléphone), la poignée ⠿ pour un fragment entier. Clique une flèche pour régler sa fiabilité, sa source, ou couper le lien.';
+        bar.appendChild(seg(t('Display'), 'mode', [['current', t('Current')], ['complete', t('Complete')]]));
+        if (store.canEdit()) bar.appendChild(seg(t('What moves'), 'scope', [['one', t('One player'), t('Dragging a bubble moves only that player')], ['tail', t('With the rest'), t('Dragging a bubble also takes everyone after it (or hold Shift)')]]));
+        bar.appendChild(h('input', { type: 'search', class: 'tb-search', placeholder: t('Find someone'), value: view.q, 'aria-label': t('Find a player in the chain'), oninput: function (e) { view.q = e.target.value; paint(); } }));
+        if (store.canEdit()) bar.appendChild(h('button', { type: 'button', class: 'btn btn-push tb-reroll', onclick: K.actions.newRound }, rounds.length ? t('New reroll') : t('Start the loop')));
+        help.textContent = store.canEdit() ? t('Drag a bubble to place it before or after a player (long press on a phone), or the handle to move a whole fragment. Click an arrow to set its reliability and source, or cut the link.') : t('Read-only view of the chain.');
         paint();
 
         function paint() {
           ui.clear(body);
-          if (archived) body.appendChild(h('p', { class: 'banner' }, 'Archive : cette boucle a été remplacée par un reroll. Les vivants et les morts sont ceux de l\'époque.'));
+          if (archived) body.appendChild(h('p', { class: 'banner' }, t('Archive: this round was replaced by a reroll. Alive and dead players are those of the time.')));
           var f = view.roundId ? L.fragments(st, view.roundId, view.mode) : { fragments: [], unplaced: st.players.filter(function (p) { return !L.deadSet(st).has(p.id); }).map(function (p) { return p.id; }) };
           var dead = view.roundId ? L.deadSet(st, view.roundId) : new Set();
           frags = f.fragments.slice().sort(function (a, b) {
@@ -138,25 +138,25 @@
             return (bb - aa) || (b.ids.length - a.ids.length);
           });
           trayIds = f.unplaced;
-          if (!frags.length) body.appendChild(h('p', { class: 'empty' }, 'Aucun lien connu dans cette boucle. Glisse un joueur du bac sur un autre : à gauche il devient son chasseur, à droite sa cible.'));
+          if (!frags.length) body.appendChild(h('p', { class: 'empty' }, t('No known link in this round. Drag a player from the tray onto another: on the left they become the hunter, on the right the target.')));
           frags.forEach(function (fr, fi) {
             var flow = h('div', { class: 'flow' });
-            // la flèche voyage avec la bulle qu'elle désigne : à la ligne, on lit « → cible » et jamais une flèche orpheline
+            // the arrow travels with the bubble it points to, so a line break never leaves an orphan arrow
             fr.ids.forEach(function (id, i) {
               flow.appendChild(h('span', { class: 'step' }, i > 0 && fr.edges[i - 1] ? arrow(fr.edges[i - 1]) : null, bubble(store.player(id), dead.has(id), fi, i)));
             });
-            if (fr.closed) flow.appendChild(h('span', { class: 'step' }, arrow(fr.edges[fr.edges.length - 1]), h('span', { class: 'flow-end' }, 'revient à ' + store.player(fr.ids[0]).name)));
-            else if (fr.tail) flow.appendChild(h('span', { class: 'flow-end flow-lost' }, 'piste perdue après ' + names(fr.tail.via.slice(-1)) + ' (mort)'));
-            else flow.appendChild(h('span', { class: 'flow-end flow-lost' }, 'cible inconnue'));
+            if (fr.closed) flow.appendChild(h('span', { class: 'step' }, arrow(fr.edges[fr.edges.length - 1]), h('span', { class: 'flow-end' }, t('back to {name}', { name: store.player(fr.ids[0]).name }))));
+            else if (fr.tail) flow.appendChild(h('span', { class: 'flow-end flow-lost' }, t('trail lost after {name} (dead)', { name: names(fr.tail.via.slice(-1)) })));
+            else flow.appendChild(h('span', { class: 'flow-end flow-lost' }, t('unknown target')));
             body.appendChild(h('section', { class: 'fragment', 'data-frag': String(fi) },
               h('header', { class: 'fragment-head' },
-                h('span', { class: 'grip', 'data-drag': 'fragment', 'data-frag': String(fi), title: 'Glisser pour déplacer tout le fragment', role: 'img', 'aria-label': 'Poignée du fragment' }, '⠿'),
-                h('h3', {}, fr.closed ? 'Boucle fermée de ' + fr.ids.length : fr.ids.length > 1 ? 'Fragment de ' + fr.ids.length : 'Isolé')), flow));
+                store.canEdit() ? h('span', { class: 'grip', 'data-drag': 'fragment', 'data-frag': String(fi), title: t('Drag to move the whole fragment'), role: 'img', 'aria-label': t('Fragment handle') }, K.icon('grip')) : null,
+                h('h3', {}, fr.closed ? t('Closed loop of {n}', { n: fr.ids.length }) : fr.ids.length > 1 ? t('Fragment of {n}', { n: fr.ids.length }) : t('Isolated'))), flow));
           });
           var tray = h('div', { class: 'flow flow-tray' });
           trayIds.map(store.player).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); }).forEach(function (p) { tray.appendChild(h('span', { class: 'step' }, bubble(p, dead.has(p.id), -1, 0))); });
           body.appendChild(h('section', { class: 'fragment fragment-tray', 'data-tray': '1' },
-            h('header', { class: 'fragment-head' }, h('h3', {}, trayIds.length ? trayIds.length + ' joueurs pas encore placés' : 'Bac : dépose ici un joueur pour le sortir de la chaîne')), tray));
+            h('header', { class: 'fragment-head' }, h('h3', {}, trayIds.length ? t('{n} players not placed yet', { n: trayIds.length }) : t('Tray: drop a player here to take them out of the chain'))), tray));
         }
       }
       refresh();

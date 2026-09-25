@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
-"""Fabrique le calque « lignes de bus » de l'onglet Map à partir du GTFS officiel du réseau.
+"""Build the bus layer of the Map tab (data/bus.js) from a GTFS feed.
 
-    python3 tools/build_bus.py                 télécharge le GTFS AggloBus (Bourges) et écrit data/bus.js
-    python3 tools/build_bus.py mon-gtfs.zip    idem à partir d'un fichier ou d'une autre URL
+    python3 tools/build_bus.py https://example.org/gtfs.zip   download the feed and write data/bus.js
+    python3 tools/build_bus.py gtfs.zip                       same from a local file
 
-Source par défaut : jeu de données « Réseau urbain AggloBus » (JVMALIN / Région Centre-Val de Loire),
-https://transport.data.gouv.fr/datasets/agglobus-offre-theorique-mobilite-reseau-urbain-de-bourges , licence ODbL.
-À relancer quand le réseau change (en général à la rentrée). Python 3.8+, aucune dépendance.
+Most transit networks publish a GTFS feed; in France they are listed on transport.data.gouv.fr.
+Re-run when the network changes. Python 3.8+, no dependencies.
 """
 import csv, io, json, math, re, sys, urllib.request, zipfile
 from datetime import date
 from pathlib import Path
 
-DEFAULT_URL = 'https://fr.ftp.opendatasoft.com/centrevaldeloire/OKINAGTFS/GTFS_AO/BOURGES-GTFS.zip'
-ATTRIBUTION = 'Lignes et arrêts : AggloBus / JVMALIN, ODbL'
+ATTRIBUTION = 'Lines and stops from the operator\'s GTFS feed'
 OUT = Path(__file__).resolve().parent.parent / 'data' / 'bus.js'
 FALLBACK = ['#E6194B', '#3CB44B', '#4363D8', '#F58231', '#911EB4', '#008080', '#9A6324', '#800000', '#808000', '#000075', '#F032E6', '#469990']
-TOLERANCE = 0.00004   # simplification des tracés : environ 4 m
+TOLERANCE = 0.00004   # path simplification, about 4 m
 
 
 def table(zf, name):
-    """Lignes d'un fichier GTFS sous forme de dictionnaires ; [] si le fichier est absent (shapes.txt est facultatif)."""
+    """Rows of one GTFS file as dicts; nothing when the file is absent (shapes.txt is optional)."""
     match = [n for n in zf.namelist() if n.lower().split('/')[-1] == name]
     if not match:
         return
@@ -30,7 +28,7 @@ def table(zf, name):
 
 
 def simplify(points, tol):
-    """Douglas-Peucker itératif : garde la forme, jette les points inutiles."""
+    """Iterative Douglas-Peucker."""
     if len(points) < 3:
         return points
     keep = [False] * len(points)
@@ -67,9 +65,9 @@ def build(zf):
     trips = {t['trip_id']: t for t in table(zf, 'trips.txt')}
     stops = {s['stop_id']: s for s in table(zf, 'stops.txt')}
     if not routes or not trips or not stops:
-        raise SystemExit('GTFS incomplet : routes.txt, trips.txt et stops.txt sont nécessaires.')
+        raise SystemExit('Incomplete GTFS: routes.txt, trips.txt and stops.txt are required.')
 
-    # 1er passage : nombre d'arrêts par course, pour choisir la course la plus complète de chaque ligne et de chaque sens
+    # pass 1: stops per trip, to keep the most complete trip of each route and direction
     count = {}
     for st in table(zf, 'stop_times.txt'):
         count[st['trip_id']] = count.get(st['trip_id'], 0) + 1
@@ -83,7 +81,7 @@ def build(zf):
             best[key] = (trip_id, n)
     chosen = {trip_id: key for key, (trip_id, _) in best.items()}
 
-    # 2e passage : la suite d'arrêts des courses retenues
+    # pass 2: stop sequence of the selected trips
     sequence = {trip_id: [] for trip_id in chosen}
     for st in table(zf, 'stop_times.txt'):
         if st['trip_id'] in sequence:
@@ -98,7 +96,7 @@ def build(zf):
     lines = {}
     for trip_id, (route_id, _direction) in chosen.items():
         route = routes.get(route_id)
-        if not route or route.get('route_type', '3') not in ('3', '700', '11', '0', ''):   # bus (et tram/trolley s'il y en a un jour)
+        if not route or route.get('route_type', '3') not in ('3', '700', '11', '0', ''):   # bus, trolleybus, tram
             continue
         line = lines.setdefault(route_id, {'id': route_id, 'name': route.get('route_short_name') or route.get('route_long_name') or route_id,
                                            'long': route.get('route_long_name', ''), 'paths': [], 'stops': {}})
@@ -108,7 +106,7 @@ def build(zf):
         path = simplify(path, TOLERANCE if shape else 0)
         if len(path) > 1:
             line['paths'].append([[round(la, 5), round(lo, 5)] for la, lo in path])
-        for s in ordered:   # les deux sens d'un même arrêt portent le même nom : un seul point, au milieu
+        for s in ordered:   # both directions of a stop share a name: one marker, in the middle
             line['stops'].setdefault(s['stop_name'], []).append((float(s['stop_lat']), float(s['stop_lon'])))
 
     out = []
@@ -123,9 +121,11 @@ def build(zf):
 
 
 def main():
-    source = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_URL
+    if len(sys.argv) < 2:
+        raise SystemExit(__doc__)
+    source = sys.argv[1]
     if re.match(r'https?://', source):
-        print('Téléchargement de', source)
+        print('Downloading', source)
         request = urllib.request.Request(source, headers={'User-Agent': 'killer-qg/1.0'})
         data = urllib.request.urlopen(request, timeout=60).read()
     else:
@@ -134,12 +134,12 @@ def main():
         lines = build(zf)
     payload = {'source': ATTRIBUTION, 'generated': date.today().isoformat(), 'lines': lines}
     OUT.parent.mkdir(exist_ok=True)
-    OUT.write_text('/* Généré par tools/build_bus.py : ne pas modifier à la main. */\nwindow.KILLER_BUS = '
+    OUT.write_text('/* Generated by tools/build_bus.py, do not edit. */\nwindow.KILLER_BUS = '
                    + json.dumps(payload, ensure_ascii=False, separators=(',', ':')) + ';\n', encoding='utf-8')
     points = sum(len(p) for l in lines for p in l['paths'])
-    print(f"{len(lines)} lignes, {sum(len(l['stops']) for l in lines)} arrêts, {points} points de tracé -> {OUT} ({OUT.stat().st_size // 1024} Ko)")
+    print(f"{len(lines)} lines, {sum(len(l['stops']) for l in lines)} stops, {points} path points -> {OUT} ({OUT.stat().st_size // 1024} kB)")
     for l in lines:
-        print(f"  {l['name']:>6}  {l['color']}  {len(l['stops']):>3} arrêts  {l['long']}")
+        print(f"  {l['name']:>6}  {l['color']}  {len(l['stops']):>3} stops  {l['long']}")
 
 
 if __name__ == '__main__':

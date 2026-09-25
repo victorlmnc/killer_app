@@ -1,7 +1,10 @@
-# Aucune donnée de la partie ne doit arriver dans le dépôt : tout vit dans Supabase.
+# Game data never goes in the repository; it lives in the database.
 *.xlsx
 *.xls
 *.csv
-killer-qg-*.json
-.DS_Store
+*.json
+!package.json
+data/bus.js.bak
+__pycache__/
 node_modules/
+.DS_Store
