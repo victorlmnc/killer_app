@@ -1,75 +1,36 @@
 # QG Killer
 
-Le tableur de l'alliance, en version web : un dashboard, la chaîne qui se met à jour toute seule,
-les fiches joueurs avec photo, la carte des adresses, les armes, le shop, les classes. Pensé pour le téléphone, partagé en temps réel.
+Application web permettant de suivre une partie de "Killer" en tant que joueur : un dashboard, la chaîne qui se met à jour toute seule, les fiches joueurs, une carte intéractive, les armes, le shop, les classes. Pensé pour fonctionner sur le téléphone et partagé en temps réel.
 
-Site 100 % statique (HTML, CSS, JS sans étape de build) + Supabase pour la base, le login et les photos.
+Site 100 % statique (HTML, CSS, JS sans étape de build) + Supabase pour la base, le login et les images.
 
-## Essayer tout de suite
+## Premier lancement - Comment utiliser l'application ?
+**Étape 1 :** Créer un compte sur le site avec l'adresse admin enregistré sur supabase, confirmer l'e-mail, se connecter.  
+**Étape 2 :** **Paramètres > L'équipe** : ajouter les adresses et les noms des coéquipiers de ton alliance. Ils créent ensuite leur compte eux-mêmes. Il n'y a qu'un niveau d'accès : chaque membre peut tout faire, y compris changer son nom affiché.  
+**Étape 3 :** **Armes > Charger la liste** : les 120 armes des années précédentes, triées par difficulté (facile / difficile).  
+**Étape 4 :** **Joueurs > Importer** : Possibiltié d'importer une liste de joueurs, il suffit de copier-coller les lignes depuis un Excel (en-têtes compris). Ou ajouter manuellement chaque joueur.  
+**Étape 5 :** Ouvrir la fiche de chaque membre de l'alliance et toucher « Membre de l'alliance ». Sur téléphone : menu du navigateur > « Ajouter à l'écran d'accueil ».
 
-Ouvre `index.html` dans un navigateur. Tant que `js/config.js` est vide, l'app tourne en **mode démo** :
-une partie fictive (personnages de romans), stockée uniquement dans ton navigateur.
+## Comment marche la chaîne ?
 
-## Mise en ligne, 15 minutes
-
-### 1. Supabase
-1. Crée un projet (région Europe).
-2. **SQL Editor > New query** : colle `supabase/schema.sql`, **remplace l'adresse e-mail du premier admin** en haut du fichier, puis Run.
-3. **Authentication > Sign In / Providers > Email** : laisse **Confirm email activé**. C'est lui qui empêche
-   quelqu'un de créer un compte avec l'adresse d'un membre.
-4. **Authentication > URL Configuration** : mets l'adresse du site (étape 3) dans *Site URL* et *Redirect URLs*.
-5. **Project Settings > API** : copie *Project URL* et la clé *anon public* dans `js/config.js`.
-
-La clé `anon` est publique par nature, ce sont les règles RLS du schéma qui protègent les données :
-sans compte confirmé **et** présent dans la liste d'accès, on ne lit rien. Après une mise à jour de l'app, relance `supabase/schema.sql` :
-il est fait pour ça et ne touche pas aux données. Ne mets jamais la clé `service_role` dans le dépôt.
-
-### 2. GitHub
-Pousse ce dossier à la racine du dépôt. Le `.gitignore` bloque les Excel, CSV et sauvegardes : aucune donnée
-de la partie ne doit être commitée, tout vit dans Supabase.
-
-### 3. GitHub Pages
-**Settings > Pages > Deploy from a branch > main / (root)**. Le site arrive sur `https://<pseudo>.github.io/<depot>/`.
-Pages sur un dépôt privé demande GitHub Pro (gratuit avec le Student Developer Pack). Un dépôt public convient
-aussi : le code ne contient aucune donnée. Netlify, Vercel ou Cloudflare Pages marchent pareil, sans configuration.
-
-### 4. Premier lancement
-1. Crée ton compte sur le site avec l'adresse admin, confirme l'e-mail, connecte-toi.
-2. **Paramètres > L'équipe** : ajoute les adresses et les noms de tes coéquipiers. Ils créent ensuite leur compte eux-mêmes.
-   Il n'y a qu'un niveau d'accès : chaque membre peut tout faire, y compris changer son nom affiché.
-3. **Armes > Charger la liste** : les 120 armes des années précédentes, triées facile / difficile.
-4. **Joueurs > Importer** : copie-colle les lignes depuis Excel (en-têtes compris).
-5. Ouvre la fiche de chaque membre de l'alliance et touche « Membre de l'alliance ».
-6. Sur téléphone : menu du navigateur > « Ajouter à l'écran d'accueil ».
-
-## Comment marche la chaîne
-
-On ne saisit que des faits : **« X chasse Y »** (avec une fiabilité : sûr, probable, rumeur) et **« Y est mort, tué par X »**.
-Tout le reste est calculé :
+On ne saisit que des faits : **« X chasse Y »** (avec une fiabilité : sûr, probable, rumeur) et **« Y est mort, tué par X »**. Tout le reste est calculé :
 
 - La **chaîne actuelle** est déduite de la chaîne complète en sautant les morts, puisque le contrat d'un mort revient à son killer.
-  Plus besoin de tenir deux feuilles à la main.
 - Enregistrer un kill donne les points au killer, lui transmet les armes de la victime et affiche sa nouvelle cible.
   Si on ne savait pas que X chassait Y, le kill complète la chaîne.
 - Un **reroll** archive la boucle telle qu'elle était (vivants et morts de l'époque) et en ouvre une nouvelle.
-- Sur la page **Chaîne**, tout se fait au glisser-déposer (souris, ou appui long sur téléphone) : une bulle déposée à droite d'un
-  joueur devient sa cible, à gauche son chasseur, entre deux joueurs elle s'insère. « Avec la suite » (ou la touche Maj) emmène
-  tout le bout de chaîne, la poignée ⠿ le fragment entier, le bac en bas sort un joueur de la chaîne. La chaîne se comporte
-  comme une liste : retirer un joueur referme le trou. Les nouveaux liens sont « sûrs » par défaut.
+
+- Sur la page **Chaîne**, tout se fait au glisser-déposer (souris, ou appui long sur téléphone). Une bulle déposée à droite d'un joueur devient sa cible, à gauche son chasseur, entre deux joueurs elle s'insère. « Avec la suite » (ou la touche Maj) emmène tout le bout de chaîne, la poignée ⠿ le fragment entier, le bac en bas sort un joueur de la chaîne. La chaîne se comporte comme une liste : retirer un joueur referme le trou. Les nouveaux liens sont « sûrs » par défaut.
 - Cliquer une **flèche** (ou l'étiquette Sûr / Probable / Rumeur d'une fiche) règle la fiabilité et la source, ou coupe le lien.
   La source s'affiche au survol.
-- Sur une fiche, « Sa cible » et « Son killer » sont des menus déroulants qui ne proposent que les joueurs encore libres.
+- Sur une fiche d'un joueur, les zones « Sa cible » et « Son killer » sont des menus déroulants qui ne proposent que les joueurs encore libres.
 - Le dashboard montre qui chasse chaque membre de l'alliance, et le shop qui a assez de points pour un coupe-gorge.
 
-## Ce qui entre dans la base
+## Ce qui entre dans la base de donnée
 
-La base contient les **inscrits au jeu**, pas l'annuaire de l'école : l'import ignore les lignes dont la colonne
-« Joue au Killer ? » n'est pas à OUI.
-Les photos sont recadrées et recompressées dans le navigateur avant envoi (les métadonnées EXIF, dont le GPS, disparaissent),
-stockées dans un bucket privé et affichées via des liens signés d'une heure.
+La base de donnée contient les **inscrits au jeu**. Les images sont recadrées et recompressées dans le navigateur avant envoi (les métadonnées EXIF, dont le GPS, disparaissent), stockées dans un bucket privé et affichées via des liens signés d'une heure.
 
-**Paramètres > Fin de partie > Effacer la partie** supprime fiches, photos, chaînes, kills et journal pour tout le monde.
-À faire le jour où le jeu se termine ; le catalogue d'armes, le shop et les réglages restent pour l'année suivante.
+A faire à la fin d'une partie : **Paramètres > Données > Télécharger une sauvegarde** si on souhaite garder une copie de l'ensemble des données de la partie (format json) puis **Paramètres > Fin de partie > Effacer la partie** supprime fiches, images, chaînes, kills et journal pour tout le monde. Le catalogue d'armes, le shop et les réglages restent pour la prochaine partie,l'année suivante.
 
 ## La carte
 
@@ -102,12 +63,12 @@ css/app.css           styles, thèmes clair et sombre
 js/config.js          URL + clé anon Supabase (vide = mode démo)
 js/seed.js            armes, shop, barème, partie fictive de démo
 js/logic.js           logique pure : chaîne dérivée, fragments, stats, import
-js/store.js           données : adaptateur Supabase + adaptateur local, temps réel, photos
+js/store.js           données : adaptateur Supabase + adaptateur local, temps réel, images
 js/ui.js              petits helpers d'interface (dialogues, toasts, avatars)
 js/geo.js             géocodage des adresses, chargement de Leaflet
 js/actions.js         lier, kill, reroll, fiche joueur, import
 js/views/*.js         une vue par onglet
-supabase/schema.sql   tables, RLS, bucket photos, temps réel (relançable : il migre une base existante)
+supabase/schema.sql   tables, RLS, bucket photos, temps réel
 tools/build_bus.py    GTFS AggloBus -> data/bus.js (calque des lignes de bus)
 tests/logic.test.js   node tests/logic.test.js
 ```
