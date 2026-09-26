@@ -208,6 +208,7 @@
   "Label": "Nom",
   "Language": "Langue",
   "Language group": "Groupe de langue",
+  "Other languages": "Autres langues",
   "Latest activity": "Dernières infos",
   "Layers": "Calques",
   "Leave empty for the French public geocoder. Any service returning GeoJSON features with a \"score\" works.": "Laisse vide pour le géocodeur public français. Tout service renvoyant des « features » GeoJSON avec un « score » convient.",

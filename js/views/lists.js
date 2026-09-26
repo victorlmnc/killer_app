@@ -189,7 +189,7 @@
         { id: 'td', label: 'TD', key: function (p) { return p.td ? [p.dept, p.td].filter(Boolean).join(' ') : ''; }, others: ['tp', 'option', 'lang_group'] },
         { id: 'tp', label: 'TP', key: function (p) { return p.tp ? [p.dept, p.tp].filter(Boolean).join(' ') : ''; }, others: ['td', 'option', 'lang_group'] },
         { id: 'option', label: t('Option'), key: function (p) { return p.option || ''; }, others: ['td', 'tp'] },
-        { id: 'lang_group', label: t('Language group'), key: function (p) { return p.lang_group || ''; }, others: ['td', 'tp'] },
+        { id: 'lang_group', label: t('Language group'), keys: function (p) { return L.languageGroups(p.lang_group); }, others: ['td', 'tp'] },
         { id: 'dept', label: t('Department'), key: function (p) { return p.dept || ''; }, others: ['td', 'tp'] }
       ];
       var view = { group: 'td', year: '', alive: false, q: '' };
@@ -211,14 +211,24 @@
         function paint() {
           ui.clear(body);
           if (!st.players.length) { body.appendChild(h('p', { class: 'empty' }, t('Classes are built from the player sheets (year, department, TD, TP, option, language group).'))); return; }
-          var q = L.norm(view.q), years = {}, unknown = t('Not set');
+          var q = L.norm(view.q), years = {}, otherLanguages = {}, unknown = t('Not set');
           st.players.forEach(function (p) {
             if (view.year && p.year !== view.year) return;
             if (view.alive && dead.has(p.id)) return;
-            var y = p.year || t('Unknown year'), k = g.key(p) || unknown;
-            years[y] = years[y] || {}; (years[y][k] = years[y][k] || []).push(p);
+            var y = p.year || t('Unknown year'), keys;
+            if (g.id === 'lang_group') {
+              var languageBuckets = L.languageGroupBuckets(p.lang_group);
+              languageBuckets.english.forEach(function (k) { years[y] = years[y] || {}; (years[y][k] = years[y][k] || []).push(p); });
+              languageBuckets.other.forEach(function (k) { (otherLanguages[k] = otherLanguages[k] || []).push(p); });
+              if (!languageBuckets.english.length && !languageBuckets.other.length) { years[y] = years[y] || {}; (years[y][unknown] = years[y][unknown] || []).push(p); }
+            } else {
+              keys = g.keys ? g.keys(p) : [g.key(p) || unknown];
+              if (!keys.length) keys = [unknown];
+              years[y] = years[y] || {};
+              keys.forEach(function (k) { (years[y][k] = years[y][k] || []).push(p); });
+            }
           });
-          if (!Object.keys(years).length) body.appendChild(h('p', { class: 'empty' }, t('Nobody with these filters.')));
+          if (!Object.keys(years).length && !Object.keys(otherLanguages).length) body.appendChild(h('p', { class: 'empty' }, t('Nobody with these filters.')));
           Object.keys(years).sort().forEach(function (y) {
             var groups = years[y], all = [].concat.apply([], Object.keys(groups).map(function (k) { return groups[k]; }));
             var alive = all.filter(function (p) { return !dead.has(p.id); }).length;
@@ -238,6 +248,25 @@
             });
             body.appendChild(sec);
           });
+          if (Object.keys(otherLanguages).length) {
+            var otherPlayers = [].concat.apply([], Object.keys(otherLanguages).map(function (k) { return otherLanguages[k]; }));
+            var aliveOther = otherPlayers.filter(function (p) { return !dead.has(p.id); }).length;
+            var otherSection = h('section', { class: 'panel year-block', style: { '--year': ui.yearColor(t('Other languages')) } },
+              h('div', { class: 'panel-head' }, h('h2', {}, t('Other languages')), h('span', { class: 'muted small' }, t('{a} players, {b} alive, grouped by {g}', { a: otherPlayers.length, b: aliveOther, g: t('Language group') }))));
+            var otherGrid = otherSection.appendChild(h('div', { class: 'class-grid' }));
+            Object.keys(otherLanguages).sort(function (a, b) { return a.localeCompare(b, K.i18n.lang, { numeric: true }); }).forEach(function (k) {
+              var ps = otherLanguages[k].sort(function (a, b) { return dead.has(a.id) - dead.has(b.id) || byName(a, b); });
+              var n = ps.filter(function (p) { return !dead.has(p.id); }).length;
+              otherGrid.appendChild(h('div', { class: 'class-col' },
+                h('div', { class: 'class-head' }, h('h3', {}, k), h('span', { class: 'class-count' + (n ? '' : ' is-zero') }, n + ' / ' + ps.length)),
+                ps.map(function (p) {
+                  var match = q && L.norm(p.name).indexOf(q) >= 0, extra = [p.year, p.td, p.tp].filter(Boolean).join(' ');
+                  return h('button', { type: 'button', class: 'class-name' + (dead.has(p.id) ? ' is-dead' : '') + (p.is_ally ? ' is-ally' : '') + (match ? ' is-match' : '') + (q && !match ? ' is-dim' : ''),
+                    onclick: function () { K.actions.openPlayer(p.id); } }, h('span', { class: 'class-who' }, p.name), extra ? h('span', { class: 'class-extra' }, extra) : null);
+                })));
+            });
+            body.appendChild(otherSection);
+          }
         }
       }
       refresh();

@@ -72,6 +72,13 @@ t('stats, leaderboard with ties, points', () => {
   assert.deepEqual(L.leaderboard(s).map(r => r.rank), [1, 2]);
   assert.equal(L.killPoints({ difficulty: 'difficile', bonus: 2, firstBlood: true, mates: 1 }), 11);
 });
+t('language groups split on commas and ignore empty or repeated values', () => {
+  assert.deepEqual(L.languageGroups('G6, Japonais'), ['G6', 'Japonais']);
+  assert.deepEqual(L.languageGroups(' G6 ,, Japonais, G6 '), ['G6', 'Japonais']);
+  assert.deepEqual(L.languageGroups(' , '), []);
+  assert.deepEqual(L.languageGroupBuckets('G6, Japonais, G12, Italien'), { english: ['G6', 'G12'], other: ['Japonais', 'Italien'] });
+  assert.deepEqual(L.languageGroupBuckets('Groupe Japonais'), { english: [], other: ['Groupe Japonais'] });
+});
 t('import: pasted spreadsheet with a header row, column mapping, row filter', () => {
   const txt = 'Plays?\tName\tYear\tDept\tTD\tPoints\nyes\tDOE Jane\t3\tA\tTD1\t45812\nno\tROE Paul\t4\tB\tTD2\t\n\tPOE Zoe\t2\tA\tTD3\t';
   const table = L.parseTable(txt), map = L.guessMapping(table);

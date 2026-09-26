@@ -263,6 +263,18 @@
     return tree;
   }
 
+  function languageGroups(value) {
+    return Array.from(new Set(String(value || '').split(',').map(function (group) { return group.trim(); }).filter(Boolean)));
+  }
+
+  function languageGroupBuckets(value) {
+    var buckets = { english: [], other: [] };
+    languageGroups(value).forEach(function (group) {
+      buckets[/^G\d+$/i.test(group) ? 'english' : 'other'].push(group);
+    });
+    return buckets;
+  }
+
   /* ---------- Import (pasted text or CSV/TSV) ----------
      parseTable() turns raw text into { header, rows, delimiter }.
      guessMapping() proposes a field for each column; mapRows() applies a mapping and an optional row filter. */
@@ -368,6 +380,6 @@
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
     planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, killPoints: killPoints, weaponList: weaponList, rankLabel: rankLabel,
-    leaderboard: leaderboard, stats: stats, classesTree: classesTree, parseImport: parseImport
+    leaderboard: leaderboard, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });
