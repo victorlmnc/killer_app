@@ -65,9 +65,10 @@ t('reroll: earlier rounds stay readable', () => {
 });
 t('stats, leaderboard with ties, points', () => {
   const s = base(); s.links = [link('r0', 'a', 'b'), link('r0', 'c', 'd')];
+  s.players[4].year = '4A'; s.players[5].year = '';
   s.kills = [{ round_id: 'r0', killer_id: 'e', victim_id: 'f' }, { round_id: 'r0', victim_id: 'b' }];
   const st = L.stats(s); assert.equal(st.alive, 4); assert.equal(st.dead, 2); assert.equal(st.unattributed, 1);
-  assert.equal(st.knownTargets, 1); assert.equal(st.coverage, 0.25);
+  assert.equal(st.knownTargets, 1); assert.equal(st.coverage, 0.25); assert.deepEqual(st.killsByYear, { '3A': 0, '4A': 1, '?': 0 });
   s.kills.push({ round_id: 'r0', killer_id: 'a', victim_id: 'c' }, { round_id: 'r0', killer_id: 'a', victim_id: 'd' });
   assert.deepEqual(L.leaderboard(s).map(r => r.rank), [1, 2]);
   assert.equal(L.killPoints({ difficulty: 'difficile', bonus: 2, firstBlood: true, mates: 1 }), 11);

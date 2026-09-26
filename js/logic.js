@@ -261,6 +261,15 @@
       byYear[y].total++;
       if (!dead.has(p.id)) byYear[y].alive++;
     });
+    var killsByYear = {};
+    Object.keys(byYear).forEach(function (y) { killsByYear[y] = 0; });
+    state.kills.forEach(function (kill) {
+      if (!kill.killer_id) return;
+      var killer = players.find(function (p) { return p.id === kill.killer_id; });
+      if (!killer) return;
+      var y = killer.year || '?';
+      killsByYear[y] = (killsByYear[y] || 0) + 1;
+    });
     var known = 0;
     if (round) {
       var maps = linkMaps(state, round.id);
@@ -269,7 +278,7 @@
     var attributed = state.kills.filter(function (k) { return !!k.killer_id || !!k.admin_reason; }).length;
     return {
       total: players.length, alive: alive.length, dead: players.length - alive.length,
-      byYear: byYear, knownTargets: known,
+      byYear: byYear, killsByYear: killsByYear, knownTargets: known,
       coverage: alive.length ? known / alive.length : 0,
       kills: state.kills.length, attributed: attributed, unattributed: state.kills.length - attributed,
       incomplete: players.filter(function (p) { return !dead.has(p.id) && !p.is_ally && (!p.year || !p.td || !p.photo_path || !p.address); })

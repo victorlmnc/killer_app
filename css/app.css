@@ -163,7 +163,6 @@ select:disabled { opacity: .6; }
 .row-title { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .row-sub { display: block; font-size: .84rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-side { display: grid; justify-items: end; gap: .15rem; flex: none; }
-.general-ranking-list { max-height: min(55dvh, 460px); overflow-y: auto; overscroll-behavior: contain; padding-right: .15rem; }
 .row-inline { display: inline-flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .row.is-dead .avatar, .bubble.is-dead .avatar { filter: grayscale(1); opacity: .5; }
 .row.is-dead .row-title { color: var(--muted); text-decoration: line-through; }
@@ -194,6 +193,7 @@ select:disabled { opacity: .6; }
 .bar-label { font-weight: 600; } .bar-num { color: var(--muted); font-variant-numeric: tabular-nums; }
 .bar-track { height: 10px; display: block; }
 .bar-total { display: block; height: 100%; border-radius: 3px; background: color-mix(in srgb, var(--year) 22%, var(--surface)); overflow: hidden; } .bar-alive { display: block; height: 100%; background: var(--year); }
+.bar-value { display: block; height: 100%; background: var(--year); }
 .event { appearance: none; border: 0; background: none; color: var(--ink); width: calc(100% + .8rem); margin-inline: -.4rem; text-align: left; cursor: pointer; display: grid; gap: .1rem; font-size: .9rem; padding: .45rem .4rem .45rem 1.35rem; border-top: 1px solid var(--line); position: relative; border-radius: var(--radius-sm); }
 .event:first-of-type { border-top: 0; } .event:hover { background: var(--surface-2); }
 .event::before { content: ""; position: absolute; left: .45rem; top: .95rem; width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }

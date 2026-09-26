@@ -39,7 +39,7 @@
   K.views.dashboard = {
     title: t('Dashboard'),
     render: function (root) {
-      var showAll = false, showAllIncomplete = false, leaderboardMode = 'kills';
+      var showAll = false, showAllIncomplete = false, showAllGeneral = false, leaderboardMode = 'kills';
       function refresh() {
         var st = store.state, set = st.settings, stats = L.stats(st), round = L.currentRound(st), edit = store.canEdit();
         ui.clear(root);
@@ -82,9 +82,9 @@
 
         var board = L.leaderboard(st), visibleBoard = board.slice(0, 12), adminRow = board.find(function (r) { return r.admin; });
         if (adminRow && visibleBoard.indexOf(adminRow) < 0) visibleBoard.push(adminRow);
-        var boardTitle = h('h2', {}, t(leaderboardMode === 'kills' ? 'Kill leaderboard' : 'General ranking'));
-        var boardMode = ui.select([{ value: 'kills', label: t('Kill leaderboard') }, { value: 'general', label: t('General ranking') }], leaderboardMode, {
-          'aria-label': t('Choose ranking'), onchange: function (e) { leaderboardMode = e.target.value; refresh(); }
+        var boardTitle = h('h2', {}, t('Ranking'));
+        var boardMode = ui.select([{ value: 'kills', label: t('Kills') }, { value: 'general', label: t('General') }], leaderboardMode, {
+          'aria-label': t('Choose ranking'), onchange: function (e) { leaderboardMode = e.target.value; showAllGeneral = false; refresh(); }
         });
         var lb = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, boardTitle, boardMode));
         function showAdminEliminations() {
@@ -110,15 +110,15 @@
           });
           lb.appendChild(h('p', { class: 'muted small' }, stats.unattributed ? t('{n} deaths without an identified killer: open their sheet to set one.', { n: stats.unattributed }) : t('Every death has an identified killer.')));
         } else {
-          var general = L.generalRanking(st), generalList = h('div', { class: 'general-ranking-list' });
-          general.forEach(function (r) {
+          var general = L.generalRanking(st);
+          general.slice(0, showAllGeneral ? general.length : 12).forEach(function (r) {
             var p = store.player(r.id);
             if (!p) return;
             var place = r.alive ? h('span', { class: 'tag tag-alive' }, t('Still in the game')) : h('span', { class: 'rank' }, '#' + r.rank);
-            generalList.appendChild(personRow(p, place));
+            lb.appendChild(personRow(p, place));
           });
           if (!general.length) lb.appendChild(h('p', { class: 'empty' }, t('No players yet')));
-          else lb.appendChild(generalList);
+          if (general.length > 12) lb.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAllGeneral = !showAllGeneral; refresh(); } }, showAllGeneral ? t('Show less') : t('Show all')));
         }
         grid.appendChild(lb);
 
@@ -132,6 +132,17 @@
         });
         yr.appendChild(h('p', { class: 'muted small' }, t('Alive out of registered.')));
         grid.appendChild(yr);
+
+        var killsYr = h('section', { class: 'panel' }, h('h2', {}, t('Kills by year')));
+        var maxKills = Math.max.apply(null, Object.keys(stats.killsByYear).map(function (y) { return stats.killsByYear[y]; }).concat([1]));
+        Object.keys(stats.killsByYear).sort().forEach(function (y) {
+          var count = stats.killsByYear[y];
+          killsYr.appendChild(h('div', { class: 'bar', style: { '--year': ui.yearColor(y) } }, h('span', { class: 'bar-label' }, y),
+            h('span', { class: 'bar-track' }, h('span', { class: 'bar-total', style: { width: (count / maxKills * 100) + '%' } }, h('span', { class: 'bar-value', style: { width: '100%' } }))),
+            h('span', { class: 'bar-num' }, count)));
+        });
+        killsYr.appendChild(h('p', { class: 'muted small' }, t('Admin eliminations are not grouped by year.')));
+        grid.appendChild(killsYr);
 
         var inc = h('section', { class: 'panel' }, h('h2', {}, t('Sheets to complete')));
         if (!stats.incomplete.length) inc.appendChild(h('p', { class: 'empty' }, t('Every living player has a class, a photo, and an address.')));
