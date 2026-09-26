@@ -16,11 +16,21 @@
 *, *::before, *::after { box-sizing: border-box; }
 html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); -webkit-text-size-adjust: 100%; }
 body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font: 400 15px/1.5 var(--body); }
-/* stars: a few tiny dots, fixed to the viewport */
-body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .55;
-  background-image: radial-gradient(1px 1px at 12% 18%, #fff 50%, transparent 51%), radial-gradient(1.3px 1.3px at 33% 72%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 58% 31%, #fff 50%, transparent 51%),
-    radial-gradient(1.2px 1.2px at 71% 84%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 86% 12%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 45% 52%, #fff 50%, transparent 51%),
-    radial-gradient(1.4px 1.4px at 92% 60%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 22% 92%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 5% 55%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 64% 8%, #fff 50%, transparent 51%); }
+#app { position: relative; z-index: 1; }
+.sky-effects { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.starfield, .shooting-stars { position: absolute; inset: 0; }
+.sky-star { position: absolute; left: var(--x); top: var(--y); width: var(--size); height: var(--size); display: block; background: #fff;
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+  opacity: var(--shine); filter: drop-shadow(0 0 2px rgba(255,255,255,.55)); }
+.shooting-star { position: absolute; left: 0; top: 0; width: 80px; height: 2px; display: block; opacity: 0; transform-origin: 0 50%;
+  background: linear-gradient(90deg, #fff, rgba(255,255,255,.45) 22%, transparent); border-radius: 99px;
+  filter: drop-shadow(0 0 4px rgba(255,255,255,.7)); }
+.shooting-star::after { content: ""; position: absolute; top: 50%; left: -2px; width: var(--head, 5px); height: var(--head, 5px); transform: translateY(-50%);
+  border-radius: 50%; background: #fff; box-shadow: 0 0 5px 1px rgba(255,255,255,.7); }
+@media (prefers-reduced-motion: no-preference) {
+  .sky-star { animation: star-twinkle var(--twinkle) ease-in-out var(--delay) infinite alternate; }
+  @keyframes star-twinkle { from { opacity: calc(var(--shine) * .55); } to { opacity: var(--shine); } }
+}
 h1, h2, h3 { font-family: var(--display); font-weight: 500; line-height: 1.1; margin: 0; letter-spacing: .005em; }
 h1 { font-size: 2.1rem; } h2 { font-size: 1.35rem; } h3 { font-size: 1.05rem; }
 p { margin: 0; } small { font-size: .8em; font-weight: 400; }

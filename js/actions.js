@@ -357,7 +357,7 @@
         body.appendChild(h('button', { type: 'button', class: 'death', title: act.killSummary(kill), onclick: function () { act.killDetails(kill.id); } }, h('span', { class: 'stamp', 'aria-hidden': 'true' }, t('Eliminated')),
           h('span', {}, (kill.killer_id ? t('Killed by {name}', { name: name(kill.killer_id) }) : t('Killed by an unknown player')) + (kill.weapon ? ' ' + t('with "{w}"', { w: kill.weapon }) : '') + ', ' + ui.ago(kill.happened_at) + '.')));
       } else {
-        body.appendChild(roundId ? h('div', { class: 'relations' }, person(t('Target'), target, 'target'), person(t('Killer'), hunter, 'hunter'))
+        body.appendChild(roundId ? h('div', { class: 'relations' }, person(t('Killer'), hunter, 'hunter'), person(t('Target'), target, 'target'))
           : h('p', { class: 'muted' }, t('Start the loop from the Chain tab to record targets and killers.')));
       }
 
