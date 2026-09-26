@@ -11,7 +11,7 @@
     var el = h('span', { class: 'logo', 'aria-hidden': 'true', style: { width: size + 'px', height: size + 'px' } });
     el.innerHTML = '<svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="20" cy="20" r="15" stroke-dasharray="2 4.5" opacity=".6"/>'
       + '<path d="M20 5a15 15 0 0 1 14.3 10.4" stroke="var(--thread)" stroke-width="2.4" stroke-linecap="round"/><path d="M36.8 10.2l-1.6 7.3-6-4.3z" fill="var(--thread)" stroke="none"/>'
-      + '<circle cx="20" cy="5" r="2.6" fill="currentColor" stroke="none"/><path d="M8 33l1 1M31 30l1-1M13 9l-.7-.7" stroke-linecap="round"/></svg>';
+      + '<circle cx="20" cy="5" r="2.6" fill="currentColor" stroke="none"/></svg>';
     return el;
   }
   function brand(tag, attrs) { return h(tag, Object.assign({ class: 'brand' }, attrs || {}), logo(tag === 'h1' ? 40 : 28), h('span', {}, 'Killer')); }
