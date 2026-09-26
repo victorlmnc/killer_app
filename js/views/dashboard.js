@@ -39,7 +39,7 @@
   K.views.dashboard = {
     title: t('Dashboard'),
     render: function (root) {
-      var showAll = false, showAllIncomplete = false;
+      var showAll = false, showAllIncomplete = false, leaderboardMode = 'kills';
       function refresh() {
         var st = store.state, set = st.settings, stats = L.stats(st), round = L.currentRound(st), edit = store.canEdit();
         ui.clear(root);
@@ -82,14 +82,44 @@
 
         var board = L.leaderboard(st), visibleBoard = board.slice(0, 12), adminRow = board.find(function (r) { return r.admin; });
         if (adminRow && visibleBoard.indexOf(adminRow) < 0) visibleBoard.push(adminRow);
-        var lb = h('section', { class: 'panel' }, h('h2', {}, t('Kill leaderboard')));
-        if (!board.length) lb.appendChild(h('p', { class: 'empty' }, t('No kill attributed yet.')));
-        visibleBoard.forEach(function (r) {
-          var rank = [h('span', { class: 'rank' }, '#' + r.rank), h('strong', { class: 'count' }, r.kills)];
-          if (r.admin) lb.appendChild(h('div', { class: 'row' }, h('span', { class: 'leader-admin-mark', 'aria-hidden': 'true' }, K.icon('settings')), h('span', { class: 'row-main' }, t('Admin')), rank));
-          else { var p = store.player(r.id); if (p) lb.appendChild(personRow(p, rank)); }
+        var boardTitle = h('h2', {}, t(leaderboardMode === 'kills' ? 'Kill leaderboard' : 'General ranking'));
+        var boardMode = ui.select([{ value: 'kills', label: t('Kill leaderboard') }, { value: 'general', label: t('General ranking') }], leaderboardMode, {
+          'aria-label': t('Choose ranking'), onchange: function (e) { leaderboardMode = e.target.value; refresh(); }
         });
-        lb.appendChild(h('p', { class: 'muted small' }, stats.unattributed ? t('{n} deaths without an identified killer: open their sheet to set one.', { n: stats.unattributed }) : t('Every death has an identified killer.')));
+        var lb = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, boardTitle, boardMode));
+        function showAdminEliminations() {
+          var adminKills = st.kills.filter(function (kill) { return !!kill.admin_reason; }).sort(function (a, b) { return b.happened_at.localeCompare(a.happened_at); });
+          ui.dialog({ title: t('Admin eliminations'), render: function (body) {
+            if (!adminKills.length) body.appendChild(h('p', { class: 'empty' }, t('No administrative eliminations yet.')));
+            adminKills.forEach(function (kill) {
+              var victim = store.player(kill.victim_id);
+              if (!victim) return;
+              var reason = t(kill.admin_reason === 'cheating' ? 'Cheating' : 'Other');
+              body.appendChild(h('button', { type: 'button', class: 'row row-btn', onclick: function () { K.actions.openPlayer(victim.id); } },
+                ui.avatar(victim, 'sm'), h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, victim.name), h('span', { class: 'row-sub' }, reason + (kill.note ? ' · ' + kill.note : ''))),
+                h('span', { class: 'muted small' }, ui.when(kill.happened_at))));
+            });
+          } });
+        }
+        if (leaderboardMode === 'kills') {
+          if (!board.length) lb.appendChild(h('p', { class: 'empty' }, t('No kill attributed yet.')));
+          visibleBoard.forEach(function (r) {
+            var rank = [h('span', { class: 'rank' }, '#' + r.rank), h('strong', { class: 'count' }, r.kills)];
+            if (r.admin) lb.appendChild(h('button', { type: 'button', class: 'row row-btn leaderboard-admin', 'aria-label': t('Admin eliminations'), onclick: showAdminEliminations }, h('span', { class: 'leader-admin-mark', 'aria-hidden': 'true' }, K.icon('settings')), h('span', { class: 'row-main' }, t('Admin')), rank));
+            else { var p = store.player(r.id); if (p) lb.appendChild(personRow(p, rank)); }
+          });
+          lb.appendChild(h('p', { class: 'muted small' }, stats.unattributed ? t('{n} deaths without an identified killer: open their sheet to set one.', { n: stats.unattributed }) : t('Every death has an identified killer.')));
+        } else {
+          var general = L.generalRanking(st), generalList = h('div', { class: 'general-ranking-list' });
+          general.forEach(function (r) {
+            var p = store.player(r.id);
+            if (!p) return;
+            var place = r.alive ? h('span', { class: 'tag tag-alive' }, t('Still in the game')) : h('span', { class: 'rank' }, '#' + r.rank);
+            generalList.appendChild(personRow(p, place));
+          });
+          if (!general.length) lb.appendChild(h('p', { class: 'empty' }, t('No players yet')));
+          else lb.appendChild(generalList);
+        }
         grid.appendChild(lb);
 
         var yr = h('section', { class: 'panel' }, h('h2', {}, t('By year')));

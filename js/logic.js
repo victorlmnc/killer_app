@@ -228,6 +228,27 @@
     return rows;
   }
 
+  function generalRanking(state) {
+    var players = state.players, deathByPlayer = new Map();
+    state.kills.forEach(function (kill) {
+      if (!players.some(function (p) { return p.id === kill.victim_id; })) return;
+      var previous = deathByPlayer.get(kill.victim_id);
+      if (!previous || Date.parse(kill.happened_at) < Date.parse(previous.happened_at)) deathByPlayer.set(kill.victim_id, kill);
+    });
+    function byName(a, b) { return (a.name || '').localeCompare(b.name || '', 'fr'); }
+    var alive = players.filter(function (p) { return !deathByPlayer.has(p.id); }).sort(byName).map(function (p) {
+      return { id: p.id, alive: true, rank: null };
+    });
+    var dead = players.filter(function (p) { return deathByPlayer.has(p.id); }).sort(function (a, b) {
+      var timeA = Date.parse(deathByPlayer.get(a.id).happened_at) || 0;
+      var timeB = Date.parse(deathByPlayer.get(b.id).happened_at) || 0;
+      return timeB - timeA || byName(a, b);
+    }).map(function (p, i, list) {
+      return { id: p.id, alive: false, rank: players.length - list.length + i + 1 };
+    });
+    return alive.concat(dead);
+  }
+
   function stats(state) {
     var round = currentRound(state);
     var dead = deadSet(state);
@@ -384,6 +405,6 @@
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
     planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, killPoints: killPoints, weaponList: weaponList, rankLabel: rankLabel,
-    leaderboard: leaderboard, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
+    leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

@@ -163,6 +163,7 @@ select:disabled { opacity: .6; }
 .row-title { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .row-sub { display: block; font-size: .84rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-side { display: grid; justify-items: end; gap: .15rem; flex: none; }
+.general-ranking-list { max-height: min(55dvh, 460px); overflow-y: auto; overscroll-behavior: contain; padding-right: .15rem; }
 .row-inline { display: inline-flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .row.is-dead .avatar, .bubble.is-dead .avatar { filter: grayscale(1); opacity: .5; }
 .row.is-dead .row-title { color: var(--muted); text-decoration: line-through; }

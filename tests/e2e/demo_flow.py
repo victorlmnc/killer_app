@@ -86,6 +86,12 @@ with sync_playwright() as p:
     expect(pg.locator('dialog[open]')).to_contain_text('Administration')
     expect(pg.locator('dialog[open]')).to_contain_text('Autre')
     pg.keyboard.press('Escape')
+    pg.goto(URL + '#/dashboard'); pg.locator('.leaderboard-admin').click()
+    dlg = pg.locator('dialog[open]')
+    expect(dlg).to_contain_text('BOVARY Emma')
+    expect(dlg).to_contain_text('Autre')
+    expect(dlg).to_contain_text('Tentative de triche détectée.')
+    pg.keyboard.press('Escape')
 
     step('import: column mapping and row filter, CSV export')
     pg.goto(URL + '#/players'); pg.get_by_role('button', name='Importer').click()

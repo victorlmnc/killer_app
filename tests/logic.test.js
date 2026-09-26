@@ -85,6 +85,18 @@ t('admin eliminations appear in the leaderboard without becoming players', () =>
   const extendedBoard = L.leaderboard(s);
   assert.equal(extendedBoard[13].admin, true); assert.equal(extendedBoard[13].rank, 14);
 });
+t('general ranking keeps living players unplaced and orders eliminations latest to earliest', () => {
+  const s = base();
+  s.kills = [
+    { victim_id: 'b', happened_at: '2026-01-01T10:00:00Z' },
+    { victim_id: 'c', happened_at: '2026-01-02T10:00:00Z' },
+    { victim_id: 'd', admin_reason: 'cheating', happened_at: '2026-01-03T10:00:00Z' }
+  ];
+  assert.deepEqual(L.generalRanking(s).map(r => [r.id, r.alive, r.rank]), [
+    ['a', true, null], ['e', true, null], ['f', true, null],
+    ['d', false, 4], ['c', false, 5], ['b', false, 6]
+  ]);
+});
 t('incomplete sheets include missing addresses for living players', () => {
   const s = base();
   s.players.forEach(p => Object.assign(p, { year: '3A', td: 'TD1', photo_path: 'photo.jpg', address: '12 rue Test' }));
