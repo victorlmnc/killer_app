@@ -67,6 +67,26 @@ with sync_playwright() as p:
     pg.goto(URL + '#/dashboard'); ev = pg.locator('.event', has_text='a éliminé SCAPIN').first
     assert 'Learning Center' in ev.get_attribute('title'); ev.click(); expect(pg.locator('dialog[open]')).to_contain_text('Détails du kill'); pg.keyboard.press('Escape')
 
+    step('admin kill: reason is recorded without killer attribution or points')
+    points_before = pg.evaluate("K.store.state.players.reduce((sum, p) => sum + (p.points || 0), 0)")
+    pg.evaluate("id => K.actions.killDialog(id)", pid('BOVARY Emma'))
+    dlg = pg.locator('dialog[open]')
+    dlg.get_by_label("Élimination décidée par l'administration").check()
+    reason = dlg.get_by_label("Motif de l'élimination administrative")
+    assert reason.locator('option').all_inner_texts() == ['Triche', 'Autre']
+    reason.select_option('other')
+    dlg.get_by_role('button', name='Enregistrer le kill').click()
+    expect(dlg.locator('.toast-error')).to_contain_text('Précise le motif')
+    dlg.locator('textarea').fill('Tentative de triche détectée.')
+    dlg.get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
+    admin_kill = pg.evaluate("K.store.state.kills.find(k => k.victim_id === K.store.state.players.find(p => p.name === 'BOVARY Emma').id)")
+    assert admin_kill['admin_reason'] == 'other' and admin_kill['killer_id'] is None and admin_kill['points'] == 0, admin_kill
+    assert pg.evaluate("K.store.state.players.reduce((sum, p) => sum + (p.points || 0), 0)") == points_before
+    pg.evaluate('id => K.actions.killDetails(id)', admin_kill['id'])
+    expect(pg.locator('dialog[open]')).to_contain_text('Administration')
+    expect(pg.locator('dialog[open]')).to_contain_text('Autre')
+    pg.keyboard.press('Escape')
+
     step('import: column mapping and row filter, CSV export')
     pg.goto(URL + '#/players'); pg.get_by_role('button', name='Importer').click()
     pg.locator('dialog textarea').fill('Joue ?\tNom\tAnnée\tTD\nOUI\tTARTUFFE Orgon\t5\tTD2\nNON\tDORINE Elmire\t4\tTD1\nOUI\tVALJEAN Jean\t2\tTD1')

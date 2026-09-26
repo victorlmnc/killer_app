@@ -114,7 +114,12 @@
       title: t('{name} is dead', { name: victim.name }),
       render: function (body, api) {
         var catalog = new Map(st.weapons.map(function (w) { return [L.norm(w.name), w.difficulty]; }));
+        var adminAllowed = store.isAdmin();
         var killerBtn = h('button', { type: 'button', class: 'btn btn-block', onclick: pickKiller });
+        var adminKill = h('input', { type: 'checkbox', onchange: refreshKiller });
+        var adminReason = ui.select([{ value: 'cheating', label: t('Cheating') }, { value: 'other', label: t('Other') }], 'cheating');
+        var killerField = ui.field(t('Killed by'), killerBtn, guess ? t('Suggested from the chain. Tap to change.') : null);
+        var adminReasonField = ui.field(t('Reason for administrative elimination'), adminReason);
         var weapon = h('input', { type: 'text', list: 'kill-weapons', placeholder: t('Weapon used'), oninput: onWeapon });
         var options = h('datalist', { id: 'kill-weapons' });
         var diff = ui.select([{ value: 'facile', label: t('Easy (1 pt)') }, { value: 'difficile', label: t('Hard (3 pts)') }], 'facile', { onchange: total });
@@ -131,9 +136,12 @@
           h('p', { class: 'muted' }, t('Points earned: '), sum));
         function refreshKiller() {
           ui.clear(killerBtn);
-          var k = killerId && store.player(killerId);
+          var administrative = adminAllowed && adminKill.checked;
+          var k = !administrative && killerId && store.player(killerId);
           killerBtn.appendChild(k ? h('span', { class: 'row-inline' }, ui.avatar(k, 'sm'), k.name) : document.createTextNode(t('Killer unknown for now')));
-          scoring.hidden = !k;
+          killerField.hidden = administrative;
+          adminReasonField.hidden = !administrative;
+          scoring.hidden = administrative || !k;
           ui.clear(options);
           L.weaponList(k && k.weapons).forEach(function (w) { options.appendChild(h('option', { value: w })); });
         }
@@ -143,16 +151,20 @@
         }
         function onWeapon() { var d = catalog.get(L.norm(weapon.value)); if (d) diff.value = d; total(); }
         function total() { sum.textContent = String(L.killPoints({ difficulty: diff.value, bonus: bonus.value, firstBlood: fb.checked, mates: mates.value })); }
-        body.appendChild(ui.field(t('Killed by'), killerBtn, guess ? t('Suggested from the chain. Tap to change.') : null));
+        body.appendChild(killerField);
+        if (adminAllowed) body.appendChild(h('label', { class: 'check' }, adminKill, t('Administrative elimination')));
+        body.appendChild(adminReasonField);
         body.appendChild(scoring);
         body.appendChild(h('div', { class: 'grid-2' }, ui.field(t('When'), when)));
         body.appendChild(ui.field(t('Note'), note));
         body.appendChild(h('div', { class: 'actions' },
           h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
           h('button', { type: 'button', class: 'btn btn-danger', onclick: function () {
+            var reason = adminAllowed && adminKill.checked ? adminReason.value : null;
+            if (reason === 'other' && !note.value.trim()) { note.focus(); return ui.toast(t('Specify the reason in the note.'), 'error'); }
             api.close();
-            act.recordKill({ victimId: victimId, killerId: killerId, weapon: weapon.value.trim(), note: note.value.trim(), when: when.value ? new Date(when.value).toISOString() : null,
-              points: killerId ? L.killPoints({ difficulty: diff.value, bonus: bonus.value, firstBlood: fb.checked, mates: mates.value }) : 0 });
+            act.recordKill({ victimId: victimId, killerId: reason ? null : killerId, adminReason: reason, weapon: reason ? '' : weapon.value.trim(), note: note.value.trim(), when: when.value ? new Date(when.value).toISOString() : null,
+              points: !reason && killerId ? L.killPoints({ difficulty: diff.value, bonus: bonus.value, firstBlood: fb.checked, mates: mates.value }) : 0 });
           } }, t('Record the kill'))));
         refreshKiller(); total();
       }
@@ -161,26 +173,31 @@
   function localIso(d) { var p = function (n) { return (n < 10 ? '0' : '') + n; }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }
 
   act.recordKill = function (k) {
+    var adminReason = k.adminReason === 'cheating' || k.adminReason === 'other' ? k.adminReason : null;
+    var killerId = adminReason ? null : k.killerId;
+    var weapon = adminReason ? '' : k.weapon || '';
+    var points = adminReason ? 0 : k.points || 0;
     return ensureRound().then(function (roundId) {
       var pre = Promise.resolve(true);
       // A kill proves the killer was hunting the victim: complete the chain if we did not know.
-      if (k.killerId && L.resolveTarget(store.state, roundId, k.killerId).id !== k.victimId) {
-        pre = act.setTarget(k.killerId, k.victimId, { roundId: roundId, confidence: 'sur', source: t('kill'), silent: true });
+      if (killerId && L.resolveTarget(store.state, roundId, killerId).id !== k.victimId) {
+        pre = act.setTarget(killerId, k.victimId, { roundId: roundId, confidence: 'sur', source: t('kill'), silent: true });
       }
       return pre.then(function () {
-        var victim = store.player(k.victimId), killer = k.killerId && store.player(k.killerId);
+        var victim = store.player(k.victimId), killer = killerId && store.player(killerId);
         var killId = store.uuid();
-        var jobs = [store.insert('kills', { id: killId, round_id: roundId, killer_id: k.killerId || null, victim_id: k.victimId, weapon: k.weapon || '', points: k.points || 0, note: k.note || '', happened_at: k.when || new Date().toISOString() })];
+        var jobs = [store.insert('kills', { id: killId, round_id: roundId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, weapon: weapon, points: points, note: k.note || '', happened_at: k.when || new Date().toISOString() })];
         if (killer) {
-          var patch = { points: (killer.points || 0) + (k.points || 0) };
+          var patch = { points: (killer.points || 0) + points };
           if (victim.weapons) patch.weapons = victim.weapons;   // the victim's contract always passes to the killer
           jobs.push(store.update('players', killer.id, patch));
         }
-        store.log(killer ? t('{a} eliminated {b}', { a: killer.name, b: victim.name }) + (k.weapon ? ' (' + k.weapon + ')' : '') : t('{name} is dead', { name: victim.name }),
-          { type: 'kill', kill_id: killId, killer_id: k.killerId || null, victim_id: k.victimId, killer: killer ? killer.name : '', victim: victim.name, weapon: k.weapon || '', points: k.points || 0, note: k.note || '' });
+        var text = adminReason ? t('Administrative elimination of {name}: {reason}', { name: victim.name, reason: t(adminReason === 'cheating' ? 'Cheating' : 'Other') })
+          : killer ? t('{a} eliminated {b}', { a: killer.name, b: victim.name }) + (weapon ? ' (' + weapon + ')' : '') : t('{name} is dead', { name: victim.name });
+        store.log(text, { type: 'kill', kill_id: killId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, killer: killer ? killer.name : '', victim: victim.name, weapon: weapon, points: points, note: k.note || '' });
         return Promise.all(jobs);
       }).then(function () {
-        var next = k.killerId ? L.resolveTarget(store.state, roundId, k.killerId) : null;
+        var next = killerId ? L.resolveTarget(store.state, roundId, killerId) : null;
         ui.toast(next && next.id ? t('Kill recorded. New target for {a}: {b}.', { a: name(k.killerId), b: name(next.id) }) : t('Kill recorded.'));
       });
     });
@@ -194,10 +211,15 @@
   };
   act.editKill = function (kill) {
     ui.pickPlayer({ title: t('Who killed {name}?', { name: name(kill.victim_id) }), filter: function (p) { return p.id !== kill.victim_id; }, extra: [{ label: t('Unknown killer'), value: null }] })
-      .then(function (v) { if (v !== undefined) store.update('kills', kill.id, { killer_id: v }); });
+      .then(function (v) { if (v !== undefined) store.update('kills', kill.id, { killer_id: v, admin_reason: null }); });
+  };
+  act.killAttribution = function (kill) {
+    if (kill.admin_reason) return t('Administrative elimination: {reason}', { reason: t(kill.admin_reason === 'cheating' ? 'Cheating' : 'Other') });
+    return kill.killer_id ? t('Killed by {name}', { name: name(kill.killer_id) }) : t('Killed by an unknown player');
   };
   act.killSummary = function (k) {
-    return [k.weapon ? t('Weapon: {w}', { w: k.weapon }) : null, K.n(k.points || 0, '{n} pt', '{n} pts'), k.note ? t('Note: {n}', { n: k.note }) : t('No note'), ui.ago(k.happened_at)].filter(Boolean).join('. ') + '.';
+    return [k.admin_reason ? t('Administrative elimination: {reason}', { reason: t(k.admin_reason === 'cheating' ? 'Cheating' : 'Other') }) : null,
+      k.weapon ? t('Weapon: {w}', { w: k.weapon }) : null, K.n(k.points || 0, '{n} pt', '{n} pts'), k.note ? t('Note: {n}', { n: k.note }) : t('No note'), ui.ago(k.happened_at)].filter(Boolean).join('. ') + '.';
   };
   act.killDetails = function (killId) {
     var k = store.state.kills.find(function (x) { return x.id === killId; });
@@ -207,11 +229,12 @@
       render: function (body, api) {
         var killer = k.killer_id && store.player(k.killer_id), victim = store.player(k.victim_id), round = store.state.rounds.find(function (r) { return r.id === k.round_id; });
         var weapon = h('input', { type: 'text', value: k.weapon || '' }), note = h('textarea', { rows: '3', value: k.note || '', placeholder: t('Place, circumstances, who was there…') });
-        function who(label, p) { return h('div', { class: 'relation' }, h('span', { class: 'relation-label' }, label), p ? h('button', { type: 'button', class: 'row row-btn', onclick: function () { api.close(); act.openPlayer(p.id); } }, ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, p.name)) : h('p', { class: 'muted' }, t('Unknown'))); }
-        body.appendChild(h('div', { class: 'relations' }, who(t('Killer'), killer), who(t('Victim'), victim)));
+        function who(label, p, emptyLabel) { return h('div', { class: 'relation' }, h('span', { class: 'relation-label' }, label), p ? h('button', { type: 'button', class: 'row row-btn', onclick: function () { api.close(); act.openPlayer(p.id); } }, ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, p.name)) : h('p', { class: 'muted' }, emptyLabel || t('Unknown'))); }
+        body.appendChild(h('div', { class: 'relations' }, who(t('Killer'), killer, k.admin_reason ? t('Administration') : null), who(t('Victim'), victim)));
         body.appendChild(h('dl', { class: 'facts' },
           h('div', {}, h('dt', {}, t('When')), h('dd', {}, ui.when(k.happened_at))),
           h('div', {}, h('dt', {}, t('Round')), h('dd', {}, round ? round.name : t('Unknown'))),
+          k.admin_reason ? h('div', {}, h('dt', {}, t('Reason')), h('dd', {}, t(k.admin_reason === 'cheating' ? 'Cheating' : 'Other'))) : null,
           h('div', {}, h('dt', {}, t('Points')), h('dd', {}, String(k.points || 0)))));
         if (store.canEdit()) {
           body.appendChild(h('div', { class: 'stack' }, ui.field(t('Weapon'), weapon), ui.field(t('Note'), note)));
@@ -227,7 +250,8 @@
   /* ----------------------------------------- activity log entries */
   act.eventSummary = function (e) {
     var d = e.details || {};
-    if (d.type === 'kill') return [d.weapon ? t('Weapon: {w}', { w: d.weapon }) : null, K.n(d.points || 0, '{n} pt', '{n} pts'), d.note ? t('Note: {n}', { n: d.note }) : t('No note')].filter(Boolean).join('. ') + '.';
+    if (d.type === 'kill') return [d.admin_reason ? t('Administrative elimination: {reason}', { reason: t(d.admin_reason === 'cheating' ? 'Cheating' : 'Other') }) : null,
+      d.weapon ? t('Weapon: {w}', { w: d.weapon }) : null, K.n(d.points || 0, '{n} pt', '{n} pts'), d.note ? t('Note: {n}', { n: d.note }) : t('No note')].filter(Boolean).join('. ') + '.';
     if (d.type === 'link') return ui.confLabel(d.confidence || 'sur') + '. ' + (d.source ? t('Source: {s}', { s: d.source }) : t('No source given')) + '.';
     if (d.type === 'move') return (d.added || []).join(' ; ') || t('No new link.');
     return e.text;
@@ -355,7 +379,7 @@
 
       if (dead && kill) {
         body.appendChild(h('button', { type: 'button', class: 'death', title: act.killSummary(kill), onclick: function () { act.killDetails(kill.id); } }, h('span', { class: 'stamp', 'aria-hidden': 'true' }, t('Eliminated')),
-          h('span', {}, (kill.killer_id ? t('Killed by {name}', { name: name(kill.killer_id) }) : t('Killed by an unknown player')) + (kill.weapon ? ' ' + t('with "{w}"', { w: kill.weapon }) : '') + ', ' + ui.ago(kill.happened_at) + '.')));
+          h('span', {}, act.killAttribution(kill) + (kill.weapon ? ' ' + t('with "{w}"', { w: kill.weapon }) : '') + ', ' + ui.ago(kill.happened_at) + '.')));
       } else {
         body.appendChild(roundId ? h('div', { class: 'relations' }, person(t('Killer'), hunter, 'hunter'), person(t('Target'), target, 'target'))
           : h('p', { class: 'muted' }, t('Start the loop from the Chain tab to record targets and killers.')));
@@ -410,7 +434,7 @@
           h('div', { class: 'grid-2' }, ui.field(t('Year'), f.year), ui.field(t('Department'), f.dept)),
           h('div', { class: 'grid-2' }, ui.field('TD', f.td), ui.field('TP', f.tp)),
           h('div', { class: 'grid-2' }, ui.field(t('Option'), f.option), ui.field(t('Language group'), f.lang_group)),
-          h('div', { class: 'grid-2' }, ui.field(t('Weapons in hand'), f.weapons, t('Comma-separated')), ui.field(t('Points'), f.points)),
+          h('div', { class: 'grid-2 grid-align-start' }, ui.field(t('Weapons in hand'), f.weapons, t('Comma-separated')), ui.field(t('Points'), f.points)),
           h('label', { class: 'check' }, f.is_ally, t('Alliance member')),
           ui.field(t('Address'), f.address, t('Include the town so the marker lands in the right place.')),
           ui.field(t('Housing type'), f.address_type, t('Sets the icon and the layer on the map.')), ui.field(t('Notes'), f.notes)));
@@ -553,7 +577,7 @@
     body.appendChild(hh('h2', {}, [t('Kills')]));
     var kt = hh('table', {}, [hh('tr', {}, [t('When'), t('Killer'), t('Victim'), t('Weapon'), t('Points'), t('Note')].map(function (x) { return hh('th', {}, [x]); }))]);
     st.kills.slice().sort(function (a, b) { return a.happened_at < b.happened_at ? 1 : -1; }).forEach(function (k) {
-      kt.appendChild(hh('tr', {}, [ui.when(k.happened_at), k.killer_id ? name(k.killer_id) : '?', name(k.victim_id), k.weapon || '', String(k.points || 0), k.note || ''].map(function (x) { return hh('td', {}, [x]); })));
+      kt.appendChild(hh('tr', {}, [ui.when(k.happened_at), k.admin_reason ? t('Administration') + ' (' + t(k.admin_reason === 'cheating' ? 'Cheating' : 'Other') + ')' : k.killer_id ? name(k.killer_id) : '?', name(k.victim_id), k.weapon || '', String(k.points || 0), k.note || ''].map(function (x) { return hh('td', {}, [x]); })));
     });
     body.appendChild(kt);
     w.focus();

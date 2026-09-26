@@ -213,12 +213,16 @@
   function rankLabel(n) { return String(n); }
 
   function leaderboard(state) {
-    var count = new Map();
-    state.kills.forEach(function (k) { if (k.killer_id) count.set(k.killer_id, (count.get(k.killer_id) || 0) + 1); });
+    var count = new Map(), adminKills = 0;
+    state.kills.forEach(function (k) {
+      if (k.killer_id) count.set(k.killer_id, (count.get(k.killer_id) || 0) + 1);
+      else if (k.admin_reason) adminKills++;
+    });
     var rows = [];
     count.forEach(function (n, id) { rows.push({ id: id, kills: n }); });
+    if (adminKills) rows.push({ id: 'admin', kills: adminKills, admin: true });
     var names = new Map(state.players.map(function (p) { return [p.id, p.name || '']; }));
-    rows.sort(function (a, b) { return b.kills - a.kills || (names.get(a.id) || '').localeCompare(names.get(b.id) || '', 'fr'); });
+    rows.sort(function (a, b) { return b.kills - a.kills || (a.admin ? 'Admin' : names.get(a.id) || '').localeCompare(b.admin ? 'Admin' : names.get(b.id) || '', 'fr'); });
     var rank = 0, lastKills = null;
     rows.forEach(function (r, i) { if (r.kills !== lastKills) { rank = i + 1; lastKills = r.kills; } r.rank = rank; r.label = rankLabel(rank); });
     return rows;
@@ -241,7 +245,7 @@
       var maps = linkMaps(state, round.id);
       alive.forEach(function (p) { if (resolveTarget(state, round.id, p.id, maps, dead).id) known++; });
     }
-    var attributed = state.kills.filter(function (k) { return !!k.killer_id; }).length;
+    var attributed = state.kills.filter(function (k) { return !!k.killer_id || !!k.admin_reason; }).length;
     return {
       total: players.length, alive: alive.length, dead: players.length - alive.length,
       byYear: byYear, knownTargets: known,

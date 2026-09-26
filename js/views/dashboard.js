@@ -80,9 +80,15 @@
         });
         grid.appendChild(box);
 
-        var board = L.leaderboard(st), lb = h('section', { class: 'panel' }, h('h2', {}, t('Kill leaderboard')));
+        var board = L.leaderboard(st), visibleBoard = board.slice(0, 12), adminRow = board.find(function (r) { return r.admin; });
+        if (adminRow && visibleBoard.indexOf(adminRow) < 0) visibleBoard.push(adminRow);
+        var lb = h('section', { class: 'panel' }, h('h2', {}, t('Kill leaderboard')));
         if (!board.length) lb.appendChild(h('p', { class: 'empty' }, t('No kill attributed yet.')));
-        board.slice(0, 12).forEach(function (r) { var p = store.player(r.id); if (p) lb.appendChild(personRow(p, [h('span', { class: 'rank' }, '#' + r.rank), h('strong', { class: 'count' }, r.kills)])); });
+        visibleBoard.forEach(function (r) {
+          var rank = [h('span', { class: 'rank' }, '#' + r.rank), h('strong', { class: 'count' }, r.kills)];
+          if (r.admin) lb.appendChild(h('div', { class: 'row' }, h('span', { class: 'leader-admin-mark', 'aria-hidden': 'true' }, K.icon('settings')), h('span', { class: 'row-main' }, t('Admin')), rank));
+          else { var p = store.player(r.id); if (p) lb.appendChild(personRow(p, rank)); }
+        });
         lb.appendChild(h('p', { class: 'muted small' }, stats.unattributed ? t('{n} deaths without an identified killer: open their sheet to set one.', { n: stats.unattributed }) : t('Every death has an identified killer.')));
         grid.appendChild(lb);
 

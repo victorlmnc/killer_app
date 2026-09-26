@@ -72,6 +72,19 @@ t('stats, leaderboard with ties, points', () => {
   assert.deepEqual(L.leaderboard(s).map(r => r.rank), [1, 2]);
   assert.equal(L.killPoints({ difficulty: 'difficile', bonus: 2, firstBlood: true, mates: 1 }), 11);
 });
+t('admin eliminations appear in the leaderboard without becoming players', () => {
+  const s = base();
+  s.kills = [{ round_id: 'r0', victim_id: 'a', admin_reason: 'cheating' }, { round_id: 'r0', victim_id: 'b', admin_reason: 'other' }, { round_id: 'r0', victim_id: 'c', killer_id: 'd' }];
+  const board = L.leaderboard(s);
+  assert.deepEqual(board.map(row => [row.admin ? 'Admin' : row.id, row.kills, row.rank]), [['Admin', 2, 1], ['d', 1, 2]]);
+  assert.equal(L.stats(s).unattributed, 0);
+  assert.equal(s.players.some(p => p.name === 'Admin'), false);
+  s.players = Array.from({ length: 13 }, (_, i) => ({ id: 'p' + i, name: 'Player ' + i }));
+  s.kills = s.players.flatMap(p => [{ killer_id: p.id, victim_id: p.id + '-a' }, { killer_id: p.id, victim_id: p.id + '-b' }]);
+  s.kills.push({ victim_id: 'admin-victim', admin_reason: 'other' });
+  const extendedBoard = L.leaderboard(s);
+  assert.equal(extendedBoard[13].admin, true); assert.equal(extendedBoard[13].rank, 14);
+});
 t('incomplete sheets include missing addresses for living players', () => {
   const s = base();
   s.players.forEach(p => Object.assign(p, { year: '3A', td: 'TD1', photo_path: 'photo.jpg', address: '12 rue Test' }));

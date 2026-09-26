@@ -105,9 +105,11 @@ create table if not exists public.kills (
   victim_id   uuid not null unique references public.players(id) on delete cascade,
   weapon      text default '',
   points      integer not null default 0,
+  admin_reason text check (admin_reason is null or admin_reason in ('cheating', 'other')),
   note        text default '',
   happened_at timestamptz not null default now()
 );
+alter table public.kills add column if not exists admin_reason text check (admin_reason is null or admin_reason in ('cheating', 'other'));
 
 create table if not exists public.weapons (
   id         uuid primary key default gen_random_uuid(),
