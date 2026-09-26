@@ -75,8 +75,25 @@
         document.body.classList.remove('is-dragging'); clearMarks();
         Array.prototype.forEach.call(body.querySelectorAll('.is-moving'), function (el) { el.classList.remove('is-moving'); });
         if (d.active) { justDragged = true; setTimeout(function () { justDragged = false; }, 0); }
-        if (commit && d.active && d.hit) K.actions.applyMove(view.roundId, view.mode, d.seg, d.hit.dest).then(function () { if (!gone) refresh(); });
+        if (commit && d.active && d.hit) {
+          var done = function () { if (!gone) refresh(); };
+          if (d.hit.dest.tray && d.seg.length > 1) askTray(d.seg).then(function (choice) { if (choice) K.actions.applyMove(view.roundId, view.mode, d.seg, { tray: true, disband: choice === 'split' }).then(done); else done(); });
+          else K.actions.applyMove(view.roundId, view.mode, d.seg, d.hit.dest).then(done);
+        }
         else if (pending && !gone) refresh();
+      }
+      /* A segment of several players dropped in the tray: keep it together, or split it. */
+      function askTray(seg) {
+        return new Promise(function (resolve) {
+          var picked = null;
+          ui.dialog({ title: t('{n} players dropped in the tray', { n: seg.length }), onClose: function () { resolve(picked); }, render: function (body, api) {
+            body.appendChild(h('p', { class: 'prose' }, t('Keep them linked as a fragment of their own, or split everybody into the tray?')));
+            body.appendChild(h('div', { class: 'actions' },
+              h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
+              h('button', { type: 'button', class: 'btn', onclick: function () { picked = 'split'; api.close(); } }, t('Split everybody')),
+              h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { picked = 'keep'; api.close(); } }, t('Keep as a fragment'))));
+          } });
+        });
       }
       function onDown(e) {
         var el = e.target.closest ? e.target.closest('[data-drag]') : null;

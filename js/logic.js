@@ -157,7 +157,8 @@
   /* Drag and drop inside the chain, list-style:
      - removing the segment closes the gap (its hunter inherits its target);
      - dropping it between A and B gives A -> segment -> B; at the end of a fragment it attaches there; in the tray it stands alone.
-     seg: consecutive ids of one fragment. dest: { after, before } (either may be missing) or { tray: true }.
+     seg: consecutive ids of one fragment. dest: { after, before } (either may be missing) or { tray: true, disband?: true }.
+     In the tray a multi-player segment keeps its own links (a new fragment) unless disband is set.
      Pure: returns { remove: [existing links], add: [new links] }. */
   function planMove(state, roundId, mode, seg, dest) {
     var raw = mode === 'complete';
@@ -184,13 +185,15 @@
     if (H && inSeg.has(H)) H = null;
     var A = dest.tray ? null : (dest.after || null), B = dest.tray ? null : (dest.before || null);
     if (!dest.tray && !closing && A === H && B === N) return { noop: true, remove: [], add: [] };
-    if (dest.tray && !H && !N && !closing) return { noop: true, remove: [], add: [] };
+    if (dest.tray && !H && !N && !closing && !(dest.disband && seg.length > 1)) return { noop: true, remove: [], add: [] };
 
     // 1. detach the segment: cut the incoming and outgoing links, then close the gap
     var inLink = maps().hunterOf.get(first), inConf = inLink ? inLink.confidence : 'sur', outConf = 'sur';
     if (N0) { var outLink = maps().hunterOf.get(N0); if (outLink) outConf = outLink.confidence; drop(outLink); }
     drop(maps().hunterOf.get(first));
     if (H && N) link(H, N, weakest(inConf, outConf));
+
+    if (dest.tray && dest.disband) work.links.filter(function (l) { return inSeg.has(l.hunter_id) || inSeg.has(l.target_id); }).forEach(drop);
 
     // 2. put it down at its new place
     if (A && B) { drop(maps().hunterOf.get(B)); link(A, first); link(last, B); }

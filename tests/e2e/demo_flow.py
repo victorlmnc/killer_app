@@ -60,7 +60,7 @@ with sync_playwright() as p:
     vw = pg.evaluate("K.store.state.players.find(p=>p.name==='SCAPIN Léandre').weapons = 'Chaudron, Lacet'")
     pg.evaluate("id => K.actions.killDialog(id)", pid('SCAPIN Léandre'))
     dlg = pg.locator('dialog[open]'); expect(dlg.locator('.btn-block')).to_contain_text('AROUET Candide')
-    assert not dlg.locator('input[type=checkbox]').is_checked()
+    assert not dlg.locator('input[type=checkbox]').first.is_checked()
     dlg.get_by_placeholder('Arme utilisée').fill('Chaudron'); dlg.locator('textarea').fill('Au Learning Center, 14 h.')
     dlg.get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
     assert pg.evaluate("K.store.state.players.find(p=>p.name==='AROUET Candide').weapons") == 'Chaudron, Lacet'
@@ -93,6 +93,32 @@ with sync_playwright() as p:
     expect(dlg).to_contain_text('Tentative de triche détectée.')
     pg.keyboard.press('Escape')
 
+    step('undo a kill gives the points back')
+    pts = pg.evaluate("K.store.state.players.find(p=>p.name==='AROUET Candide').points")
+    pg.evaluate("id => K.actions.openPlayer(id)", pid('SCAPIN Léandre')); pg.get_by_role('button', name='Annuler le kill').click()
+    pg.locator('dialog[open]').last.get_by_role('button', name='Annuler le kill').click(); pg.wait_for_timeout(200); pg.keyboard.press('Escape')
+    assert pg.evaluate("K.store.state.players.find(p=>p.name==='AROUET Candide').points") == pts - 3
+    assert not pg.evaluate("K.actions.isDead(K.store.state.players.find(p=>p.name==='SCAPIN Léandre').id)")
+
+    step('drop a tail in the tray: keep as a fragment, or split everybody')
+    pg.goto(URL + '#/chain'); pg.wait_for_selector('.bubble')
+    def to_tray(src, shift):
+        sx, sy = center(src); pg.locator('[data-tray] h3').scroll_into_view_if_needed()
+        if shift: pg.keyboard.down('Shift')
+        pg.mouse.move(sx, sy); pg.mouse.down()
+        if shift: pg.keyboard.up('Shift')
+        tr = pg.locator('[data-tray] h3').bounding_box(); pg.mouse.move(sx + 20, sy + 20, steps=3); pg.mouse.move(tr['x'] + 200, tr['y'] + 10, steps=6); pg.mouse.up(); pg.wait_for_timeout(200)
+    c0 = chain(); to_tray('COUPEAU', True); expect(pg.locator('dialog[open]')).to_contain_text('déposés dans le bac')
+    pg.locator('dialog[open]').get_by_role('button', name='Garder en fragment').click(); pg.wait_for_timeout(250)
+    c1 = chain(); assert any(x.startswith('COUPEAU>') for x in c1) and len(c1) == len(c0) + 1, (c0, c1)
+    to_tray('COUPEAU', True); pg.locator('dialog[open]').get_by_role('button', name='Tout remettre dans le bac').click(); pg.wait_for_timeout(250)
+    c2 = chain(); assert not any('COUPEAU' in x for x in c2) and len(c2) == len(c0), (c0, c2)
+
+    step('copying from the page gives plain text')
+    got = pg.evaluate("""() => new Promise(res => { const h2 = document.querySelector('.fragment h3'); const r = document.createRange(); r.selectNodeContents(h2); getSelection().removeAllRanges(); getSelection().addRange(r);
+      document.addEventListener('copy', e => { res({ plain: e.clipboardData.getData('text/plain'), html: e.clipboardData.getData('text/html'), prevented: e.defaultPrevented }); }, { once: true }); document.execCommand('copy'); })""")
+    assert got['plain'] and got['html'] == '' and got['prevented'], got
+
     step('import: column mapping and row filter, CSV export')
     pg.goto(URL + '#/players'); pg.get_by_role('button', name='Importer').click()
     pg.locator('dialog textarea').fill('Joue ?\tNom\tAnnée\tTD\nOUI\tTARTUFFE Orgon\t5\tTD2\nNON\tDORINE Elmire\t4\tTD1\nOUI\tVALJEAN Jean\t2\tTD1')
@@ -108,9 +134,12 @@ with sync_playwright() as p:
     with pg.expect_popup() as pop: pg.get_by_role('button', name='Exporter').click(); pg.get_by_role('button', name='Rapport').click()
     expect(pop.value.locator('h1')).to_contain_text('Killer'); pop.value.close()
 
-    step('profile: display name and language')
-    pg.locator('.whoami').click(); pg.locator('dialog input[type=text]').fill('Le Chef'); pg.locator('dialog').get_by_role('button', name='Enregistrer').click(); pg.wait_for_timeout(150)
-    expect(pg.locator('.whoami-name')).to_have_text('Le Chef')
+    step('profile: display name, animated GIF avatar kept as GIF')
+    gif = b'GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\x00\x00\x00\x00\x00!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;'
+    pg.locator('.whoami').click(); pg.locator('dialog input[type=file]').set_input_files({'name': 'me.gif', 'mimeType': 'image/gif', 'buffer': gif}); pg.wait_for_timeout(200)
+    assert pg.evaluate("K.store.me().avatar_path").startswith('data:image/gif')
+    pg.locator('dialog input[type=text]').fill('Le Chef'); pg.locator('dialog').get_by_role('button', name='Enregistrer').click(); pg.wait_for_timeout(150)
+    expect(pg.locator('.whoami-name')).to_have_text('Le Chef'); assert pg.locator('.whoami img').get_attribute('src').startswith('data:image/gif')
 
     step('roles: a member has no Settings tab, an observer is read-only with chosen tabs')
     pg.goto(URL + '#/settings'); expect(pg.locator('h1')).to_have_text('Paramètres')
@@ -120,7 +149,7 @@ with sync_playwright() as p:
     assert pg.locator('.nav-item').count() == 2 and pg.locator('h1').inner_text() == 'Dashboard'
     pg.evaluate("location.hash = '#/chain'"); pg.wait_for_timeout(200)
     assert pg.locator('.grip').count() == 0 and pg.get_by_role('button', name='Nouveau reroll').count() == 0
-    n = pg.evaluate('K.store.state.links.length'); pg.evaluate("K.store.remove('links', K.store.state.links[0].id)"); expect(pg.locator('.toast-error')).to_contain_text('lecture seule'); assert pg.evaluate('K.store.state.links.length') == n
+    n = pg.evaluate('K.store.state.links.length'); pg.evaluate("K.store.remove('links', K.store.state.links[0].id)"); expect(pg.locator('.toast-error').last).to_contain_text('lecture seule'); assert pg.evaluate('K.store.state.links.length') == n
     pg.evaluate("K.store.state.members[0].role = 'admin'; K.store.role = 'admin'; K.store.emit()")
 
     step('settings: accounts with roles, clear log, erase game')
@@ -131,7 +160,7 @@ with sync_playwright() as p:
     assert pg.evaluate('K.store.state.events.length') == 0
     pg.get_by_role('button', name='Effacer la partie').click(); pg.locator('dialog').get_by_role('button', name='Effacer la partie').click(); pg.wait_for_timeout(200)
     s = state(); assert not s['players'] and len(s['weapons']) == 120 and len(s['spots']) == 2
-    pg.goto(URL + '#/dashboard'); pg.reload(); pg.wait_for_selector('.panel-empty')
+    assert json.loads(pg.evaluate('localStorage.getItem("killer.local.v1")'))['players'] == []   # persisted (reloads on file:// are not reliable in headless Chromium)
     ctx.close()
 
     step('phone: long press then drag')

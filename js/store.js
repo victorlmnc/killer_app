@@ -237,15 +237,26 @@
       img.src = url;
     });
   }
+  var GIF_MAX = { supabase: 1048576, local: 400 * 1024 };   // animated GIFs are stored as-is, so they are capped by size
+  function isGif(file) { return file && file.type === 'image/gif'; }
+  function gifTooBig(file) { return isGif(file) && file.size > GIF_MAX[store.mode]; }
+  function gifDataUrl(file) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = function () { rej(new Error(K.t('Unreadable image'))); }; r.readAsDataURL(file); }); }
+  function localImage(file, max) { return isGif(file) ? gifDataUrl(file) : shrink(file, max).then(function (c) { return c.toDataURL('image/jpeg', 0.8); }); }
+  function tooBig() { if (K.ui) K.ui.toast(K.t('This GIF is too large ({kb} kB max).', { kb: Math.round(GIF_MAX[store.mode] / 1024) }), 'error'); return Promise.resolve(null); }
   function uploadImage(file, path, old) {
+    if (isGif(file)) {
+      return guard(sb.storage.from(PHOTO_BUCKET).upload(path, file, { contentType: 'image/gif', upsert: true }).then(check)
+        .then(function () { if (old && old !== path) sb.storage.from(PHOTO_BUCKET).remove([old]); signed.delete(path); return path; }), K.t('Photo upload'));
+    }
     return guard(shrink(file, 640).then(function (c) { return new Promise(function (res) { c.toBlob(res, 'image/jpeg', 0.85); }); })
       .then(function (blob) { return sb.storage.from(PHOTO_BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: true }); }).then(check)
       .then(function () { if (old && old !== path) sb.storage.from(PHOTO_BUCKET).remove([old]); signed.delete(path); return path; }), K.t('Photo upload'));
   }
   store.setPhoto = function (playerId, file) {
     var p = store.player(playerId); if (!p || !store.canEdit()) return denied();
-    if (store.mode !== 'supabase') return shrink(file, 240).then(function (c) { return store.update('players', playerId, { photo_path: c.toDataURL('image/jpeg', 0.8) }); });
-    return uploadImage(file, 'players/' + playerId + '-' + Date.now() + '.jpg', p.photo_path).then(function (path) { if (path) return store.update('players', playerId, { photo_path: path }); });
+    if (gifTooBig(file)) return tooBig();
+    if (store.mode !== 'supabase') return localImage(file, 240).then(function (url) { return store.update('players', playerId, { photo_path: url }); });
+    return uploadImage(file, 'players/' + playerId + '-' + Date.now() + (isGif(file) ? '.gif' : '.jpg'), p.photo_path).then(function (path) { if (path) return store.update('players', playerId, { photo_path: path }); });
   };
   store.removePhoto = function (playerId) {
     var p = store.player(playerId); if (!p || !p.photo_path) return Promise.resolve();
@@ -254,8 +265,9 @@
   };
   store.setAvatar = function (file) {
     var me = store.me(); if (!me) return Promise.resolve();
-    if (store.mode !== 'supabase') return shrink(file, 160).then(function (c) { return store.updateMember(me.email, { avatar_path: c.toDataURL('image/jpeg', 0.8) }); });
-    return uploadImage(file, 'avatars/' + store.user.id + '.jpg', me.avatar_path).then(function (path) { if (path) return store.updateMember(me.email, { avatar_path: path }); });
+    if (gifTooBig(file)) return tooBig();
+    if (store.mode !== 'supabase') return localImage(file, 160).then(function (url) { return store.updateMember(me.email, { avatar_path: url }); });
+    return uploadImage(file, 'avatars/' + store.user.id + (isGif(file) ? '.gif' : '.jpg'), me.avatar_path).then(function (path) { if (path) return store.updateMember(me.email, { avatar_path: path }); });
   };
 
   /* ----- end of game: everything personal goes, the weapon catalogue, spots and settings stay ----- */

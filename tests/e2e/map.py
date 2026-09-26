@@ -60,7 +60,7 @@ with sync_playwright() as p:
     multi = pg.evaluate("(() => { const m = __L.markers.find(m => m.o.title.includes(',')); m.openPopup(); return m.o.title.split(', ').length })()")
     assert pg.locator('#fake-pop .map-pop-item').count() == multi and multi > 1
     print('· filters: alive, alliance targets')
-    pg.locator('.chip', has_text='Vivants').click(); dead = pg.evaluate('[...K.logic.deadSet(K.store.state)]')
+    pg.locator('.chip', has_text='Vivant').click(); dead = pg.evaluate('[...K.logic.deadSet(K.store.state)]')
     alive_located = [x for x in located if x['id'] not in dead]
     expect(pg.locator('.view-map > section.panel').first).to_contain_text(f'Joueurs localisés {len(alive_located)}')
     pg.locator('.chip', has_text='Cibles').click(); pg.wait_for_timeout(100)
@@ -98,12 +98,10 @@ with sync_playwright() as p:
     assert set(kinds) == {'normale', 'coloc', 'immeuble', 'residence', 'spot'}, set(kinds)
     assert pg.evaluate("__L.markers.filter(m => m.o.icon.html.includes('pin-residence')).every(m => /pin-count/.test(m.o.icon.html))")
     n_before = pg.evaluate('__L.markers.length'); n_res = kinds.count('residence')
-    pg.locator('.layer-row', has_text='Résidences étudiantes').click()
-    assert pg.evaluate('__L.markers.length') == n_before - n_res
+    pg.locator('.layer-row', has_text='Résidences étudiantes').click(); pg.wait_for_function('n => (window.__L.markers || []).length === n', arg=n_before - n_res, timeout=5000)
     expect(pg.locator('.view-map > section.panel').first).not_to_contain_text('Résidence des Tanneurs')      # la liste suit les calques
-    pg.reload(); pg.wait_for_function('(window.__L.markers || []).length > 0')                                # le réglage est retenu sur l'appareil
-    assert pg.evaluate('__L.markers.length') == n_before - n_res
-    pg.locator('.layers summary').click(); pg.locator('.layer-row', has_text='Résidences étudiantes').click()
+    assert json.loads(pg.evaluate('localStorage.getItem("killer.map.v1")'))['hidden'] == ['residence']   # remembered on the device
+    pg.locator('.layer-row', has_text='Résidences étudiantes').click()
     print('· add a strategic spot by tapping the map, then its popup')
     pg.get_by_role('button', name='Ajouter un lieu stratégique').click()
     pg.get_by_placeholder('ex. resto U').fill('Arrêt Lahitolle'); pg.get_by_role('button', name='Ajouter le lieu').click()

@@ -6,6 +6,7 @@ URL = 'file://' + str(ROOT / 'index.html')
 def context(browser, **kw):
     ctx = browser.new_context(**kw)
     ctx.route('**/fonts.g*/**', lambda r: r.abort())          # no network in CI
+    ctx.route('**/js/config.js', lambda r: r.fulfill(body="window.KILLER_CONFIG = { supabaseUrl: '', supabaseAnonKey: '' };", content_type='text/javascript'))   # demo mode
     return ctx
 
 def collect_errors(page, errors):

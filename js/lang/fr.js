@@ -498,7 +498,6 @@
   "{email} will no longer be able to read or change anything.": "{email} ne pourra plus rien lire ni modifier.",
   "{name} added.": "{name} ajouté.",
   "{name} and {n} others": "{name} et {n} autres",
-  "{name} is alive again. The killer's points are not removed automatically.": "{name} redevient vivant. Les points du killer ne sont pas retirés automatiquement.",
   "{name} is dead": "{name} est mort(e)",
   "{n} address located": "{n} adresse localisée",
   "{n} addresses located": "{n} adresses localisées",
@@ -524,6 +523,21 @@
   "{n} stop": "{n} arrêt",
   "{n} stops": "{n} arrêts",
   "…equals": "…vaut",
-  "Hello {name}": "Bonjour {name}"
+  "Hello {name}": "Bonjour {name}",
+  "Alive players by year": "Joueurs vivants par année",
+  "Dashboard blocks": "Blocs du dashboard",
+  "Hover a slice for the detail; click a legend entry to hide it.": "Survole une part pour le détail ; clique une entrée de la légende pour la masquer.",
+  "Keep as a fragment": "Garder en fragment",
+  "Keep them linked as a fragment of their own, or split everybody into the tray?": "Les garder reliés dans un fragment à part, ou remettre tout le monde dans le bac ?",
+  "Next block": "Bloc suivant",
+  "Previous block": "Bloc précédent",
+  "Registered players by year": "Joueurs inscrits par année",
+  "Split everybody": "Tout remettre dans le bac",
+  "Statistics": "Statistiques",
+  "This GIF is too large ({kb} kB max).": "Ce GIF est trop lourd ({kb} Ko max).",
+  "Total: {n}": "Total : {n}",
+  "{name} is alive again and {killer} loses the {n} points of this kill.": "{name} redevient vivant et {killer} perd les {n} points de ce kill.",
+  "{name} is alive again.": "{name} redevient vivant.",
+  "{n} players dropped in the tray": "{n} joueurs déposés dans le bac"
 });
 })();

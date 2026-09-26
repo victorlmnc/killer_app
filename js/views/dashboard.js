@@ -39,7 +39,42 @@
   K.views.dashboard = {
     title: t('Dashboard'),
     render: function (root) {
-      var showAll = false, showAllIncomplete = false, showAllGeneral = false, leaderboardMode = 'kills';
+      var showAll = false, showAllIncomplete = false, showAllGeneral = false, leaderboardMode = 'kills', slide = 0;
+      /* Blocks below the hero live in a swipeable carousel; the active slide survives re-renders. */
+      function carousel(slides) {
+        var track = h('div', { class: 'carousel-track', tabindex: '0', 'aria-label': t('Dashboard blocks') }), dots = h('div', { class: 'carousel-dots', role: 'tablist' });
+        slides.forEach(function (sl, i) {
+          sl.el.classList.add('slide'); sl.el.setAttribute('role', 'tabpanel'); track.appendChild(sl.el);
+          dots.appendChild(h('button', { type: 'button', role: 'tab', class: 'carousel-dot' + (i === slide ? ' is-on' : ''), 'aria-selected': String(i === slide), 'aria-label': sl.title, onclick: function () { go(i, true); } }, h('span', {}, sl.title)));
+        });
+        function go(i, smooth) {
+          slide = Math.max(0, Math.min(slides.length - 1, i));
+          var target = slides[slide].el;
+          track.scrollTo({ left: target.offsetLeft - (track.clientWidth - target.clientWidth) / 2, behavior: smooth ? 'smooth' : 'auto' });
+          mark();
+        }
+        function mark() {
+          Array.prototype.forEach.call(dots.children, function (d, i) { d.classList.toggle('is-on', i === slide); d.setAttribute('aria-selected', String(i === slide)); });
+          Array.prototype.forEach.call(track.children, function (c, i) { c.classList.toggle('is-current', i === slide); });
+          prev.disabled = slide === 0; next.disabled = slide === slides.length - 1;
+        }
+        var ticking = false;
+        track.addEventListener('scroll', function () {   // swiping: the slide nearest to the centre becomes current
+          if (ticking) return; ticking = true;
+          requestAnimationFrame(function () {
+            ticking = false;
+            var mid = track.scrollLeft + track.clientWidth / 2, best = 0, dist = Infinity;
+            Array.prototype.forEach.call(track.children, function (c, i) { var d = Math.abs(c.offsetLeft + c.clientWidth / 2 - mid); if (d < dist) { dist = d; best = i; } });
+            if (best !== slide) { slide = best; mark(); }
+          });
+        });
+        track.addEventListener('keydown', function (e) { if (e.key === 'ArrowRight') go(slide + 1, true); if (e.key === 'ArrowLeft') go(slide - 1, true); });
+        var prev = h('button', { type: 'button', class: 'carousel-arrow', 'aria-label': t('Previous block'), onclick: function () { go(slide - 1, true); } }, K.icon('chevron', 'ic-left'));
+        var next = h('button', { type: 'button', class: 'carousel-arrow', 'aria-label': t('Next block'), onclick: function () { go(slide + 1, true); } }, K.icon('chevron', 'ic-right'));
+        var el = h('div', { class: 'carousel' }, h('div', { class: 'carousel-head' }, prev, dots, next), track);
+        requestAnimationFrame(function () { go(slide, false); });
+        return el;
+      }
       function refresh() {
         var st = store.state, set = st.settings, stats = L.stats(st), round = L.currentRound(st), edit = store.canEdit();
         ui.clear(root);
@@ -64,7 +99,7 @@
               school ? h('div', {}, h('dt', {}, t('Participation')), h('dd', {}, ui.pct((official || stats.total) / school), h('small', {}, ' ' + t('of the school')))) : null),
             h('a', { class: 'btn btn-primary', href: '#/chain' }, t('Open the chain')))));
 
-        var grid = root.appendChild(h('div', { class: 'dash-grid' }));
+        var slides = [], grid = { appendChild: function (el) { slides.push({ title: el.querySelector('h2').textContent, el: el }); } };
         var allies = st.players.filter(function (p) { return p.is_ally; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });
         var dead = L.deadSet(st);
         var box = h('section', { class: 'panel' }, h('h2', {}, t('The alliance')));
@@ -122,51 +157,40 @@
         }
         grid.appendChild(lb);
 
-        var yr = h('section', { class: 'panel' }, h('h2', {}, t('By year')));
-        var max = Math.max.apply(null, Object.keys(stats.byYear).map(function (y) { return stats.byYear[y].total; }).concat([1]));
-        Object.keys(stats.byYear).sort().forEach(function (y) {
-          var b = stats.byYear[y];
-          yr.appendChild(h('div', { class: 'bar', style: { '--year': ui.yearColor(y) } }, h('span', { class: 'bar-label' }, y),
-            h('span', { class: 'bar-track' }, h('span', { class: 'bar-total', style: { width: (b.total / max * 100) + '%' } }, h('span', { class: 'bar-alive', style: { width: (b.total ? b.alive / b.total * 100 : 0) + '%' } }))),
-            h('span', { class: 'bar-num' }, b.alive + ' / ' + b.total)));
-        });
-        yr.appendChild(h('p', { class: 'muted small' }, t('Alive out of registered.')));
-        grid.appendChild(yr);
-
-        var killsYr = h('section', { class: 'panel' }, h('h2', {}, t('Kills by year')));
-        var maxKills = Math.max.apply(null, Object.keys(stats.killsByYear).map(function (y) { return stats.killsByYear[y]; }).concat([1]));
-        Object.keys(stats.killsByYear).sort().forEach(function (y) {
-          var count = stats.killsByYear[y];
-          killsYr.appendChild(h('div', { class: 'bar', style: { '--year': ui.yearColor(y) } }, h('span', { class: 'bar-label' }, y),
-            h('span', { class: 'bar-track' }, h('span', { class: 'bar-total', style: { width: (count / maxKills * 100) + '%' } }, h('span', { class: 'bar-value', style: { width: '100%' } }))),
-            h('span', { class: 'bar-num' }, count)));
-        });
-        killsYr.appendChild(h('p', { class: 'muted small' }, t('Admin eliminations are not grouped by year.')));
-        grid.appendChild(killsYr);
+        var years = Object.keys(stats.byYear).sort(), yc = function (y) { return ui.yearColor(y) === 'var(--muted)' ? '#8A93A0' : ui.yearColor(y); };
+        var adminKills = st.kills.filter(function (k) { return !k.killer_id && k.admin_reason; }).length, unknownKills = st.kills.filter(function (k) { return !k.killer_id && !k.admin_reason; }).length;
+        var killItems = years.map(function (y) { return { label: y === '?' ? t('Not set') : t('Year') + ' ' + y, value: stats.killsByYear[y] || 0, color: yc(y) }; })
+          .concat([{ label: t('Admin'), value: adminKills, color: '#ff3b4b' }, { label: t('Unknown killer'), value: unknownKills, color: '#55555c' }]);
+        var stat = h('section', { class: 'panel' }, h('h2', {}, t('Statistics')), h('div', { class: 'pies' },
+          h('div', { class: 'pie-block' }, h('h3', {}, t('Alive players by year')), K.charts.pie3d(years.map(function (y) { return { label: y === '?' ? t('Not set') : t('Year') + ' ' + y, value: stats.byYear[y].alive, color: yc(y) }; }), { label: t('Alive players by year'), caption: t('Total: {n}', { n: stats.alive }) })),
+          h('div', { class: 'pie-block' }, h('h3', {}, t('Kills by year')), K.charts.pie3d(killItems, { label: t('Kills by year') })),
+          h('div', { class: 'pie-block' }, h('h3', {}, t('Registered players by year')), K.charts.pie3d(years.map(function (y) { return { label: y === '?' ? t('Not set') : t('Year') + ' ' + y, value: stats.byYear[y].total, color: yc(y) }; }), { label: t('Registered players by year') }))),
+          h('p', { class: 'muted small' }, t('Hover a slice for the detail; click a legend entry to hide it.')));
+        grid.appendChild(stat);
 
         var inc = h('section', { class: 'panel' }, h('h2', {}, t('Sheets to complete')));
         if (!stats.incomplete.length) inc.appendChild(h('p', { class: 'empty' }, t('Every living player has a class, a photo, and an address.')));
-        stats.incomplete.slice(0, showAllIncomplete ? stats.incomplete.length : 8).forEach(function (p) {
+        stats.incomplete.slice(0, showAllIncomplete ? stats.incomplete.length : 12).forEach(function (p) {
           var miss = [!p.year || !p.td ? t('class') : null, !p.photo_path ? t('photo') : null, !p.address ? t('address') : null].filter(Boolean).join(', ');
           inc.appendChild(personRow(p, h('span', { class: 'muted small' }, t('missing: {x}', { x: miss }))));
         });
-        if (stats.incomplete.length > 8) inc.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAllIncomplete = !showAllIncomplete; refresh(); } }, showAllIncomplete ? t('Show less') : t('Show all')));
+        if (stats.incomplete.length > 12) inc.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAllIncomplete = !showAllIncomplete; refresh(); } }, showAllIncomplete ? t('Show less') : t('Show all')));
         grid.appendChild(inc);
 
         var feed = h('section', { class: 'panel' }, h('h2', {}, t('Latest activity')));
         if (!st.events.length) feed.appendChild(h('p', { class: 'empty' }, t('Kills, links and rerolls recorded by the team will show here.')));
-        st.events.slice(0, showAll ? 60 : 8).forEach(function (e) {
+        st.events.slice(0, showAll ? 80 : 15).forEach(function (e) {
           var d = e.details || {}, has = (d.type === 'kill' && d.note) || (d.type === 'link' && d.source);
           feed.appendChild(h('button', { type: 'button', class: 'event event-' + (d.type || 'other'), title: K.actions.eventSummary(e), onclick: function () { K.actions.eventDetails(e); } },
             h('span', { class: 'event-text' }, e.text, has ? h('span', { class: 'has-note', 'aria-label': t('with a note') }, '✎') : null),
             h('span', { class: 'muted small' }, [e.actor, ui.ago(e.created_at)].filter(Boolean).join(', '))));
         });
-        if (st.events.length > 8) feed.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAll = !showAll; refresh(); } }, showAll ? t('Show less') : t('Show {n} earlier entries', { n: Math.min(st.events.length, 60) - 8 })));
-        grid.appendChild(feed);
-
+        if (st.events.length > 15) feed.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAll = !showAll; refresh(); } }, showAll ? t('Show less') : t('Show {n} earlier entries', { n: Math.min(st.events.length, 80) - 15 })));
         var links = (set.links || []).filter(function (l) { return ui.safeUrl(l.url); });
-        if (links.length) grid.appendChild(h('section', { class: 'panel' }, h('h2', {}, t('Useful links')),
+        if (links.length) feed.appendChild(h('div', { class: 'stack' }, h('h3', {}, t('Useful links')),
           links.map(function (l) { return h('a', { class: 'row row-btn', href: l.url, target: '_blank', rel: 'noopener noreferrer' }, h('span', { class: 'row-main' }, l.label || l.url)); })));
+        grid.appendChild(feed);
+        root.appendChild(carousel(slides));
       }
       refresh();
       return refresh;

@@ -206,8 +206,14 @@
   act.revive = function (playerId) {
     var kill = store.state.kills.find(function (k) { return k.victim_id === playerId; });
     if (!kill) return Promise.resolve();
-    return ui.confirm({ title: t('Undo this kill?'), text: t('{name} is alive again. The killer\'s points are not removed automatically.', { name: name(playerId) }), action: t('Undo the kill'), danger: true })
-      .then(function (ok) { if (ok) return store.remove('kills', kill.id).then(function () { store.log(t('Kill undone: {name} is alive again', { name: name(playerId) })); }); });
+    var killer = kill.killer_id && store.player(kill.killer_id), pts = killer ? kill.points || 0 : 0;
+    return ui.confirm({ title: t('Undo this kill?'), text: pts ? t('{name} is alive again and {killer} loses the {n} points of this kill.', { name: name(playerId), killer: killer.name, n: pts }) : t('{name} is alive again.', { name: name(playerId) }), action: t('Undo the kill'), danger: true })
+      .then(function (ok) {
+        if (!ok) return;
+        var jobs = [store.remove('kills', kill.id)];
+        if (pts) jobs.push(store.update('players', killer.id, { points: Math.max(0, (killer.points || 0) - pts) }));
+        return Promise.all(jobs).then(function () { store.log(t('Kill undone: {name} is alive again', { name: name(playerId) })); });
+      });
   };
   act.editKill = function (kill) {
     ui.pickPlayer({ title: t('Who killed {name}?', { name: name(kill.victim_id) }), filter: function (p) { return p.id !== kill.victim_id; }, extra: [{ label: t('Unknown killer'), value: null }] })
@@ -348,7 +354,7 @@
             : res && res.via.length ? h('p', { class: 'muted small' }, t('Trail lost after {name} (dead).', { name: name(res.via[res.via.length - 1]) })) : null);
       }
 
-      var file = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: function () { if (file.files[0]) store.setPhoto(p.id, file.files[0]); } });
+      var file = h('input', { type: 'file', accept: 'image/*,.gif', hidden: true, onchange: function () { if (file.files[0]) store.setPhoto(p.id, file.files[0]); } });
       function showPhoto() {
         var offPhoto = null;
         ui.dialog({ title: p.name, onClose: function () { if (offPhoto) offPhoto(); }, render: function (photoBody) {
@@ -359,7 +365,7 @@
             var url = store.photoUrl(current.photo_path);
             photoBody.appendChild(url ? h('img', { class: 'photo-viewer-image', src: url, alt: current.name }) : ui.avatar(current, 'xl'));
             if (!edit) return;
-            var picker = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: function () { if (picker.files[0]) store.setPhoto(current.id, picker.files[0]); } });
+            var picker = h('input', { type: 'file', accept: 'image/*,.gif', hidden: true, onchange: function () { if (picker.files[0]) store.setPhoto(current.id, picker.files[0]); } });
             photoBody.appendChild(picker);
             var actions = h('div', { class: 'photo-viewer-actions' },
               h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { picker.click(); } }, t('Change photo')));
@@ -591,7 +597,7 @@
       render: function (body, api) {
         var email = store.user ? store.user.email : '';
         var nameIn = h('input', { type: 'text', value: (me && me.name) || '', maxlength: '40', placeholder: email.split('@')[0] });
-        var file = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: function () { if (file.files[0]) store.setAvatar(file.files[0]).then(function () { ui.toast(t('Photo saved.')); }); } });
+        var file = h('input', { type: 'file', accept: 'image/*,.gif', hidden: true, onchange: function () { if (file.files[0]) store.setAvatar(file.files[0]).then(function () { ui.toast(t('Photo saved.')); }); } });
         var pass = h('input', { type: 'password', autocomplete: 'new-password', minlength: '8', placeholder: t('8 characters minimum') });
         var lang = ui.select([{ value: 'fr', label: 'Français' }, { value: 'en', label: 'English' }], K.i18n.lang);
         var roleLabel = { admin: t('Administrator'), member: t('Alliance member'), observer: t('Observer') }[store.role] || '';

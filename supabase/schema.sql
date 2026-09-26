@@ -189,11 +189,11 @@ create trigger protect_account before update on public.accounts for each row exe
 
 -- ---------------------------------------------------------------------------
 -- Photos: private bucket, served through short-lived signed URLs.
--- Editors manage player photos; everyone manages their own avatar (avatars/<uid>.jpg).
+-- Editors manage player photos; everyone manages their own avatar (avatars/<uid>.jpg or .gif).
 -- ---------------------------------------------------------------------------
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('photos', 'photos', false, 1048576, array['image/jpeg'])
-on conflict (id) do update set public = false, file_size_limit = 1048576, allowed_mime_types = array['image/jpeg'];
+values ('photos', 'photos', false, 1048576, array['image/jpeg', 'image/gif'])
+on conflict (id) do update set public = false, file_size_limit = 1048576, allowed_mime_types = array['image/jpeg', 'image/gif'];
 
 drop policy if exists "photos lecture"     on storage.objects;
 drop policy if exists "photos ajout"       on storage.objects;
@@ -204,9 +204,9 @@ drop policy if exists "photos write"  on storage.objects;
 drop policy if exists "photos update" on storage.objects;
 drop policy if exists "photos delete" on storage.objects;
 create policy "photos read"   on storage.objects for select to authenticated using (bucket_id = 'photos' and public.is_member());
-create policy "photos write"  on storage.objects for insert to authenticated with check (bucket_id = 'photos' and (public.can_edit() or name = 'avatars/' || auth.uid()::text || '.jpg'));
-create policy "photos update" on storage.objects for update to authenticated using (bucket_id = 'photos' and (public.can_edit() or name = 'avatars/' || auth.uid()::text || '.jpg'));
-create policy "photos delete" on storage.objects for delete to authenticated using (bucket_id = 'photos' and (public.can_edit() or name = 'avatars/' || auth.uid()::text || '.jpg'));
+create policy "photos write"  on storage.objects for insert to authenticated with check (bucket_id = 'photos' and (public.can_edit() or name like 'avatars/' || auth.uid()::text || '.%'));
+create policy "photos update" on storage.objects for update to authenticated using (bucket_id = 'photos' and (public.can_edit() or name like 'avatars/' || auth.uid()::text || '.%'));
+create policy "photos delete" on storage.objects for delete to authenticated using (bucket_id = 'photos' and (public.can_edit() or name like 'avatars/' || auth.uid()::text || '.%'));
 
 -- ---------------------------------------------------------------------------
 -- Realtime: everyone sees teammates' changes without reloading.

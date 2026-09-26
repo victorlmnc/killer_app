@@ -133,6 +133,16 @@
     });
   };
 
+  /* Copying from the page yields plain text only: no HTML, so chats and editors do not turn headings into "#". */
+  document.addEventListener('copy', function (e) {
+    var target = e.target, editable = target && (/INPUT|TEXTAREA/.test(target.tagName) || target.isContentEditable);
+    if (editable || !e.clipboardData) return;
+    var text = String(window.getSelection && window.getSelection()).replace(/\n{3,}/g, '\n\n').trim();
+    if (!text) return;
+    e.clipboardData.setData('text/plain', text);
+    e.preventDefault();
+  });
+
   ui.safeUrl = function (u) { return /^https?:\/\//i.test(String(u || '')) ? u : null; };
   ui.ago = function (iso) {
     var s = (Date.now() - new Date(iso).getTime()) / 1000;
