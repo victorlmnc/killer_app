@@ -247,7 +247,7 @@
       byYear: byYear, knownTargets: known,
       coverage: alive.length ? known / alive.length : 0,
       kills: state.kills.length, attributed: attributed, unattributed: state.kills.length - attributed,
-      incomplete: players.filter(function (p) { return !dead.has(p.id) && (!p.year || !p.td || !p.photo_path); })
+      incomplete: players.filter(function (p) { return !dead.has(p.id) && !p.is_ally && (!p.year || !p.td || !p.photo_path || !p.address); })
     };
   }
 

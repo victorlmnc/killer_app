@@ -39,7 +39,7 @@
   K.views.dashboard = {
     title: t('Dashboard'),
     render: function (root) {
-      var showAll = false;
+      var showAll = false, showAllIncomplete = false;
       function refresh() {
         var st = store.state, set = st.settings, stats = L.stats(st), round = L.currentRound(st), edit = store.canEdit();
         ui.clear(root);
@@ -98,12 +98,12 @@
         grid.appendChild(yr);
 
         var inc = h('section', { class: 'panel' }, h('h2', {}, t('Sheets to complete')));
-        if (!stats.incomplete.length) inc.appendChild(h('p', { class: 'empty' }, t('Every living player has a class and a photo.')));
-        stats.incomplete.slice(0, 8).forEach(function (p) {
-          var miss = [!p.year || !p.td ? t('class') : null, !p.photo_path ? t('photo') : null].filter(Boolean).join(', ');
+        if (!stats.incomplete.length) inc.appendChild(h('p', { class: 'empty' }, t('Every living player has a class, a photo, and an address.')));
+        stats.incomplete.slice(0, showAllIncomplete ? stats.incomplete.length : 8).forEach(function (p) {
+          var miss = [!p.year || !p.td ? t('class') : null, !p.photo_path ? t('photo') : null, !p.address ? t('address') : null].filter(Boolean).join(', ');
           inc.appendChild(personRow(p, h('span', { class: 'muted small' }, t('missing: {x}', { x: miss }))));
         });
-        if (stats.incomplete.length > 8) inc.appendChild(h('p', { class: 'muted small' }, t('and {n} more.', { n: stats.incomplete.length - 8 })));
+        if (stats.incomplete.length > 8) inc.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAllIncomplete = !showAllIncomplete; refresh(); } }, showAllIncomplete ? t('Show less') : t('Show all')));
         grid.appendChild(inc);
 
         var feed = h('section', { class: 'panel' }, h('h2', {}, t('Latest activity')));

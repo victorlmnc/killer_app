@@ -265,6 +265,8 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 @media (prefers-reduced-motion: no-preference) { .sheet[open] { animation: rise .18s ease-out; } @keyframes rise { from { transform: translateY(16px); opacity: 0; } } }
 .profile { display: flex; gap: 1rem; align-items: center; }
 .profile-photo { appearance: none; border: 0; background: none; padding: 0; cursor: pointer; border-radius: 50%; } .profile-meta { display: grid; gap: .45rem; }
+.photo-viewer-image { display: block; width: 100%; max-height: 62dvh; object-fit: contain; border-radius: var(--radius-sm); }
+.photo-viewer-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: .5rem; }
 .relations { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: .7rem .8rem; }
 .relation { min-width: 0; display: grid; gap: .3rem; align-content: start; } .relation-label { font-size: .78rem; color: var(--muted); display: block; } .relation .row-btn { padding-inline: .3rem; margin-inline: -.3rem; }
 .relation-pick { display: flex; align-items: center; gap: .35rem; min-width: 0; } .relation-pick select { min-width: 0; font-weight: 500; }

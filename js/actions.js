@@ -325,8 +325,29 @@
       }
 
       var file = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: function () { if (file.files[0]) store.setPhoto(p.id, file.files[0]); } });
+      function showPhoto() {
+        var offPhoto = null;
+        ui.dialog({ title: p.name, onClose: function () { if (offPhoto) offPhoto(); }, render: function (photoBody) {
+          function drawPhoto() {
+            var current = store.player(playerId);
+            if (!current) return;
+            ui.clear(photoBody);
+            var url = store.photoUrl(current.photo_path);
+            photoBody.appendChild(url ? h('img', { class: 'photo-viewer-image', src: url, alt: current.name }) : ui.avatar(current, 'xl'));
+            if (!edit) return;
+            var picker = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: function () { if (picker.files[0]) store.setPhoto(current.id, picker.files[0]); } });
+            photoBody.appendChild(picker);
+            var actions = h('div', { class: 'photo-viewer-actions' },
+              h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { picker.click(); } }, t('Change photo')));
+            if (current.photo_path) actions.appendChild(h('button', { type: 'button', class: 'btn btn-danger', onclick: function () { store.removePhoto(current.id); } }, t('Remove photo')));
+            photoBody.appendChild(actions);
+          }
+          offPhoto = store.on(drawPhoto);
+          drawPhoto();
+        } });
+      }
       body.appendChild(h('div', { class: 'profile' },
-        edit ? h('button', { type: 'button', class: 'profile-photo', 'aria-label': t('Change photo'), onclick: function () { file.click(); } }, ui.avatar(p, 'xl')) : ui.avatar(p, 'xl'), file,
+        p.photo_path || edit ? h('button', { type: 'button', class: 'profile-photo', 'aria-label': p.photo_path ? t('View photo') : t('Change photo'), onclick: function () { if (p.photo_path) showPhoto(); else file.click(); } }, ui.avatar(p, 'xl')) : ui.avatar(p, 'xl'), file,
         h('div', { class: 'profile-meta' },
           h('div', { class: 'tags' }, ui.yearTag(p), p.tp ? h('span', { class: 'tag' }, p.tp) : null, p.lang_group ? h('span', { class: 'tag' }, p.lang_group) : null, p.option ? h('span', { class: 'tag' }, p.option) : null),
           h('div', { class: 'tags' }, h('span', { class: 'tag ' + (dead ? 'tag-dead' : 'tag-alive') }, dead ? t('Dead') : t('Alive')),
@@ -359,9 +380,7 @@
       function add(label, fn, cls) { A.appendChild(h('button', { type: 'button', class: 'btn ' + (cls || ''), onclick: fn }, label)); }
       if (!dead && isCurrent) add(t('Mark as dead'), function () { api.close(); act.killDialog(p.id); }, 'btn-danger');
       if (dead && kill) { add(kill.killer_id ? t('Change killer') : t('Set killer'), function () { act.editKill(kill); }); add(t('Undo the kill'), function () { act.revive(p.id); }); }
-      add(p.is_ally ? t('Remove from alliance') : t('Alliance member'), function () { store.update('players', p.id, { is_ally: !p.is_ally }); });
       add(t('Edit sheet'), function () { act.editPlayer(p.id); });
-      if (p.photo_path) add(t('Remove photo'), function () { store.removePhoto(p.id); });
       body.appendChild(A);
     }
   };
@@ -381,6 +400,7 @@
           option: h('input', { type: 'text', value: p.option || '' }), lang_group: h('input', { type: 'text', value: p.lang_group || '', placeholder: 'G2' }),
           weapons: h('input', { type: 'text', value: p.weapons || '', placeholder: t('Banana, Watering can') }),
           points: h('input', { type: 'number', min: '0', inputmode: 'numeric', value: String(p.points || 0) }),
+          is_ally: h('input', { type: 'checkbox', checked: !!p.is_ally }),
           address: h('input', { type: 'text', value: p.address || '', placeholder: t('e.g. 12 High Street, Town'), autocomplete: 'off', oninput: function () { if (!typeTouched && !p.address) f.address_type.value = L.guessAddressType(f.address.value); } }),
           address_type: ui.select(L.ADDRESS_TYPES.slice().reverse().map(function (x) { return { value: x.id, label: t(x.label) }; }), L.addressType(p.address_type), { onchange: function () { typeTouched = true; } }),
           notes: h('textarea', { rows: '3', value: p.notes || '', placeholder: t('Habits on campus, clubs, who could save them…') })
@@ -391,6 +411,7 @@
           h('div', { class: 'grid-2' }, ui.field('TD', f.td), ui.field('TP', f.tp)),
           h('div', { class: 'grid-2' }, ui.field(t('Option'), f.option), ui.field(t('Language group'), f.lang_group)),
           h('div', { class: 'grid-2' }, ui.field(t('Weapons in hand'), f.weapons, t('Comma-separated')), ui.field(t('Points'), f.points)),
+          h('label', { class: 'check' }, f.is_ally, t('Alliance member')),
           ui.field(t('Address'), f.address, t('Include the town so the marker lands in the right place.')),
           ui.field(t('Housing type'), f.address_type, t('Sets the icon and the layer on the map.')), ui.field(t('Notes'), f.notes)));
         var actions = h('div', { class: 'actions' });
@@ -403,6 +424,7 @@
           var row = {}; Object.keys(f).forEach(function (k) { row[k] = f[k].value.trim(); });
           if (!row.name) { f.name.focus(); return ui.toast(t('A name is required.'), 'error'); }
           row.points = Math.max(0, parseInt(row.points, 10) || 0);
+          row.is_ally = f.is_ally.checked;
           var moved = (p.address || '') !== row.address;
           if (moved) { row.lat = null; row.lng = null; }
           var saved = playerId ? store.update('players', playerId, row).then(function () { return playerId; })
@@ -464,9 +486,19 @@
         }
         function run() {
           var rows = fresh().rows.map(function (r) { return Object.assign({ year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: null, lng: null, notes: '', weapons: '', points: 0, is_ally: false, photo_path: null }, r); });
-          store.insertMany('players', rows); store.log(t('{n} players imported', { n: rows.length }));
-          var toPlace = rows.filter(L.hasAddress).length;
-          api.close(); ui.toast(t('{n} players imported.', { n: rows.length }) + (toPlace ? ' ' + t('Open the Map tab to locate the {n} addresses.', { n: toPlace }) : ''));
+          var saved = store.insertMany('players', rows); store.log(t('{n} players imported', { n: rows.length }));
+          api.close(); ui.toast(t('{n} players imported.', { n: rows.length }));
+          saved.then(function (inserted) {
+            if (!inserted) return;
+            var todo = inserted.filter(L.hasAddress), i = 0;
+            function locateNext() {
+              if (i >= todo.length) return;
+              return K.geo.locatePlayer(todo[i++].id).then(function () {
+                if (i < todo.length) return new Promise(function (resolve) { setTimeout(resolve, 120); }).then(locateNext);
+              });
+            }
+            return locateNext();
+          });
         }
         preview();
       }

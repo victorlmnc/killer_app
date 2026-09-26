@@ -72,6 +72,14 @@ t('stats, leaderboard with ties, points', () => {
   assert.deepEqual(L.leaderboard(s).map(r => r.rank), [1, 2]);
   assert.equal(L.killPoints({ difficulty: 'difficile', bonus: 2, firstBlood: true, mates: 1 }), 11);
 });
+t('incomplete sheets include missing addresses for living players', () => {
+  const s = base();
+  s.players.forEach(p => Object.assign(p, { year: '3A', td: 'TD1', photo_path: 'photo.jpg', address: '12 rue Test' }));
+  s.players[0].address = '';
+  s.players[1].is_ally = true;
+  s.players[1].photo_path = '';
+  assert.deepEqual(L.stats(s).incomplete.map(p => p.id), ['a']);
+});
 t('language groups split on commas and ignore empty or repeated values', () => {
   assert.deepEqual(L.languageGroups('G6, Japonais'), ['G6', 'Japonais']);
   assert.deepEqual(L.languageGroups(' G6 ,, Japonais, G6 '), ['G6', 'Japonais']);

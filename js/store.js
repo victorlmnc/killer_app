@@ -123,7 +123,7 @@
     rows = rows.map(function (r) { return Object.assign({ id: uuid() }, r); });
     Array.prototype.push.apply(store.state[table], rows);
     store.emit();
-    return guard(backend().insert(table, rows), K.t('Import'));
+    return guard(backend().insert(table, rows), K.t('Import')).then(function () { return rows; });
   };
   store.update = function (table, id, patch) {
     if (!store.canEdit()) return denied();
