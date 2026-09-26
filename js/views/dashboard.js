@@ -47,10 +47,12 @@
           sl.el.classList.add('slide'); sl.el.setAttribute('role', 'tabpanel'); track.appendChild(sl.el);
           dots.appendChild(h('button', { type: 'button', role: 'tab', class: 'carousel-dot' + (i === slide ? ' is-on' : ''), 'aria-selected': String(i === slide), 'aria-label': sl.title, onclick: function () { go(i, true); } }, h('span', {}, sl.title)));
         });
+        /* Positions are measured against the track itself: offsetLeft would be relative to the page on wide layouts. */
+        function leftOf(el) { return el.getBoundingClientRect().left - track.getBoundingClientRect().left + track.scrollLeft; }
         function go(i, smooth) {
           slide = Math.max(0, Math.min(slides.length - 1, i));
           var target = slides[slide].el;
-          track.scrollTo({ left: target.offsetLeft - (track.clientWidth - target.clientWidth) / 2, behavior: smooth ? 'smooth' : 'auto' });
+          track.scrollTo({ left: leftOf(target) - (track.clientWidth - target.clientWidth) / 2, behavior: smooth ? 'smooth' : 'auto' });
           mark();
         }
         function mark() {
@@ -64,7 +66,7 @@
           requestAnimationFrame(function () {
             ticking = false;
             var mid = track.scrollLeft + track.clientWidth / 2, best = 0, dist = Infinity;
-            Array.prototype.forEach.call(track.children, function (c, i) { var d = Math.abs(c.offsetLeft + c.clientWidth / 2 - mid); if (d < dist) { dist = d; best = i; } });
+            Array.prototype.forEach.call(track.children, function (c, i) { var d = Math.abs(leftOf(c) + c.clientWidth / 2 - mid); if (d < dist) { dist = d; best = i; } });
             if (best !== slide) { slide = best; mark(); }
           });
         });

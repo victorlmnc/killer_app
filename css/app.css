@@ -90,7 +90,7 @@ button, input, select, textarea { font: inherit; color: var(--ink); }
 .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem .75rem; flex-wrap: wrap; } .panel-head .btn { align-self: center; }
 .panel-empty { padding: 2rem 1.5rem; }
 .stack { display: grid; gap: .8rem; } .stack-lg { display: grid; gap: 1rem; }
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; align-items: end; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; align-items: start; }
 .grid-2.grid-align-start { align-items: start; }
 .actions { display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; } .actions-start { justify-content: flex-start; margin-top: .25rem; }
 .toolbar { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
@@ -195,7 +195,7 @@ select:disabled { opacity: .6; }
 .carousel-arrow { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); width: 38px; height: 38px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; flex: none; }
 .carousel-arrow:hover { background: var(--pill); } .carousel-arrow:disabled { opacity: .3; cursor: default; }
 .carousel-arrow .ic-left { transform: rotate(90deg); } .carousel-arrow .ic-right { transform: rotate(-90deg); }
-.carousel-track { display: flex; gap: 1rem; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding: .25rem 12% 1rem; scroll-padding: 0 12%; outline: none; -webkit-overflow-scrolling: touch; }
+.carousel-track { position: relative; display: flex; gap: 1rem; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding: .25rem 12% 1rem; scroll-padding: 0 12%; outline: none; -webkit-overflow-scrolling: touch; }
 .carousel-track::-webkit-scrollbar { display: none; }
 .carousel-track > .slide { flex: 0 0 76%; scroll-snap-align: center; opacity: .45; transform: scale(.97); transition: opacity .25s, transform .25s; min-height: 320px; }
 .carousel-track > .slide.is-current { opacity: 1; transform: none; }
@@ -304,7 +304,7 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 }
 @media (prefers-reduced-motion: no-preference) { .sheet[open] { animation: rise .18s ease-out; } @keyframes rise { from { transform: translateY(16px); opacity: 0; } } }
 .profile { display: flex; gap: 1rem; align-items: center; }
-.profile-photo { appearance: none; border: 0; background: none; padding: 0; cursor: pointer; border-radius: 50%; } .profile-meta { display: grid; gap: .45rem; }
+.profile-photo { appearance: none; border: 0; background: none; padding: 0; cursor: pointer; border-radius: 50%; } .profile-meta { display: grid; gap: .45rem; justify-items: start; }
 .photo-viewer-image { display: block; width: 100%; max-height: 62dvh; object-fit: contain; border-radius: var(--radius-sm); }
 .photo-viewer-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: .5rem; }
 .relations { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: .7rem .8rem; }
