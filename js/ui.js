@@ -105,7 +105,7 @@
   ui.select = function (options, value, attrs) {
     return h('select', Object.assign({ value: value == null ? '' : value }, attrs || {}), options.map(function (o) {
       var opt = typeof o === 'string' ? { value: o, label: o } : o;
-      return h('option', { value: opt.value }, opt.label);
+      return h('option', { value: opt.value, disabled: !!opt.disabled }, opt.label);
     }));
   };
 
@@ -142,18 +142,26 @@
   /* Weapons of a sheet as removable tags, plus a search that offers catalogue weapons first (same spelling everywhere,
      no duplicates) and a new weapon only when nothing matches. .value is the usual comma-separated text. */
   var pickers = 0;
-  ui.weaponPicker = function (text, onChange) {
+  ui.weaponPicker = function (text, opts) {
+    // opts: { onChange(), check(name, names) -> reason it cannot be added or null, max }
+    opts = opts || {};
     var L = K.logic, names = L.weaponList(text), items = [], active = 0, id = 'wpick-' + (++pickers);
-    var tags = h('div', { class: 'wpick-tags' });
-    var input = h('input', { type: 'text', placeholder: t('Add a weapon…'), autocomplete: 'off', role: 'combobox', 'aria-expanded': 'false', 'aria-autocomplete': 'list', 'aria-controls': id, 'aria-label': t('Add a weapon'),
-      oninput: suggest, onkeydown: key, onblur: function () { setTimeout(close, 150); } });
+    var tags = h('div', { class: 'wpick-tags' }), msg = h('p', { class: 'field-hint danger', role: 'alert', hidden: true });
+    var input = h('input', { type: 'text', autocomplete: 'off', role: 'combobox', 'aria-expanded': 'false', 'aria-autocomplete': 'list', 'aria-controls': id, 'aria-label': t('Add a weapon'),
+      oninput: function () { say(''); suggest(); }, onkeydown: key, onblur: function () { setTimeout(close, 150); } });
     var list = h('ul', { class: 'wpick-list', role: 'listbox', id: id, hidden: true });
-    function changed() { drawTags(); if (onChange) onChange(); }
+    function say(text) { msg.textContent = text; msg.hidden = !text; }
+    function full() { return opts.max && names.length >= opts.max; }
+    function changed() {
+      drawTags();
+      input.disabled = full(); input.placeholder = full() ? t('{n} weapons at most', { n: opts.max }) : t('Add a weapon…');
+      if (opts.onChange) opts.onChange();
+    }
     function drawTags() {
       ui.clear(tags);
       names.forEach(function (n, i) {
         tags.appendChild(h('span', { class: 'wpick-item' }, ui.weaponTag(n, true),
-          h('button', { type: 'button', class: 'wpick-remove', 'aria-label': t('Remove {w}', { w: n }), onclick: function () { names.splice(i, 1); changed(); input.focus(); } }, '×')));
+          h('button', { type: 'button', class: 'wpick-remove', 'aria-label': t('Remove {w}', { w: n }), onclick: function () { names.splice(i, 1); say(''); changed(); input.focus(); } }, '×')));
       });
     }
     function resolve(name) {   // typed text -> the catalogue spelling when it is the same weapon
@@ -162,8 +170,12 @@
     }
     function add(name) {
       name = resolve(name);
-      if (name && !names.some(function (n) { return L.norm(n) === L.norm(name); })) { names.push(name); changed(); }
-      input.value = ''; close(); input.focus();
+      input.value = ''; close();   // before onChange, so the half-typed search is never read as a weapon
+      if (!name || names.some(function (n) { return L.norm(n) === L.norm(name); })) return input.focus();
+      var why = opts.check && opts.check(name, names.slice());
+      if (why) { say(why); return input.focus(); }
+      say(''); names.push(name); changed();
+      if (!input.disabled) input.focus();
     }
     function close() { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); }
     function suggest() {
@@ -171,13 +183,13 @@
       ui.clear(list); items = []; active = 0;
       if (!q) return close();
       var found = L.matchWeapons(q, K.store.state.weapons, names).slice(0, 7);
-      items = found.map(function (m) { return { name: m.weapon.name, how: m.how }; });
+      items = found.map(function (m) { return { name: m.weapon.name, how: m.how, why: opts.check && opts.check(m.weapon.name, names.slice()) }; });
       if (!found.some(function (m) { return m.how === 'exact'; }) && !names.some(function (n) { return L.norm(n) === L.norm(q); })) items.push({ name: q, isNew: true });
       items.forEach(function (it, i) {
-        list.appendChild(h('li', { id: id + '-' + i, role: 'option', class: 'wpick-option' + (it.isNew ? ' is-new' : ''),
+        list.appendChild(h('li', { id: id + '-' + i, role: 'option', class: 'wpick-option' + (it.isNew ? ' is-new' : '') + (it.why ? ' is-blocked' : ''), 'aria-disabled': it.why ? 'true' : null,
           onmousedown: function (e) { e.preventDefault(); }, onclick: function () { add(it.name); } },
           it.isNew ? [K.icon('plus', 'ic-sm'), t('Add "{w}" as a new weapon', { w: it.name })]
-            : [ui.weaponTag(it.name, true), it.how === 'close' ? h('span', { class: 'muted small' }, t('similar spelling')) : null]));
+            : [ui.weaponTag(it.name, true), it.why ? h('span', { class: 'muted small' }, it.why) : it.how === 'close' ? h('span', { class: 'muted small' }, t('similar spelling')) : null]));
       });
       list.hidden = !items.length; input.setAttribute('aria-expanded', String(!!items.length));
       mark();
@@ -192,11 +204,12 @@
       else if (e.key === 'ArrowUp' && open) { e.preventDefault(); active = (active - 1 + items.length) % items.length; mark(); }
       else if ((e.key === 'Enter' || e.key === ',') && input.value.trim()) { e.preventDefault(); add(open ? items[active].name : input.value); }
       else if (e.key === 'Escape' && open) { e.preventDefault(); e.stopPropagation(); close(); }
-      else if (e.key === 'Backspace' && !input.value && names.length) { names.pop(); changed(); }
+      else if (e.key === 'Backspace' && !input.value && names.length) { names.pop(); say(''); changed(); }
     }
-    drawTags();
+    drawTags(); input.disabled = full(); input.placeholder = full() ? t('{n} weapons at most', { n: opts.max }) : t('Add a weapon…');
     return {
-      el: h('div', { class: 'wpick' }, tags, h('div', { class: 'wpick-search' }, input, list)), input: input,
+      el: h('div', { class: 'wpick' }, tags, h('div', { class: 'wpick-search' }, input, list), msg), input: input,
+      names: function () { return names.slice(); },
       get value() { var pending = input.value.trim() && resolve(input.value), all = names.slice(); if (pending && !all.some(function (n) { return L.norm(n) === L.norm(pending); })) all.push(pending); return all.join(', '); }
     };
   };

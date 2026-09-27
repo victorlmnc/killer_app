@@ -141,6 +141,7 @@ select:disabled { opacity: .6; }
 .wpick-option { display: flex; align-items: center; gap: .5rem; padding: .4rem .5rem; border-radius: 6px; cursor: pointer; font-size: .88rem; }
 .wpick-option.is-active, .wpick-option:hover { background: var(--pill-hi); }
 .wpick-option.is-new { color: var(--muted); } .wpick-option.is-new.is-active { color: var(--ink); }
+.wpick-option.is-blocked { opacity: .55; cursor: not-allowed; } .wpick-search input:disabled { opacity: .6; cursor: not-allowed; }
 .weapon-levels { display: grid; gap: .4rem; } .weapon-levels:empty { display: none; }
 .weapon-level { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; } .weapon-level select { width: auto; min-width: 9rem; }
 .tag-conf { cursor: pointer; background: none; min-height: 26px; border: 1px solid; }
