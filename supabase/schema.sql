@@ -107,8 +107,10 @@ create table if not exists public.kills (
   points      integer not null default 0,
   admin_reason text check (admin_reason is null or admin_reason in ('cheating', 'other')),
   note        text default '',
+  killer_weapons text,                      -- the killer's weapons before the victim's passed to them (restored on undo); null = unchanged
   happened_at timestamptz not null default now()
 );
+alter table public.kills add column if not exists killer_weapons text;
 alter table public.kills add column if not exists admin_reason text check (admin_reason is null or admin_reason in ('cheating', 'other'));
 
 create table if not exists public.weapons (

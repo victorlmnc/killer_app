@@ -438,7 +438,7 @@
     players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, photo_path: '', created_at: NOW },
     rounds: { name: '', position: 0, created_at: NOW },
     links: { round_id: null, hunter_id: null, target_id: null, confidence: 'sur', source: '', created_at: NOW },
-    kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', points: 0, admin_reason: '', note: '', happened_at: NOW },
+    kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', points: 0, admin_reason: '', note: '', killer_weapons: null, happened_at: NOW },
     weapons: { name: '', difficulty: 'facile', owned: false, note: '' },
     events: { text: '', actor: '', details: {}, created_at: NOW },
     spots: { name: '', note: '', address: '', lat: 0, lng: 0, created_at: NOW }
@@ -448,6 +448,7 @@
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   function cleanValue(key, v, def, now) {
+    if (key === 'killer_weapons') return v == null ? null : String(v);   // '' is meaningful: the killer had no weapon
     if (v == null || v === '') return NULLABLE[key] || def === null ? null : def === NOW ? now : def;
     if (ENUMS[key]) return ENUMS[key].indexOf(v) >= 0 ? v : (NULLABLE[key] ? null : def);
     if (def === NOW) { var d = new Date(v); return isNaN(d) ? now : d.toISOString(); }

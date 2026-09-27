@@ -186,10 +186,11 @@
       return pre.then(function () {
         var victim = store.player(k.victimId), killer = killerId && store.player(killerId);
         var killId = store.uuid();
-        var jobs = [store.insert('kills', { id: killId, round_id: roundId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, weapon: weapon, points: points, note: k.note || '', happened_at: k.when || new Date().toISOString() })];
+        var inherits = !!(killer && victim.weapons);   // the victim's contract always passes to the killer; theirs is kept on the kill for an undo
+        var jobs = [store.insert('kills', { id: killId, round_id: roundId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, weapon: weapon, points: points, note: k.note || '', killer_weapons: inherits ? killer.weapons || '' : null, happened_at: k.when || new Date().toISOString() })];
         if (killer) {
           var patch = { points: (killer.points || 0) + points };
-          if (victim.weapons) patch.weapons = victim.weapons;   // the victim's contract always passes to the killer
+          if (inherits) patch.weapons = victim.weapons;
           jobs.push(store.update('players', killer.id, patch));
         }
         var text = adminReason ? t('Administrative elimination of {name}: {reason}', { name: victim.name, reason: t(adminReason === 'cheating' ? 'Cheating' : 'Other') })
@@ -206,12 +207,20 @@
   act.revive = function (playerId) {
     var kill = store.state.kills.find(function (k) { return k.victim_id === playerId; });
     if (!kill) return Promise.resolve();
-    var killer = kill.killer_id && store.player(kill.killer_id), pts = killer ? kill.points || 0 : 0;
-    return ui.confirm({ title: t('Undo this kill?'), text: pts ? t('{name} is alive again and {killer} loses the {n} points of this kill.', { name: name(playerId), killer: killer.name, n: pts }) : t('{name} is alive again.', { name: name(playerId) }), action: t('Undo the kill'), danger: true })
+    var killer = kill.killer_id && store.player(kill.killer_id), pts = killer ? kill.points || 0 : 0, victim = store.player(playerId);
+    // The killer gets their former weapons back, unless they have changed since (another kill, a manual edit).
+    var same = function (a, b) { return L.weaponList(a).map(L.norm).sort().join() === L.weaponList(b).map(L.norm).sort().join(); };
+    var restore = killer && kill.killer_weapons != null && victim && same(killer.weapons, victim.weapons);
+    var text = [pts ? t('{name} is alive again and {killer} loses the {n} points of this kill.', { name: name(playerId), killer: killer.name, n: pts }) : t('{name} is alive again.', { name: name(playerId) })];
+    if (restore) text.push(kill.killer_weapons ? t('{killer} gets their weapons back: {w}.', { killer: killer.name, w: kill.killer_weapons }) : t('{killer} had no weapon before this kill: the inherited ones are removed.', { killer: killer.name }));
+    else if (killer && kill.killer_weapons != null) text.push(t('The weapons of {killer} have changed since this kill: they are left as they are.', { killer: killer.name }));
+    return ui.confirm({ title: t('Undo this kill?'), text: text, action: t('Undo the kill'), danger: true })
       .then(function (ok) {
         if (!ok) return;
-        var jobs = [store.remove('kills', kill.id)];
-        if (pts) jobs.push(store.update('players', killer.id, { points: Math.max(0, (killer.points || 0) - pts) }));
+        var jobs = [store.remove('kills', kill.id)], patch = {};
+        if (pts) patch.points = Math.max(0, (killer.points || 0) - pts);
+        if (restore) patch.weapons = kill.killer_weapons;
+        if (Object.keys(patch).length) jobs.push(store.update('players', killer.id, patch));
         return Promise.all(jobs).then(function () { store.log(t('Kill undone: {name} is alive again', { name: name(playerId) })); });
       });
   };
