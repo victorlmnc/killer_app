@@ -161,12 +161,12 @@
 
         var years = Object.keys(stats.byYear).sort(), yc = function (y) { return ui.yearColor(y) === 'var(--muted)' ? '#8A93A0' : ui.yearColor(y); };
         var adminKills = st.kills.filter(function (k) { return !k.killer_id && k.admin_reason; }).length, unknownKills = st.kills.filter(function (k) { return !k.killer_id && !k.admin_reason; }).length;
-        var killItems = years.map(function (y) { return { label: y === '?' ? t('Not set') : t('Year') + ' ' + y, value: stats.killsByYear[y] || 0, color: yc(y) }; })
+        var killItems = years.map(function (y) { return { label: y === '?' ? t('Not set') : y, value: stats.killsByYear[y] || 0, color: yc(y) }; })
           .concat([{ label: t('Admin'), value: adminKills, color: '#ff3b4b' }, { label: t('Unknown killer'), value: unknownKills, color: '#55555c' }]);
         var stat = h('section', { class: 'panel' }, h('h2', {}, t('Statistics')), h('div', { class: 'pies' },
-          h('div', { class: 'pie-block' }, h('h3', {}, t('Alive players by year')), K.charts.pie3d(years.map(function (y) { return { label: y === '?' ? t('Not set') : t('Year') + ' ' + y, value: stats.byYear[y].alive, color: yc(y) }; }), { label: t('Alive players by year'), caption: t('Total: {n}', { n: stats.alive }) })),
+          h('div', { class: 'pie-block' }, h('h3', {}, t('Alive players by year')), K.charts.pie3d(years.map(function (y) { return { label: y === '?' ? t('Not set') : y, value: stats.byYear[y].alive, color: yc(y) }; }), { label: t('Alive players by year'), caption: t('Total: {n}', { n: stats.alive }) })),
           h('div', { class: 'pie-block' }, h('h3', {}, t('Kills by year')), K.charts.pie3d(killItems, { label: t('Kills by year') })),
-          h('div', { class: 'pie-block' }, h('h3', {}, t('Registered players by year')), K.charts.pie3d(years.map(function (y) { return { label: y === '?' ? t('Not set') : t('Year') + ' ' + y, value: stats.byYear[y].total, color: yc(y) }; }), { label: t('Registered players by year') }))),
+          h('div', { class: 'pie-block' }, h('h3', {}, t('Registered players by year')), K.charts.pie3d(years.map(function (y) { return { label: y === '?' ? t('Not set') : y, value: stats.byYear[y].total, color: yc(y) }; }), { label: t('Registered players by year') }))),
           h('p', { class: 'muted small' }, t('Hover a slice for the detail; click a legend entry to hide it.')));
         grid.appendChild(stat);
 
