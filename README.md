@@ -1,6 +1,6 @@
-# Killer
+# QG Killer
 
-A private web app for a team playing *Killer*, the campus assassination game: everyone gets a target and a
+QG Killer is a private web app for a team playing *Killer*, the campus assassination game: everyone gets a target and a
 couple of "weapons", kills pass contracts along a hidden loop, and the last players standing win.
 
 Winning depends on rebuilding that loop from partial information. This app is the team's shared notebook for

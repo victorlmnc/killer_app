@@ -14,7 +14,8 @@
       + '<circle cx="20" cy="5" r="2.6" fill="currentColor" stroke="none"/></svg>';
     return el;
   }
-  function brand(tag, attrs) { return h(tag, Object.assign({ class: 'brand' }, attrs || {}), logo(tag === 'h1' ? 40 : 28), h('span', {}, 'Killer')); }
+  var APP_NAME = 'QG Killer';   // also the browser tab title, whatever the page
+  function brand(tag, attrs) { return h(tag, Object.assign({ class: 'brand' }, attrs || {}), logo(tag === 'h1' ? 40 : 28), h('span', {}, APP_NAME)); }
   function langSwitch() {
     return h('div', { class: 'lang', role: 'group', 'aria-label': t('Language') }, ['fr', 'en'].map(function (l) {
       return h('button', { type: 'button', class: K.i18n.lang === l ? 'is-on' : '', 'aria-pressed': String(K.i18n.lang === l), onclick: function () { if (K.i18n.lang !== l) K.setLang(l); } }, l.toUpperCase());
@@ -106,7 +107,7 @@
     if (!K.views[name] || allowed.indexOf(name) < 0) { name = allowed[0] || 'dashboard'; if (location.hash !== '#/' + name) { location.hash = '#/' + name; return; } }
     var view = K.views[name];
     shell.title.textContent = view.title;
-    document.title = view.title + ' · ' + (store.state.settings.game_name || 'Killer');
+    document.title = APP_NAME;
     if (refreshView && refreshView.destroy) refreshView.destroy();
     ui.clear(shell.main); shell.main.className = 'view view-' + name;
     refreshView = view.render(shell.main);
