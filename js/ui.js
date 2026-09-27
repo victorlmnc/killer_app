@@ -29,7 +29,34 @@
     return el;
   }
   ui.h = h;
-  ui.clear = function (el) { while (el.firstChild) el.removeChild(el.firstChild); return el; };
+  /* Views redraw by clearing and rebuilding their content, which makes the page jump to the top and drops focus.
+     Clearing anything inside the view pins the scroll position (and the focused control, found again by id or
+     aria-label) until the rebuild is done. Changing tab calls ui.releaseScroll so a new tab still opens at the top. */
+  var pin = null;
+  function holdScroll(el) {
+    var active = document.activeElement, focus = null;
+    if (active && active !== el && el.contains(active)) focus = { tag: active.tagName, id: active.id, label: active.getAttribute('aria-label') };
+    if (pin) { if (focus && !pin.focus) pin.focus = focus; return; }
+    var p = pin = { y: window.scrollY, focus: focus };
+    function restore() {
+      if (pin !== p) return;
+      var f = p.focus, again = null;
+      if (f && (f.id || f.label) && !document.querySelector('dialog[open]')) {
+        again = f.id ? document.getElementById(f.id) : document.querySelector('main.view ' + f.tag + '[aria-label="' + f.label.replace(/["\\]/g, '\\$&') + '"]');
+        if (again && again !== document.activeElement) again.focus({ preventScroll: true });
+        p.focus = null;
+      }
+      if (window.scrollY !== p.y) window.scrollTo(0, p.y);
+    }
+    Promise.resolve().then(restore);                                                                 // right after the rebuild
+    requestAnimationFrame(function () { restore(); if (pin === p) pin = null; });                   // after layout-dependent code (carousel)
+  }
+  ui.releaseScroll = function () { pin = null; };
+  ui.clear = function (el) {
+    if (el.firstChild && el.closest && el.closest('main.view')) holdScroll(el);
+    while (el.firstChild) el.removeChild(el.firstChild);
+    return el;
+  };
 
   ui.toast = function (text, kind) {
     // A modal <dialog> lives in the top layer: the toast has to move there to stay visible.

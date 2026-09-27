@@ -111,7 +111,7 @@
     ui.clear(shell.main); shell.main.className = 'view view-' + name;
     refreshView = view.render(shell.main);
     chrome();
-    window.scrollTo(0, 0);
+    ui.releaseScroll(); window.scrollTo(0, 0);
   }
 
   window.addEventListener('hashchange', route);
