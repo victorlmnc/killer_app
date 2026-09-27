@@ -59,7 +59,16 @@
           Array.prototype.forEach.call(dots.children, function (d, i) { d.classList.toggle('is-on', i === slide); d.setAttribute('aria-selected', String(i === slide)); });
           Array.prototype.forEach.call(track.children, function (c, i) { c.classList.toggle('is-current', i === slide); });
           prev.disabled = slide === 0; next.disabled = slide === slides.length - 1;
+          fit();
         }
+        /* The track takes the height of the current block, not the tallest one; it follows the block when its content changes. */
+        var ro = window.ResizeObserver ? new ResizeObserver(function () { fit(); }) : null;
+        function fit() {
+          if (!track.isConnected) { if (ro) ro.disconnect(); return; }   // replaced by a re-render
+          var cs = getComputedStyle(track), c = slides[slide].el;
+          track.style.height = (c.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) + 'px';
+        }
+        if (ro) slides.forEach(function (sl) { ro.observe(sl.el); });
         var ticking = false;
         track.addEventListener('scroll', function () {   // swiping: the slide nearest to the centre becomes current
           if (ticking) return; ticking = true;
