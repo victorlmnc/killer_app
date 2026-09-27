@@ -52,9 +52,12 @@
     var src = (links || []).map(function (l) { return l.source; }).filter(Boolean);
     return ui.confLabel(confidence || 'sur') + '. ' + (src.length ? t('Source: {s}', { s: src.join(' ; ') }) : t('No source given')) + (store.canEdit() ? '. ' + t('Click to edit.') : '');
   };
-  act.editEdge = function (links) {
+  /* pair = { hunterId, targetId, anchorId } (player sheet): one form for "hunter hunts target" even when dead players sit
+     between them; it applies to every link in between, and "delete" cuts the link touching anchorId (the sheet's player). */
+  act.editEdge = function (links, pair) {
     links = (links || []).filter(function (l) { return store.state.links.some(function (x) { return x.id === l.id; }); });
     if (!links.length || !store.canEdit()) return;
+    if (pair && links.length > 1) return editPair(links, pair);
     ui.dialog({
       title: t('Link reliability'),
       render: function (body, api) {
@@ -86,6 +89,39 @@
       }
     });
   };
+
+  function editPair(links, pair) {
+    var conf0 = links.reduce(function (c, l) { return L.weakest(c, l.confidence || 'sur'); }, 'sur');
+    var src0 = links.map(function (l) { return l.source; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).join(' ; ');
+    var dead = [];   // the dead players in between (links come in either order)
+    links.forEach(function (l) { [l.hunter_id, l.target_id].forEach(function (id) { if (id !== pair.hunterId && id !== pair.targetId && dead.indexOf(id) < 0) dead.push(id); }); });
+    dead = dead.map(name);
+    var cut = links.find(function (l) { return l.hunter_id === pair.anchorId || l.target_id === pair.anchorId; }) || links[0];
+    ui.dialog({
+      title: t('Link reliability'),
+      render: function (body, api) {
+        var conf = ui.select(CONF_OPTIONS(), conf0, { 'aria-label': t('Reliability') });
+        var src = h('input', { type: 'text', value: src0, placeholder: t('e.g. seen on their phone, told by Emma') });
+        body.appendChild(h('div', { class: 'edge-edit' },
+          h('p', { class: 'link-preview' }, h('strong', {}, name(pair.hunterId)), h('span', { class: 'thread-arrow' }, ' ' + t('hunts') + ' '), h('strong', {}, name(pair.targetId))),
+          h('p', { class: 'prose muted small' }, t('Dead players in between ({names}): the reliability applies to the whole trail.', { names: dead.join(', ') })),
+          h('div', { class: 'grid-2' }, ui.field(t('Reliability'), conf), ui.field(t('Where the information comes from'), src)),
+          h('button', { type: 'button', class: 'linkish danger small', onclick: function () {
+            ui.confirm({ title: t('Delete this link?'), text: t('{a} will no longer hunt {b}: the chain is cut there.', { a: name(cut.hunter_id), b: name(cut.target_id) }), action: t('Delete link'), danger: true })
+              .then(function (ok) { if (ok) { api.close(); store.remove('links', cut.id); store.log(t('Link removed: {a} no longer hunts {b}', { a: name(cut.hunter_id), b: name(cut.target_id) })); } });
+          } }, t('Delete this link'))));
+        body.appendChild(h('div', { class: 'actions' },
+          h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
+          h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+            var c = conf.value, sc = src.value.trim();
+            if (c === conf0 && sc === src0) return api.close();
+            links.forEach(function (l) { if (c !== (l.confidence || 'sur') || sc !== (l.source || '')) store.update('links', l.id, { confidence: c, source: sc }); });
+            store.log(t('Link updated: {a} hunts {b} ({c})', { a: name(pair.hunterId), b: name(pair.targetId), c: ui.confLabel(c).toLowerCase() }), linkDetails(pair.hunterId, pair.targetId, c, sc));
+            api.close();
+          } }, t('Save'))));
+      }
+    });
+  }
 
   /* ------------------------------------------------ drag and drop in the chain */
   act.applyMove = function (roundId, mode, seg, dest) {
@@ -357,7 +393,7 @@
         return h('div', { class: 'relation' }, h('span', { class: 'relation-label' }, label),
           h('div', { class: 'relation-pick' }, other ? ui.avatar(other, 'sm') : h('span', { class: 'avatar avatar-sm avatar-empty', 'aria-hidden': 'true' }, '?'), select),
           other ? h('div', { class: 'relation-meta' },
-            h('button', { type: 'button', class: 'tag tag-conf tag-' + res.confidence, title: act.edgeTitle(res.links, res.confidence), onclick: function () { act.editEdge(res.links); } }, ui.confLabel(res.confidence)),
+            h('button', { type: 'button', class: 'tag tag-conf tag-' + res.confidence, title: act.edgeTitle(res.links, res.confidence), onclick: function () { act.editEdge(res.links, dir === 'target' ? { hunterId: p.id, targetId: other.id, anchorId: p.id } : { hunterId: other.id, targetId: p.id, anchorId: p.id }); } }, ui.confLabel(res.confidence)),
             h('button', { type: 'button', class: 'linkish small', onclick: function () { api.close(); act.openPlayer(other.id, ctx); } }, t('Open sheet')))
             : res && res.via.length ? h('p', { class: 'muted small' }, t('Trail lost after {name} (dead).', { name: name(res.via[res.via.length - 1]) })) : null);
       }

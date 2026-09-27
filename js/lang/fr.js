@@ -436,6 +436,7 @@
   "Two weapons at most: one easy and one hard.": "Deux armes maximum : une facile et une difficile.",
   "unknown difficulty": "difficulté inconnue",
   "Unnamed game": "Partie sans nom",
+  "Dead players in between ({names}): the reliability applies to the whole trail.": "Joueurs morts entre les deux ({names}) : la fiabilité s'applique à toute la piste.",
   "View photo": "Voir la photo",
   "Show {name} on the map": "Montrer {name} sur la carte",
   "Show {n} earlier entries": "Voir les {n} infos précédentes",
