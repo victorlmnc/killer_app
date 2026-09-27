@@ -94,13 +94,39 @@
           var note = h('textarea', { rows: '3', value: (w && w.note) || '', placeholder: t('e.g. in the kitchen of the residence, Emma keeps one, buy at the market') });
           b.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Difficulty'), diff),
             h('label', { class: 'check' }, owned, t('We have it')), ui.field(t('Note'), note, t('Where to find it, who keeps it.'))));
+          if (w && store.state.weapons.length > 1) b.appendChild(h('p', { class: 'small' }, h('button', { type: 'button', class: 'linkish', onclick: function () { api.close(); merge(w); } }, t('Merge with another weapon…')),
+            h('span', { class: 'muted' }, ' ' + t('for a duplicate: the sheets that carry it are updated.'))));
           b.appendChild(h('div', { class: 'actions' },
             w ? h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () { store.remove('weapons', w.id); api.close(); } }, t('Delete')) : null,
             h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
             h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
               var row = { name: name.value.trim(), difficulty: diff.value, owned: owned.checked, note: note.value.trim() }; if (!row.name) return name.focus();
+              var twin = store.state.weapons.find(function (x) { return x !== w && L.norm(x.name) === L.norm(row.name); });
+              if (twin) return ui.toast(t('"{w}" is already in the catalogue.', { w: twin.name }), 'error');
               if (w) store.update('weapons', w.id, row); else store.insert('weapons', row); api.close();
             } }, w ? t('Save') : t('Add the weapon'))));
+        } });
+      }
+      /* Duplicate cleanup: "from" disappears into "into"; sheets and kills that name it are renamed, stock and notes kept. */
+      function merge(from) {
+        var others = store.state.weapons.filter(function (x) { return x !== from; }).sort(byName);
+        var close = L.matchWeapons(from.name, others)[0];
+        ui.dialog({ title: t('Merge "{w}"', { w: from.name }), render: function (b, api) {
+          var into = ui.select(others.map(function (x) { return { value: x.id, label: x.name + ' (' + (x.difficulty === 'difficile' ? t('hard') : t('easy')) + ')' }; }), close ? close.weapon.id : others[0].id);
+          b.appendChild(h('p', { class: 'prose' }, t('"{w}" is removed from the catalogue and replaced by the weapon chosen below on every sheet and kill that mentions it. Its stock and note are kept.', { w: from.name })));
+          b.appendChild(ui.field(t('Merge into'), into, close ? t('Closest spelling selected.') : null));
+          b.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
+            h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+              var target = store.state.weapons.find(function (x) { return x.id === into.value; }); if (!target) return;
+              var st = store.state, n = 0;
+              st.players.forEach(function (p) { var text = L.renameWeapon(p.weapons, from.name, target.name); if (text !== null) { n++; store.update('players', p.id, { weapons: text }); } });
+              st.kills.forEach(function (k) { if (k.weapon && L.norm(k.weapon) === L.norm(from.name)) store.update('kills', k.id, { weapon: target.name }); });
+              var notes = [target.note, from.note].filter(Boolean).filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' · ');
+              store.update('weapons', target.id, { owned: !!(target.owned || from.owned), note: notes });
+              store.remove('weapons', from.id);
+              store.log(t('Weapon "{a}" merged into "{b}"', { a: from.name, b: target.name }));
+              api.close(); ui.toast(t('Merged: {n} sheets updated.', { n: n }));
+            } }, t('Merge'))));
         } });
       }
       function paint() {

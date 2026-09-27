@@ -129,6 +129,18 @@ select:disabled { opacity: .6; }
 .tag-facile { color: var(--alive); background: rgba(122, 215, 164, .12); } .tag-difficile { color: var(--brass); background: rgba(224, 180, 90, .12); } .tag-none { color: var(--muted); }
 .tag-weapon { white-space: normal; } .tag-weapon-level { opacity: .75; font-size: .92em; } .tag-weapon-level::before { content: "· "; }
 .tag-sm { padding: .05rem .45rem; font-size: .72rem; gap: .2rem; } .row-sub.tags { gap: .25rem; margin-top: .15rem; }
+/* weapon picker (player sheet) */
+.wpick { display: grid; gap: .4rem; }
+.wpick-tags { display: flex; flex-wrap: wrap; gap: .3rem; } .wpick-tags:empty { display: none; }
+.wpick-item { display: inline-flex; align-items: center; }
+.wpick-item .tag { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.wpick-remove { appearance: none; border: 0; background: var(--pill-hi); color: var(--muted); cursor: pointer; border-radius: 0 99px 99px 0; padding: 0 .45rem; font-size: .9rem; line-height: 1.45rem; min-height: 1.45rem; }
+.wpick-remove:hover { color: var(--ink); background: var(--line-2); }
+.wpick-search { position: relative; }
+.wpick-list { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: .3rem; list-style: none; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--radius-sm); box-shadow: var(--shadow); display: grid; gap: .1rem; max-height: 16rem; overflow-y: auto; }
+.wpick-option { display: flex; align-items: center; gap: .5rem; padding: .4rem .5rem; border-radius: 6px; cursor: pointer; font-size: .88rem; }
+.wpick-option.is-active, .wpick-option:hover { background: var(--pill-hi); }
+.wpick-option.is-new { color: var(--muted); } .wpick-option.is-new.is-active { color: var(--ink); }
 .weapon-levels { display: grid; gap: .4rem; } .weapon-levels:empty { display: none; }
 .weapon-level { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; } .weapon-level select { width: auto; min-width: 9rem; }
 .tag-conf { cursor: pointer; background: none; min-height: 26px; border: 1px solid; }

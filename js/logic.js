@@ -212,6 +212,41 @@
   function weaponList(text) {
     return String(text || '').split(/[,;\n]/).map(function (s) { return s.trim(); }).filter(Boolean);
   }
+  function editDistance(a, b) {
+    var prev = [], cur, i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      cur = [i];
+      for (j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+  /* Catalogue weapons for what is being typed, best first: same name (accents, case, spaces and dashes ignored),
+     then names starting with it, containing it, and close spellings (typo, plural). exclude: names already picked. */
+  function matchWeapons(query, weapons, exclude) {
+    var q = norm(query), skip = new Set((exclude || []).map(norm));
+    if (!q) return [];
+    var single = function (s) { return s.replace(/[sx]$/, ''); }, out = [];
+    weapons.forEach(function (w) {
+      var n = norm(w.name), how = null;
+      if (!n || skip.has(n)) return;
+      if (n === q || single(n) === single(q)) how = 'exact';
+      else if (n.indexOf(q) === 0) how = 'prefix';
+      else if (n.indexOf(q) > 0) how = 'contains';
+      else if (q.length >= 4 && editDistance(single(n), single(q)) <= (q.length <= 6 ? 1 : 2)) how = 'close';
+      if (how) out.push({ weapon: w, how: how });
+    });
+    var rank = { exact: 0, prefix: 1, contains: 2, close: 3 };
+    return out.sort(function (a, b) { return rank[a.how] - rank[b.how] || a.weapon.name.localeCompare(b.weapon.name, 'fr'); });
+  }
+  /* A weapons text with one weapon renamed (merge): null when that weapon is not in it. Duplicates collapse. */
+  function renameWeapon(text, from, to) {
+    var list = weaponList(text), f = norm(from), seen = new Set(), hit = false;
+    var out = list.map(function (w) { if (norm(w) === f) { hit = true; return to; } return w; })
+      .filter(function (w) { var n = norm(w); if (seen.has(n)) return false; seen.add(n); return true; });
+    return hit ? out.join(', ') : null;
+  }
 
   function rankLabel(n) { return String(n); }
 
@@ -504,7 +539,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, killPoints: killPoints, weaponList: weaponList, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

@@ -139,6 +139,67 @@
     return h('span', { class: 'tag tag-weapon tag-' + (d || 'none') + (small ? ' tag-sm' : ''), title: name + ' (' + label + ')' },
       K.icon('weapons', 'ic-sm'), name, small ? h('span', { class: 'sr-only' }, ' (' + label + ')') : h('span', { class: 'tag-weapon-level' }, label));
   };
+  /* Weapons of a sheet as removable tags, plus a search that offers catalogue weapons first (same spelling everywhere,
+     no duplicates) and a new weapon only when nothing matches. .value is the usual comma-separated text. */
+  var pickers = 0;
+  ui.weaponPicker = function (text, onChange) {
+    var L = K.logic, names = L.weaponList(text), items = [], active = 0, id = 'wpick-' + (++pickers);
+    var tags = h('div', { class: 'wpick-tags' });
+    var input = h('input', { type: 'text', placeholder: t('Add a weapon…'), autocomplete: 'off', role: 'combobox', 'aria-expanded': 'false', 'aria-autocomplete': 'list', 'aria-controls': id, 'aria-label': t('Add a weapon'),
+      oninput: suggest, onkeydown: key, onblur: function () { setTimeout(close, 150); } });
+    var list = h('ul', { class: 'wpick-list', role: 'listbox', id: id, hidden: true });
+    function changed() { drawTags(); if (onChange) onChange(); }
+    function drawTags() {
+      ui.clear(tags);
+      names.forEach(function (n, i) {
+        tags.appendChild(h('span', { class: 'wpick-item' }, ui.weaponTag(n, true),
+          h('button', { type: 'button', class: 'wpick-remove', 'aria-label': t('Remove {w}', { w: n }), onclick: function () { names.splice(i, 1); changed(); input.focus(); } }, '×')));
+      });
+    }
+    function resolve(name) {   // typed text -> the catalogue spelling when it is the same weapon
+      var m = L.matchWeapons(name, K.store.state.weapons)[0];
+      return m && m.how === 'exact' ? m.weapon.name : name.trim();
+    }
+    function add(name) {
+      name = resolve(name);
+      if (name && !names.some(function (n) { return L.norm(n) === L.norm(name); })) { names.push(name); changed(); }
+      input.value = ''; close(); input.focus();
+    }
+    function close() { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); }
+    function suggest() {
+      var q = input.value.trim();
+      ui.clear(list); items = []; active = 0;
+      if (!q) return close();
+      var found = L.matchWeapons(q, K.store.state.weapons, names).slice(0, 7);
+      items = found.map(function (m) { return { name: m.weapon.name, how: m.how }; });
+      if (!found.some(function (m) { return m.how === 'exact'; }) && !names.some(function (n) { return L.norm(n) === L.norm(q); })) items.push({ name: q, isNew: true });
+      items.forEach(function (it, i) {
+        list.appendChild(h('li', { id: id + '-' + i, role: 'option', class: 'wpick-option' + (it.isNew ? ' is-new' : ''),
+          onmousedown: function (e) { e.preventDefault(); }, onclick: function () { add(it.name); } },
+          it.isNew ? [K.icon('plus', 'ic-sm'), t('Add "{w}" as a new weapon', { w: it.name })]
+            : [ui.weaponTag(it.name, true), it.how === 'close' ? h('span', { class: 'muted small' }, t('similar spelling')) : null]));
+      });
+      list.hidden = !items.length; input.setAttribute('aria-expanded', String(!!items.length));
+      mark();
+    }
+    function mark() {
+      Array.prototype.forEach.call(list.children, function (li, i) { li.classList.toggle('is-active', i === active); li.setAttribute('aria-selected', String(i === active)); });
+      if (items.length) input.setAttribute('aria-activedescendant', id + '-' + active);
+    }
+    function key(e) {
+      var open = !list.hidden && items.length;
+      if (e.key === 'ArrowDown' && open) { e.preventDefault(); active = (active + 1) % items.length; mark(); }
+      else if (e.key === 'ArrowUp' && open) { e.preventDefault(); active = (active - 1 + items.length) % items.length; mark(); }
+      else if ((e.key === 'Enter' || e.key === ',') && input.value.trim()) { e.preventDefault(); add(open ? items[active].name : input.value); }
+      else if (e.key === 'Escape' && open) { e.preventDefault(); e.stopPropagation(); close(); }
+      else if (e.key === 'Backspace' && !input.value && names.length) { names.pop(); changed(); }
+    }
+    drawTags();
+    return {
+      el: h('div', { class: 'wpick' }, tags, h('div', { class: 'wpick-search' }, input, list)), input: input,
+      get value() { var pending = input.value.trim() && resolve(input.value), all = names.slice(); if (pending && !all.some(function (n) { return L.norm(n) === L.norm(pending); })) all.push(pending); return all.join(', '); }
+    };
+  };
   ui.confLabel = function (c) { return { sur: t('Confirmed'), probable: t('Likely'), rumeur: t('Rumour') }[c] || t('Confirmed'); };
 
   /* Player picker with search. opts: { title, filter(p), extra: [{label, value}] } -> Promise(id | value | undefined) */

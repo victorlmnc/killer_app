@@ -197,6 +197,19 @@ t('stats: information gathered on every player outside the alliance', () => {
   assert.deepEqual(c.byYear, { '3A': { total: 4, address: 2 }, '?': { total: 1, address: 1 } });
   assert.deepEqual(c.housing, { residence: 1, normale: 2 });
 });
+t('weapons: catalogue suggestions and merge renaming', () => {
+  const W = ['Écocup', 'Banane', 'Bananier', 'Tronçonneuse', 'Lacet'].map(name => ({ name }));
+  const names = (q, ex) => L.matchWeapons(q, W, ex).map(m => m.weapon.name + ':' + m.how);
+  assert.deepEqual(names('eco-cup'), ['Écocup:exact']);
+  assert.deepEqual(names('ecocups'), ['Écocup:exact'], 'a plural is the same weapon');
+  assert.deepEqual(names('ban'), ['Banane:prefix', 'Bananier:prefix']);
+  assert.deepEqual(names('ban', ['banane']), ['Bananier:prefix'], 'weapons already picked are left out');
+  assert.deepEqual(names('tronconeuse'), ['Tronçonneuse:close'], 'a typo still finds the weapon');
+  assert.deepEqual(names('ecu'), [], 'short queries do not guess');
+  assert.equal(L.renameWeapon('Eco cup, Lacet', 'ecocup', 'Écocup'), 'Écocup, Lacet');
+  assert.equal(L.renameWeapon('Ecocup, Écocup', 'ecocup', 'Écocup'), 'Écocup', 'duplicates collapse');
+  assert.equal(L.renameWeapon('Lacet', 'ecocup', 'Écocup'), null);
+});
 t('backup: round trip, demo ids remapped, dangling references dropped', () => {
   let k = 0; const uuid = () => `00000000-0000-4000-8000-${String(++k).padStart(12, '0')}`;
   const s = base(); s.links = [link('r0', 'a', 'b', 'bogus'), link('r0', 'b', 'zz'), link('rX', 'c', 'd')];
