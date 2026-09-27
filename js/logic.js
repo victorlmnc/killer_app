@@ -378,6 +378,77 @@
   function csvCell(v) { v = v == null ? '' : String(v); return /[";\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
   function toCsv(header, rows) { return [header].concat(rows).map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n'); }
 
+  /* ---------- Full-game backup ----------
+     Every table with every column, so a backup restores into an empty database (or the demo) as is.
+     Defaults give the type; null = required reference; NOW = the import time when the backup has no date. */
+  var BACKUP_FORMAT = 'killer-backup', NOW = {};
+  var BACKUP_TABLES = {
+    players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, photo_path: '', created_at: NOW },
+    rounds: { name: '', position: 0, created_at: NOW },
+    links: { round_id: null, hunter_id: null, target_id: null, confidence: 'sur', source: '', created_at: NOW },
+    kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', points: 0, admin_reason: '', note: '', happened_at: NOW },
+    weapons: { name: '', difficulty: 'facile' },
+    events: { text: '', actor: '', details: {}, created_at: NOW },
+    spots: { name: '', note: '', address: '', lat: 0, lng: 0, created_at: NOW }
+  };
+  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1 };   // empty -> null rather than the default
+  var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile'], admin_reason: ['cheating', 'other'] };
+  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function cleanValue(key, v, def, now) {
+    if (v == null || v === '') return NULLABLE[key] || def === null ? null : def === NOW ? now : def;
+    if (ENUMS[key]) return ENUMS[key].indexOf(v) >= 0 ? v : (NULLABLE[key] ? null : def);
+    if (def === NOW) { var d = new Date(v); return isNaN(d) ? now : d.toISOString(); }
+    if (typeof def === 'number') { var n = Number(v); return isFinite(n) ? (key === 'lat' || key === 'lng' ? n : Math.round(n)) : (NULLABLE[key] ? null : def); }
+    if (typeof def === 'boolean') return v === true || v === 'true';
+    if (key === 'details') return typeof v === 'object' ? v : null;
+    return String(v);
+  }
+  /* Parses and checks a backup file. Ids that are not UUIDs (demo game) get new ones so the backup also fits the
+     database; references follow, dangling ones are dropped. -> { data, meta } or { error: message key } */
+  function readBackup(text, opts) {
+    opts = opts || {};
+    var raw, now = opts.now || new Date().toISOString(), newId = opts.uuid;
+    try { raw = typeof text === 'string' ? JSON.parse(text) : text; } catch (e) { return { error: 'This file is not valid JSON.' }; }
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.players) || (raw.format && raw.format !== BACKUP_FORMAT)) return { error: 'This file is not a Killer backup.' };
+    var ids = new Map(), data = {};
+    function mapId(id) {
+      id = String(id);
+      if (!ids.has(id)) ids.set(id, UUID_RE.test(id) || !newId ? id : newId());
+      return ids.get(id);
+    }
+    Object.keys(BACKUP_TABLES).forEach(function (table) {
+      var cols = BACKUP_TABLES[table], seen = new Set();
+      data[table] = (Array.isArray(raw[table]) ? raw[table] : []).filter(function (r) { return r && typeof r === 'object' && r.id != null && !seen.has(String(r.id)) && seen.add(String(r.id)); })
+        .map(function (r) {
+          var row = { id: mapId(r.id) };
+          Object.keys(cols).forEach(function (k) { row[k] = cleanValue(k, r[k], cols[k], now); });
+          return row;
+        });
+    });
+    // References: ids are remapped, then anything pointing nowhere is dropped (required) or cleared (optional).
+    var has = {}; ['players', 'rounds', 'kills'].forEach(function (tb) { has[tb] = new Set(data[tb].map(function (r) { return r.id; })); });
+    function ref(v, table) { if (v == null) return null; v = ids.get(String(v)) || String(v); return has[table].has(v) ? v : null; }
+    data.players = data.players.filter(function (p) { return p.name.trim(); }); has.players = new Set(data.players.map(function (p) { return p.id; }));
+    data.links = data.links.map(function (l) { l.round_id = ref(l.round_id, 'rounds'); l.hunter_id = ref(l.hunter_id, 'players'); l.target_id = ref(l.target_id, 'players'); return l; })
+      .filter(function (l) { return l.round_id && l.hunter_id && l.target_id && l.hunter_id !== l.target_id; });
+    var victims = new Set();
+    data.kills = data.kills.map(function (k) { k.round_id = ref(k.round_id, 'rounds'); k.killer_id = ref(k.killer_id, 'players'); k.victim_id = ref(k.victim_id, 'players'); return k; })
+      .filter(function (k) { return k.victim_id && !victims.has(k.victim_id) && victims.add(k.victim_id); });
+    data.events.forEach(function (e) {
+      if (!e.details) return;
+      Object.keys(e.details).forEach(function (k) { if (/_id$/.test(k) && e.details[k] != null && ids.has(String(e.details[k]))) e.details[k] = ids.get(String(e.details[k])); });
+    });
+    data.settings = raw.settings && typeof raw.settings === 'object' && !Array.isArray(raw.settings) ? raw.settings : {};
+    return { data: data, meta: { name: raw.game_name || data.settings.game_name || '', exported_at: raw.exported_at || null, photos: data.players.filter(function (p) { return p.photo_path && p.photo_path.indexOf('data:') === 0; }).length } };
+  }
+  function makeBackup(state, exportedAt) {
+    var out = { format: BACKUP_FORMAT, version: 1, exported_at: exportedAt || new Date().toISOString(), game_name: (state.settings && state.settings.game_name) || '' };
+    Object.keys(BACKUP_TABLES).forEach(function (t) { out[t] = state[t] || []; });
+    out.settings = state.settings || {};
+    return out;
+  }
+
   /* ---------- Map ---------- */
   // Housing types, most collective first: a shared marker takes the most collective type.
   var ADDRESS_TYPES = [
@@ -416,7 +487,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, killPoints: killPoints, weaponList: weaponList, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, killPoints: killPoints, weaponList: weaponList, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

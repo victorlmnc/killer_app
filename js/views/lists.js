@@ -20,11 +20,11 @@
 
       function exportMenu() {
         ui.dialog({ title: t('Export'), render: function (b, api) {
-          b.appendChild(h('p', { class: 'prose' }, t('The CSV opens in any spreadsheet. The report is a printable page: use "Save as PDF" in the print dialog. The JSON backup contains the whole game and can be kept for next year\'s statistics.')));
+          b.appendChild(h('p', { class: 'prose' }, t('The CSV opens in any spreadsheet. The report is a printable page: use "Save as PDF" in the print dialog. The saved game contains everything, photos included, and can be imported again from the settings.')));
           b.appendChild(h('div', { class: 'stack' },
             h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.exportCsv(); api.close(); } }, K.icon('download'), t('Players (CSV)')),
             h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.exportPdf(); api.close(); } }, K.icon('print'), t('Report (print / PDF)')),
-            h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.exportJson(); api.close(); } }, K.icon('download'), t('Full backup (JSON)'))));
+            h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.exportJson(); api.close(); } }, K.icon('download'), t('Save the game'))));
         } });
       }
       function refresh() {

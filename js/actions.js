@@ -548,11 +548,70 @@
     var rows = playerRows().map(function (r) { var p = r.p; return [p.name, r.dead ? t('Dead') : t('Alive'), p.year, p.dept, p.td, p.tp, p.option, p.lang_group, p.points || 0, p.weapons, r.target, r.targetConf, r.hunter, p.is_ally ? t('yes') : '', p.address, p.address ? t(L.ADDRESS_TYPES.find(function (x) { return x.id === L.addressType(p.address_type); }).label) : '', p.notes]; });
     ui.download('players-' + new Date().toISOString().slice(0, 10) + '.csv', '\ufeff' + L.toCsv(header, rows), 'text/csv;charset=utf-8');
   };
+  /* The whole game in one file: sheets, rounds, links, kills, the full log, catalogue, spots and settings. */
   act.exportJson = function () {
-    var copy = JSON.parse(JSON.stringify(store.state));
-    copy.players.forEach(function (p) { if (p.photo_path && p.photo_path.indexOf('data:') === 0) p.photo_path = null; });
-    delete copy.members;
-    ui.download('killer-backup-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(copy, null, 2), 'application/json');
+    ui.dialog({
+      title: t('Save the game'),
+      render: function (body, api) {
+        var withPhotos = h('input', { type: 'checkbox', checked: true }), out = h('p', { class: 'muted small' });
+        var go = h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+          go.disabled = true; out.textContent = t('Preparing the file…');
+          store.snapshot(withPhotos.checked, function (done, total) { out.textContent = t('Photos: {a} / {b}', { a: done, b: total }); }).then(function (backup) {
+            ui.download('killer-' + L.norm(backup.game_name || 'game').replace(/[^a-z0-9]+/g, '-') + '-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(backup), 'application/json');
+            api.close(); ui.toast(t('Game saved.'));
+          }).catch(function (e) { console.error(e); go.disabled = false; out.textContent = ''; ui.toast(e.message || String(e), 'error'); });
+        } }, K.icon('download'), t('Download'));
+        body.appendChild(h('p', { class: 'prose' }, t('One file with the whole game: sheets, rounds, links, kills, the full activity log, the weapon catalogue, spots and settings. It can be imported again here or into another database.')));
+        body.appendChild(h('label', { class: 'check' }, withPhotos, t('Include the photos (larger file)')));
+        body.appendChild(out);
+        body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')), go));
+      }
+    });
+  };
+
+  /* Replaces the current game with a file made by exportJson (older backups work too). */
+  act.restoreDialog = function () {
+    if (!store.isAdmin()) return;
+    ui.dialog({
+      title: t('Import a saved game'),
+      render: function (body, api) {
+        var backup = null, summary = h('div', {}), catalogue = h('input', { type: 'checkbox', checked: true });
+        var go = h('button', { type: 'button', class: 'btn btn-danger', disabled: true, onclick: run }, t('Replace the game'));
+        var file = h('input', { type: 'file', accept: '.json,application/json', onchange: function () {
+          var f = file.files[0]; backup = null; go.disabled = true; ui.clear(summary);
+          if (!f) return;
+          var r = new FileReader();
+          r.onload = function () {
+            var res = L.readBackup(String(r.result), { uuid: store.uuid });
+            if (res.error) return summary.appendChild(h('p', { class: 'prose danger' }, t(res.error)));
+            backup = res; go.disabled = false;
+            var d = res.data;
+            summary.appendChild(h('p', { class: 'prose' }, h('strong', {}, res.meta.name || t('Unnamed game')), res.meta.exported_at ? ' · ' + t('saved {when}', { when: ui.when(res.meta.exported_at) }) : ''));
+            summary.appendChild(h('p', { class: 'prose muted' }, t('{p} players ({ph} photos), {r} rounds, {l} links, {k} kills, {e} log entries, {w} weapons, {s} spots.',
+              { p: d.players.length, ph: res.meta.photos, r: d.rounds.length, l: d.links.length, k: d.kills.length, e: d.events.length, w: d.weapons.length, s: d.spots.length })));
+          };
+          r.readAsText(f);
+        } });
+        body.appendChild(h('p', { class: 'prose' }, t('Open a file made with "Save the game". The sheets, photos, chains, kills and log of the current game are replaced for the whole team.')));
+        body.appendChild(ui.field(t('File'), file));
+        body.appendChild(summary);
+        body.appendChild(h('label', { class: 'check' }, catalogue, t('Also replace the weapon catalogue, spots and settings')));
+        body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')), go));
+        function run() {
+          if (!backup) return;
+          ui.confirm({ title: t('Replace the current game?'), text: [t('The {n} current sheets, their photos, the chains, kills and log will be deleted for the whole team.', { n: store.state.players.length }), t('Save the current game first if you want to keep it.')], action: t('Replace the game'), danger: true })
+            .then(function (ok) {
+              if (!ok) return;
+              go.disabled = true; go.textContent = t('Importing…');
+              store.restore(backup.data, { catalogue: catalogue.checked }).then(function (done) {
+                if (!done) { go.disabled = false; go.textContent = t('Replace the game'); return; }
+                store.log(t('Saved game imported: {name}', { name: backup.meta.name || t('Unnamed game') }));
+                api.close(); ui.toast(t('Game imported.'));
+              });
+            });
+        }
+      }
+    });
   };
   /* Printable report in a new window: the browser's "Save as PDF" does the rest, no library needed. */
   act.exportPdf = function () {

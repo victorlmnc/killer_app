@@ -19,7 +19,10 @@ screen and in the profile dialog.
 - **Kills** – recording a kill credits the points, passes the victim's weapons to the killer, shows the killer's
   new target and completes the chain if the link was unknown.
 - **Players** – sheets with class, weapons, address, notes and photo; filters; import from a spreadsheet or CSV
-  with column mapping; export as CSV, printable report (PDF) or JSON backup.
+  with column mapping; export as CSV or printable report (PDF).
+- **Saved games** – the whole game in one JSON file (sheets, photos, rounds, links, kills, full log, catalogue,
+  spots, settings). *Settings → Import a saved game* replaces the current game with it, in the shared database
+  or in the demo.
 - **Map** – one marker per located address, grouped by residence, with housing-type layers, strategic spots and
   optional bus lines built from a GTFS feed.
 - **Dashboard** – how much of the loop is known, who hunts each member of the team, leaderboard, incomplete

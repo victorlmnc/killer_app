@@ -185,4 +185,23 @@ t('arrow: raw links behind a derived edge are reachable', () => {
   assert.deepEqual(e.links.map(l => l.id), ['r0:a>b', 'r0:b>c']); assert.equal(e.confidence, 'probable');
   assert.equal(L.fragments(s, 'r0', 'complete').fragments[0].edges[0].links.length, 1);
 });
+t('backup: round trip, demo ids remapped, dangling references dropped', () => {
+  let k = 0; const uuid = () => `00000000-0000-4000-8000-${String(++k).padStart(12, '0')}`;
+  const s = base(); s.links = [link('r0', 'a', 'b', 'bogus'), link('r0', 'b', 'zz'), link('rX', 'c', 'd')];
+  s.kills = [{ id: 'k1', round_id: 'r0', killer_id: 'gone', victim_id: 'b', points: '3' }, { id: 'k2', victim_id: 'b' }];
+  s.events = [{ id: 'e1', text: 'kill', details: { kill_id: 'k1', victim_id: 'b', victim: 'B' } }];
+  s.settings = { game_name: 'Test' };
+  const r = L.readBackup(JSON.stringify(L.makeBackup(s, '2026-01-01T00:00:00.000Z')), { uuid, now: 'NOW' });
+  assert.equal(r.meta.name, 'Test'); assert.equal(r.data.players.length, 6);
+  const id = old => r.data.players.find(p => p.name === old.toUpperCase()).id;
+  assert.ok(r.data.players.every(p => /^0{8}-/.test(p.id) && p.points === 0 && p.photo_path === null && p.created_at === 'NOW'));
+  assert.equal(r.data.links.length, 1, 'links to unknown players or rounds are dropped');
+  assert.deepEqual([r.data.links[0].hunter_id, r.data.links[0].target_id, r.data.links[0].confidence], [id('a'), id('b'), 'sur']);
+  assert.equal(r.data.kills.length, 1, 'one kill per victim');
+  assert.deepEqual([r.data.kills[0].killer_id, r.data.kills[0].victim_id, r.data.kills[0].points], [null, id('b'), 3]);
+  assert.equal(r.data.events[0].details.kill_id, r.data.kills[0].id); assert.equal(r.data.events[0].details.victim_id, id('b'));
+  const keep = '11111111-2222-4333-8444-555555555555';
+  assert.equal(L.readBackup({ players: [{ id: keep, name: 'X' }] }, { uuid }).data.players[0].id, keep, 'real UUIDs are kept');
+  assert.ok(L.readBackup('{').error); assert.ok(L.readBackup('{"format":"other","players":[]}').error); assert.ok(L.readBackup('[]').error);
+});
 console.log(`\n${n} tests OK`);

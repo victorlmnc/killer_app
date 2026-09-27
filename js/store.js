@@ -288,6 +288,81 @@
   };
   store.resetDemo = function () { return local.reset().then(store.emit); };
 
+  /* ----- full backup: the whole game in one file, photos embedded as data URLs ----- */
+  function blobToDataUrl(blob) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = rej; r.readAsDataURL(blob); }); }
+  function inBatches(items, size, fn) {
+    var i = 0;
+    function next() { var chunk = items.slice(i, i += size); return chunk.length ? Promise.all(chunk.map(fn)).then(next) : Promise.resolve(); }
+    return next();
+  }
+  function allEvents() {   // the app keeps only the latest 80 in memory
+    var out = [];
+    function page(from) {
+      return sb.from('events').select('*').order('created_at', { ascending: false }).range(from, from + 999).then(check)
+        .then(function (rows) { out = out.concat(rows || []); return rows && rows.length === 1000 ? page(from + 1000) : out; });
+    }
+    return page(0);
+  }
+  /* Resolves to the backup object. onProgress(done, total) while photos download. */
+  store.snapshot = function (withPhotos, onProgress) {
+    var copy = JSON.parse(JSON.stringify(store.state));
+    delete copy.members;
+    var events = store.mode === 'supabase' ? allEvents().then(function (rows) { copy.events = rows; }) : Promise.resolve();
+    return events.then(function () {
+      var photos = copy.players.filter(function (p) { return p.photo_path; });
+      if (!withPhotos) { photos.forEach(function (p) { p.photo_path = null; }); return; }
+      var done = 0;
+      return inBatches(photos.filter(function (p) { return p.photo_path.indexOf('data:') !== 0; }), 6, function (p) {
+        return sb.storage.from(PHOTO_BUCKET).download(p.photo_path).then(check).then(blobToDataUrl)
+          .then(function (url) { p.photo_path = url; }, function (e) { console.error(e); p.photo_path = null; })
+          .then(function () { if (onProgress) onProgress(++done, photos.length); });
+      });
+    }).then(function () { return K.logic.makeBackup(copy); });
+  };
+
+  /* Replaces the game with a backup read by K.logic.readBackup. opts.catalogue also replaces weapons, spots and settings.
+     Resolves to true when everything was written. */
+  store.restore = function (data, opts) {
+    if (!store.isAdmin()) return denied().then(function () { return false; });
+    opts = opts || {};
+    var GAME = ['players', 'rounds', 'links', 'kills', 'events'], tables = opts.catalogue ? GAME.concat(['weapons', 'spots']) : GAME;
+    if (store.mode !== 'supabase') {
+      tables.forEach(function (t) { store.state[t] = data[t]; });
+      store.state.players.forEach(function (p) { if (p.photo_path && p.photo_path.indexOf('data:') !== 0) p.photo_path = null; });   // storage paths mean nothing here
+      if (opts.catalogue) store.state.settings = withDefaults(data.settings);
+      local.persist(); store.emit();
+      return Promise.resolve(true);
+    }
+    var all = '00000000-0000-0000-0000-000000000000', stamp = Date.now();
+    // 1. photos go to storage first, so the rows are written with their final paths
+    var uploads = inBatches(data.players.filter(function (p) { return p.photo_path && p.photo_path.indexOf('data:') === 0; }), 4, function (p) {
+      return fetch(p.photo_path).then(function (r) { return r.blob(); }).then(function (blob) {
+        var gif = blob.type === 'image/gif', path = 'players/' + p.id + '-' + stamp + (gif ? '.gif' : '.jpg');
+        if (blob.size > GIF_MAX.supabase) throw new Error('photo too large');
+        return sb.storage.from(PHOTO_BUCKET).upload(path, blob, { contentType: gif ? 'image/gif' : 'image/jpeg', upsert: true }).then(check).then(function () { p.photo_path = path; });
+      }).catch(function (e) { console.error(e); p.photo_path = null; });
+    });
+    function wipe(t) { return sb.from(t).delete().neq('id', all).then(check); }
+    function fill(t) { return inBatches(chunks(data[t], 500), 1, function (rows) { return sb.from(t).insert(rows).then(check); }); }
+    return uploads.then(function () {
+      // 2. old photos that the backup does not reuse
+      var keep = new Set(data.players.map(function (p) { return p.photo_path; }));
+      var old = store.state.players.map(function (p) { return p.photo_path; }).filter(function (p) { return p && p.indexOf('data:') !== 0 && !keep.has(p); });
+      return old.length ? sb.storage.from(PHOTO_BUCKET).remove(old) : null;
+    })
+      // 3. empty the tables, references first; 4. refill, referenced tables first
+      .then(function () { return ['links', 'kills', 'events', 'players', 'rounds'].concat(opts.catalogue ? ['weapons', 'spots'] : []).reduce(function (p, t) { return p.then(function () { return wipe(t); }); }, Promise.resolve()); })
+      .then(function () { return ['rounds', 'players', 'links', 'kills', 'events'].concat(opts.catalogue ? ['weapons', 'spots'] : []).reduce(function (p, t) { return p.then(function () { return fill(t); }); }, Promise.resolve()); })
+      .then(function () {
+        if (!opts.catalogue) return;
+        var rows = Object.keys(data.settings).map(function (k) { return { key: k, value: data.settings[k] }; });
+        return rows.length ? sb.from('settings').upsert(rows).then(check) : null;
+      })
+      .then(function () { return true; }, function (err) { console.error(err); if (K.ui) K.ui.toast(K.t('Restore') + ' — ' + (err.message || err), 'error'); return false; })
+      .then(function (ok) { return supa.loadAll().then(store.emit).then(function () { return ok; }, function () { return ok; }); });
+  };
+  function chunks(rows, size) { var out = []; for (var i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size)); return out; }
+
   /* ----- auth ----- */
   store.auth = {
     signIn: function (email, password) { return sb.auth.signInWithPassword({ email: email, password: password }); },
