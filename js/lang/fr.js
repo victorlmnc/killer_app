@@ -452,6 +452,7 @@
   "Undo the kill": "Annuler le kill",
   "Undo this kill?": "Annuler ce kill ?",
   "Unknown": "Inconnu",
+  "Unknown address": "Adresse inconnue",
   "Unknown killer": "Killer inconnu",
   "Unknown target": "Cible inconnue",
   "Unknown year": "Année inconnue",

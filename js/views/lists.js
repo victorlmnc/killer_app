@@ -9,7 +9,7 @@
     title: t('Players'),
     render: function (root) {
       var view = { q: '', list: 'alive', year: '', dept: '', sort: 'name' };
-      var LISTS = [['all', t('All')], ['alive', t('Alive')], ['dead', t('Dead')], ['allies', t('Alliance')], ['notarget', t('Unknown target')], ['weapons', t('Known weapons')]];
+      var LISTS = [['all', t('All')], ['alive', t('Alive')], ['dead', t('Dead')], ['allies', t('Alliance')], ['notarget', t('Unknown target')], ['weapons', t('Known weapons')], ['noaddress', t('Unknown address')]];
       var search = h('input', { type: 'search', placeholder: t('Search a name, a note, an address'), 'aria-label': t('Search a player'), oninput: function (e) { view.q = e.target.value; paint(); } });
       var chips = h('div', { class: 'chips', role: 'group', 'aria-label': t('List') }), filters = h('div', { class: 'toolbar' }), count = h('p', { class: 'muted small' }), list = h('div', { class: 'list' });
       root.appendChild(h('div', { class: 'toolbar' }, search,
@@ -50,6 +50,7 @@
           if (view.list === 'allies' && !p.is_ally) return false;
           if (view.list === 'notarget' && (d || targets.get(p.id))) return false;
           if (view.list === 'weapons' && (d || !p.weapons)) return false;
+          if (view.list === 'noaddress' && (p.is_ally || L.hasAddress(p))) return false;   // same scope as the dashboard statistics
           if (view.year && p.year !== view.year) return false;
           if (view.dept && p.dept !== view.dept) return false;
           return !q || L.norm([p.name, p.notes, p.address, p.weapons, p.option].join(' ')).indexOf(q) >= 0;
