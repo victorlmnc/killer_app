@@ -220,6 +220,13 @@ select:disabled { opacity: .6; }
 .bar-track { height: 10px; display: block; }
 .bar-total { display: block; height: 100%; border-radius: 3px; background: color-mix(in srgb, var(--year) 22%, var(--surface)); overflow: hidden; } .bar-alive { display: block; height: 100%; background: var(--year); }
 .bar-value { display: block; height: 100%; background: var(--year); }
+/* information gathered (dashboard statistics) */
+.collected { display: grid; gap: .5rem; margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.collected h3 { margin: .4rem 0 0; font-family: var(--body); font-weight: 600; font-size: .9rem; color: var(--muted); }
+.stack-tight { display: grid; gap: .45rem; }
+.bar-wide { grid-template-columns: minmax(7.5rem, 11rem) 1fr auto; } .bar-wide .bar-label { font-weight: 500; }
+.bar-wide .bar-value { border-radius: 0 4px 4px 0; }
+@media (max-width: 640px) { .bar-wide { grid-template-columns: 1fr auto; } .bar-wide .bar-track { grid-column: 1 / -1; grid-row: 2; } }
 .event { appearance: none; border: 0; background: none; color: var(--ink); width: calc(100% + .8rem); margin-inline: -.4rem; text-align: left; cursor: pointer; display: grid; gap: .1rem; font-size: .9rem; padding: .45rem .4rem .45rem 1.35rem; border-top: 1px solid var(--line); position: relative; border-radius: var(--radius-sm); }
 .event:first-of-type { border-top: 0; } .event:hover { background: var(--surface-2); }
 .event::before { content: ""; position: absolute; left: .45rem; top: .95rem; width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }

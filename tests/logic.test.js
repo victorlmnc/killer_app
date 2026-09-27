@@ -185,6 +185,18 @@ t('arrow: raw links behind a derived edge are reachable', () => {
   assert.deepEqual(e.links.map(l => l.id), ['r0:a>b', 'r0:b>c']); assert.equal(e.confidence, 'probable');
   assert.equal(L.fragments(s, 'r0', 'complete').fragments[0].edges[0].links.length, 1);
 });
+t('stats: information gathered on every player outside the alliance', () => {
+  const s = base();
+  Object.assign(s.players[0], { address: '1 rue X', lat: 1, lng: 2, photo_path: 'p.jpg', weapons: 'Banane', address_type: 'residence' });
+  Object.assign(s.players[1], { address: '2 rue Y', year: '' });
+  Object.assign(s.players[2], { address: '3 rue Z', is_ally: true });
+  Object.assign(s.players[3], { address: '4 rue W' }); s.kills = [{ victim_id: 'd' }];
+  const c = L.stats(s).collected;
+  assert.equal(c.total, 5, 'allies are left out, the dead are counted');
+  assert.deepEqual([c.address, c.located, c.photo, c.cls, c.weapons], [3, 1, 1, 4, 1]);
+  assert.deepEqual(c.byYear, { '3A': { total: 4, address: 2 }, '?': { total: 1, address: 1 } });
+  assert.deepEqual(c.housing, { residence: 1, normale: 2 });
+});
 t('backup: round trip, demo ids remapped, dangling references dropped', () => {
   let k = 0; const uuid = () => `00000000-0000-4000-8000-${String(++k).padStart(12, '0')}`;
   const s = base(); s.links = [link('r0', 'a', 'b', 'bogus'), link('r0', 'b', 'zz'), link('rX', 'c', 'd')];

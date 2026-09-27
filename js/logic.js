@@ -279,11 +279,28 @@
       alive.forEach(function (p) { if (resolveTarget(state, round.id, p.id, maps, dead).id) known++; });
     }
     var attributed = state.kills.filter(function (k) { return !!k.killer_id || !!k.admin_reason; }).length;
+    // Information gathered on every player outside the alliance, dead or alive.
+    var targets = players.filter(function (p) { return !p.is_ally; });
+    function count(test) { return targets.filter(test).length; }
+    var collected = {
+      total: targets.length,
+      address: count(hasAddress), located: count(function (p) { return hasAddress(p) && hasCoords(p); }),
+      photo: count(function (p) { return !!p.photo_path; }), cls: count(function (p) { return !!p.year && !!p.td; }),
+      weapons: count(function (p) { return String(p.weapons || '').trim() !== ''; }),
+      byYear: {}, housing: {}
+    };
+    targets.forEach(function (p) {
+      var y = p.year || '?', b = collected.byYear[y] = collected.byYear[y] || { total: 0, address: 0 };
+      b.total++;
+      if (!hasAddress(p)) return;
+      b.address++;
+      var type = addressType(p.address_type); collected.housing[type] = (collected.housing[type] || 0) + 1;
+    });
     return {
       total: players.length, alive: alive.length, dead: players.length - alive.length,
       byYear: byYear, killsByYear: killsByYear, knownTargets: known,
       coverage: alive.length ? known / alive.length : 0,
-      kills: state.kills.length, attributed: attributed, unattributed: state.kills.length - attributed,
+      kills: state.kills.length, attributed: attributed, unattributed: state.kills.length - attributed, collected: collected,
       incomplete: players.filter(function (p) { return !dead.has(p.id) && !p.is_ally && (!p.year || !p.td || !p.photo_path || !p.address); })
     };
   }

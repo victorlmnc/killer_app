@@ -35,6 +35,31 @@
   }
   function personRow(p, right) { return h('button', { type: 'button', class: 'row row-btn', onclick: function () { K.actions.openPlayer(p.id); } }, ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, p.name), right); }
 
+  /* What we know about the players outside the alliance: one bar per piece of information, then addresses by year. */
+  function meter(label, value, total, color) {
+    var share = total ? value / total : 0;
+    return h('div', { class: 'bar bar-wide', style: { '--year': color } },
+      h('span', { class: 'bar-label' }, label),
+      h('span', { class: 'bar-track', 'aria-hidden': 'true' }, h('span', { class: 'bar-total' }, h('span', { class: 'bar-value', style: { width: (share * 100).toFixed(1) + '%' } }))),
+      h('span', { class: 'bar-num' }, value + ' / ' + total + ' · ' + ui.pct(share)));
+  }
+  function collectedBlock(c, years, yc) {
+    var box = h('div', { class: 'collected' }, h('h3', {}, t('Information gathered')));
+    if (!c.total) { box.appendChild(h('p', { class: 'empty' }, t('No player outside the alliance.'))); return box; }
+    box.appendChild(h('p', { class: 'muted small' }, t('On the {n} players outside the alliance, dead or alive.', { n: c.total })));
+    var ink = 'var(--ink)';
+    box.appendChild(h('div', { class: 'stack-tight' },
+      meter(t('Address'), c.address, c.total, ink), meter(t('Located on the map'), c.located, c.total, ink),
+      meter(t('Photo'), c.photo, c.total, ink), meter(t('Class (year and TD)'), c.cls, c.total, ink), meter(t('Weapons'), c.weapons, c.total, ink)));
+    box.appendChild(h('h3', {}, t('Addresses by year')));
+    box.appendChild(h('div', { class: 'stack-tight' }, years.filter(function (y) { return c.byYear[y]; }).map(function (y) {
+      return meter(y === '?' ? t('Not set') : y, c.byYear[y].address, c.byYear[y].total, yc(y));
+    })));
+    var housing = L.ADDRESS_TYPES.filter(function (x) { return c.housing[x.id]; }).map(function (x) { return t(x.plural) + ' ' + c.housing[x.id]; });
+    if (housing.length) box.appendChild(h('p', { class: 'muted small' }, t('Known addresses: {list}', { list: housing.join(' · ') })));
+    return box;
+  }
+
   K.views = K.views || {};
   K.views.dashboard = {
     title: t('Dashboard'),
@@ -177,6 +202,7 @@
           h('div', { class: 'pie-block' }, h('h3', {}, t('Kills by year')), K.charts.pie3d(killItems, { label: t('Kills by year') })),
           h('div', { class: 'pie-block' }, h('h3', {}, t('Registered players by year')), K.charts.pie3d(years.map(function (y) { return { label: y === '?' ? t('Not set') : y, value: stats.byYear[y].total, color: yc(y) }; }), { label: t('Registered players by year') }))),
           h('p', { class: 'muted small' }, t('Hover a slice for the detail; click a legend entry to hide it.')));
+        stat.appendChild(collectedBlock(stats.collected, years, yc));
         grid.appendChild(stat);
 
         var inc = h('section', { class: 'panel' }, h('h2', {}, t('Sheets to complete')));
