@@ -67,7 +67,7 @@
           list.appendChild(h('button', { type: 'button', class: 'row row-btn row-player' + (d ? ' is-dead' : ''), onclick: function () { K.actions.openPlayer(p.id); } },
             ui.avatar(p), h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name),
               h('span', { class: 'row-sub' }, d ? t('Dead') : tg ? t('Hunts {name}', { name: tg.name }) : t('Unknown target')),
-              p.weapons && !d ? h('span', { class: 'row-sub' }, p.weapons) : null),
+              p.weapons && !d ? h('span', { class: 'row-sub tags' }, L.weaponList(p.weapons).map(function (w) { return ui.weaponTag(w, true); })) : null),
             h('span', { class: 'row-side' }, h('span', { class: 'tags' }, p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, ui.yearTag(p)),
               h('span', { class: 'muted small' }, K.n(p.points || 0, '{n} pt', '{n} pts') + (n ? ', ' + K.n(n, '{n} kill', '{n} kills') : '')))));
         });
@@ -81,21 +81,24 @@
   K.views.weapons = {
     title: t('Weapons'),
     render: function (root) {
-      var q = '';
+      var q = '', stock = '';   // stock filter: '' all, 'owned', 'missing'
       var search = h('input', { type: 'search', placeholder: t('Search a weapon'), 'aria-label': t('Search a weapon'), oninput: function (e) { q = e.target.value; paint(); } });
       var body = h('div', { class: 'stack-lg' });
       root.appendChild(h('div', { class: 'toolbar' }, search, store.canEdit() ? h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { edit(null); } }, K.icon('plus'), t('Add a weapon')) : null));
       root.appendChild(body);
-      function edit(w) {
+      function edit(w, preset) {   // preset: name of a weapon seen in play but missing from the catalogue
         if (!store.canEdit()) return;
         ui.dialog({ title: w ? t('Edit weapon') : t('Add a weapon'), render: function (b, api) {
-          var name = h('input', { type: 'text', value: w ? w.name : '' }), diff = ui.select([{ value: 'facile', label: t('Easy (1 pt)') }, { value: 'difficile', label: t('Hard (3 pts)') }], w ? w.difficulty : 'facile');
-          b.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Difficulty'), diff)));
+          var name = h('input', { type: 'text', value: w ? w.name : preset || '' }), diff = ui.select([{ value: 'facile', label: t('Easy (1 pt)') }, { value: 'difficile', label: t('Hard (3 pts)') }], w ? w.difficulty : 'facile');
+          var owned = h('input', { type: 'checkbox', checked: !!(w && w.owned) });
+          var note = h('textarea', { rows: '3', value: (w && w.note) || '', placeholder: t('e.g. in the kitchen of the residence, Emma keeps one, buy at the market') });
+          b.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Difficulty'), diff),
+            h('label', { class: 'check' }, owned, t('We have it')), ui.field(t('Note'), note, t('Where to find it, who keeps it.'))));
           b.appendChild(h('div', { class: 'actions' },
             w ? h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () { store.remove('weapons', w.id); api.close(); } }, t('Delete')) : null,
             h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
             h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
-              var row = { name: name.value.trim(), difficulty: diff.value }; if (!row.name) return name.focus();
+              var row = { name: name.value.trim(), difficulty: diff.value, owned: owned.checked, note: note.value.trim() }; if (!row.name) return name.focus();
               if (w) store.update('weapons', w.id, row); else store.insert('weapons', row); api.close();
             } }, w ? t('Save') : t('Add the weapon'))));
         } });
@@ -108,25 +111,35 @@
             store.canEdit() ? h('div', { class: 'actions actions-start' }, h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { store.insertMany('weapons', K.seed.weapons.map(function (w) { return { name: w[0], difficulty: w[1] }; })); } }, t('Load the list'))) : null));
           return;
         }
-        var catalog = new Map(st.weapons.map(function (w) { return [L.norm(w.name), w.difficulty]; }));
+        var catalog = new Map(st.weapons.map(function (w) { return [L.norm(w.name), w]; }));
         var inPlay = [];
-        st.players.forEach(function (p) { if (!dead.has(p.id)) L.weaponList(p.weapons).forEach(function (w) { inPlay.push({ name: w, holder: p, difficulty: catalog.get(L.norm(w)) }); }); });
+        st.players.forEach(function (p) { if (!dead.has(p.id)) L.weaponList(p.weapons).forEach(function (w) { var c = catalog.get(L.norm(w)); inPlay.push({ name: w, holder: p, difficulty: c && c.difficulty, owned: !!(c && c.owned) }); }); });
         inPlay = inPlay.filter(function (w) { return !nq || L.norm(w.name).indexOf(nq) >= 0; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });
         var sec = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Currently in play'), h('small', { class: 'muted' }, ' ' + inPlay.length)), h('span', { class: 'muted small' }, t('From the weapons noted on living players\' sheets'))));
         if (!inPlay.length) sec.appendChild(h('p', { class: 'empty' }, nq ? t('No weapon in play matches this search.') : t('Note weapons on player sheets and they will show here with their holder.')));
         else sec.appendChild(h('div', { class: 'weapon-grid' }, inPlay.map(function (w) {
-          return h('button', { type: 'button', class: 'weapon-card weapon-' + (w.difficulty || 'unknown'), onclick: function () { K.actions.openPlayer(w.holder.id); } },
-            h('span', { class: 'weapon-name' }, w.name),
-            h('span', { class: 'weapon-meta' }, h('span', { class: 'tag tag-' + (w.difficulty || 'none') }, w.difficulty ? (w.difficulty === 'difficile' ? t('Hard, 3 pts') : t('Easy, 1 pt')) : t('Not in catalogue')),
-              h('span', { class: 'weapon-holder' }, ui.avatar(w.holder, 'sm'), h('span', {}, w.holder.name))));
+          return h('div', { class: 'weapon-card weapon-' + (w.difficulty || 'unknown') },
+            h('button', { type: 'button', class: 'weapon-open', onclick: function () { K.actions.openPlayer(w.holder.id); } },
+              h('span', { class: 'weapon-name' }, w.name, w.owned ? h('span', { class: 'tag tag-owned' }, t('We have it')) : null),
+              h('span', { class: 'weapon-meta' }, h('span', { class: 'tag tag-' + (w.difficulty || 'none') }, w.difficulty ? (w.difficulty === 'difficile' ? t('Hard, 3 pts') : t('Easy, 1 pt')) : t('Not in catalogue')),
+                h('span', { class: 'weapon-holder' }, ui.avatar(w.holder, 'sm'), h('span', {}, w.holder.name)))),
+            !w.difficulty && store.canEdit() ? h('button', { type: 'button', class: 'linkish small weapon-add', onclick: function () { edit(null, w.name); } }, K.icon('plus', 'ic-sm'), t('Add to the catalogue')) : null);
         })));
         body.appendChild(sec);
+        var ownedCount = st.weapons.filter(function (w) { return w.owned; }).length;
+        body.appendChild(h('div', { class: 'toolbar' },
+          h('div', { class: 'chips', role: 'group', 'aria-label': t('Stock') }, [['', t('All')], ['owned', t('We have it')], ['missing', t('To find')]].map(function (f) {
+            return h('button', { type: 'button', class: 'chip' + (stock === f[0] ? ' is-on' : ''), 'aria-pressed': String(stock === f[0]), onclick: function () { stock = f[0]; paint(); } }, f[1]);
+          })),
+          h('span', { class: 'muted small' }, t('{a} of {b} weapons gathered', { a: ownedCount, b: st.weapons.length }))));
         var cols = h('div', { class: 'cols-2' }), held = new Set(inPlay.map(function (w) { return L.norm(w.name); }));
         [['facile', t('Easy'), t('1 point')], ['difficile', t('Hard'), t('3 points')]].forEach(function (d) {
-          var items = st.weapons.filter(function (w) { return w.difficulty === d[0] && (!nq || L.norm(w.name).indexOf(nq) >= 0); }).sort(byName);
+          var items = st.weapons.filter(function (w) { return w.difficulty === d[0] && (!nq || L.norm(w.name).indexOf(nq) >= 0) && (!stock || !!w.owned === (stock === 'owned')); }).sort(byName);
           cols.appendChild(h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, d[1], h('small', { class: 'muted' }, ' ' + items.length)), h('span', { class: 'tag tag-' + d[0] }, d[2])),
             items.length ? h('div', { class: 'weapon-cloud' }, items.map(function (w) {
-              return h('button', { type: 'button', class: 'chip chip-' + d[0] + (held.has(L.norm(w.name)) ? ' is-held' : ''), title: held.has(L.norm(w.name)) ? t('Currently in play.') : null, onclick: function () { edit(w); } }, w.name);
+              var tip = [w.owned ? t('We have it.') : null, held.has(L.norm(w.name)) ? t('Currently in play.') : null, w.note || null].filter(Boolean).join(' ');
+              return h('button', { type: 'button', class: 'chip chip-' + d[0] + (held.has(L.norm(w.name)) ? ' is-held' : '') + (w.owned ? ' is-owned' : ''), title: tip || null, onclick: function () { edit(w); } },
+                w.owned ? h('span', { class: 'owned-mark' }, h('span', { 'aria-hidden': 'true' }, '✓ '), h('span', { class: 'sr-only' }, t('We have it') + ': ')) : null, w.name, w.note ? h('span', { class: 'chip-note' }, w.note) : null);
             })) : h('p', { class: 'empty' }, t('Nothing matches.'))));
         });
         body.appendChild(cols);

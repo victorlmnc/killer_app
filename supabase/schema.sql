@@ -114,8 +114,12 @@ alter table public.kills add column if not exists admin_reason text check (admin
 create table if not exists public.weapons (
   id         uuid primary key default gen_random_uuid(),
   name       text not null,
-  difficulty text not null default 'facile' check (difficulty in ('facile', 'difficile'))
+  difficulty text not null default 'facile' check (difficulty in ('facile', 'difficile')),
+  owned      boolean not null default false,   -- the alliance already has this object (gathered before the game)
+  note       text default ''                   -- where to find it, who keeps it
 );
+alter table public.weapons add column if not exists owned boolean not null default false;
+alter table public.weapons add column if not exists note text default '';
 
 -- Places rather than people (canteen, gym, bus stop). Kept from one year to the next.
 create table if not exists public.spots (

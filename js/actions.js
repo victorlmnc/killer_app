@@ -327,7 +327,6 @@
       var target = roundId && !dead ? L.resolveTarget(st, roundId, p.id) : null;
       var hunter = roundId && !dead ? L.resolveHunter(st, roundId, p.id) : null;
       var maps = roundId ? L.linkMaps(st, roundId) : null;
-      var catalog = new Map(st.weapons.map(function (w) { return [L.norm(w.name), w.difficulty]; }));
       api.setTitle(p.name);
       ui.clear(body);
 
@@ -392,10 +391,7 @@
       }
 
       var weapons = L.weaponList(p.weapons);
-      if (weapons.length) body.appendChild(h('div', { class: 'tags' }, weapons.map(function (w) {
-        var d = catalog.get(L.norm(w));
-        return h('span', { class: 'tag tag-weapon' }, K.icon('weapons', 'ic-sm'), w + (d ? ' (' + (d === 'difficile' ? t('hard') : t('easy')) + ')' : ''));
-      })));
+      if (weapons.length) body.appendChild(h('div', { class: 'tags' }, weapons.map(function (w) { return ui.weaponTag(w); })));
       if (p.address) body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, t('Address: ')), p.address,
         L.addressType(p.address_type) !== 'normale' ? ' (' + t(L.ADDRESS_TYPES.find(function (x) { return x.id === L.addressType(p.address_type); }).label).toLowerCase() + ')' : '',
         L.hasCoords(p) ? [' ', h('a', { class: 'linkish', href: '#/map?player=' + p.id, onclick: function () { api.close(); } }, t('Show on map'))] : null));
@@ -422,13 +418,41 @@
       title: playerId ? t('Edit sheet') : t('Add a player'),
       render: function (body, api) {
         var typeTouched = false;
+        /* Difficulty of each weapon typed in the sheet. It belongs to the catalogue: a weapon already there can be
+           switched easy/hard (for everyone), an unknown one can be added or left as "don't know". */
+        var levels = {}, levelsBox = h('div', { class: 'weapon-levels' });
+        function drawLevels() {
+          ui.clear(levelsBox);
+          var names = L.weaponList(f.weapons.value);
+          if (!names.length) return;
+          levelsBox.appendChild(h('span', { class: 'field-label' }, t('Difficulty of each weapon')));
+          names.forEach(function (w) {
+            var key = L.norm(w), known = ui.weaponDifficulty(w);
+            if (!(key in levels)) levels[key] = { value: known || '' };
+            var opts = [{ value: 'facile', label: t('Easy (1 pt)') }, { value: 'difficile', label: t('Hard (3 pts)') }];
+            if (!known) opts.push({ value: '', label: t("Don't know") });
+            var tag = h('span', { class: 'tag tag-weapon tag-' + (levels[key].value || 'none') }, K.icon('weapons', 'ic-sm'), w);
+            levelsBox.appendChild(h('div', { class: 'weapon-level' }, tag,
+              ui.select(opts, levels[key].value, { 'aria-label': t('Difficulty of {w}', { w: w }), onchange: function (e) { levels[key].value = e.target.value; tag.className = 'tag tag-weapon tag-' + (e.target.value || 'none'); } })));
+          });
+          if (names.some(function (w) { return ui.weaponDifficulty(w); })) levelsBox.appendChild(h('span', { class: 'field-hint' }, t('Weapons already in the catalogue: changing their difficulty changes it for everyone.')));
+        }
+        function saveLevels(names) {
+          var done = {};
+          names.forEach(function (w) {
+            var key = L.norm(w), lv = levels[key]; if (!lv || done[key]) return; done[key] = true;
+            var cat = store.state.weapons.find(function (x) { return L.norm(x.name) === key; });
+            if (cat && lv.value && lv.value !== cat.difficulty) store.update('weapons', cat.id, { difficulty: lv.value });
+            else if (!cat && lv.value) store.insert('weapons', { name: w, difficulty: lv.value });
+          });
+        }
         var f = {
           name: h('input', { type: 'text', value: p.name || '', placeholder: t('LASTNAME Firstname'), required: true }),
           year: ui.select([{ value: '', label: '—' }].concat((s.years || []).map(function (y) { return y.name; })), p.year || ''),
           dept: ui.select([{ value: '', label: '—' }].concat(s.depts || []), p.dept || ''),
           td: h('input', { type: 'text', value: p.td || '', placeholder: 'TD1' }), tp: h('input', { type: 'text', value: p.tp || '', placeholder: 'TP1' }),
           option: h('input', { type: 'text', value: p.option || '' }), lang_group: h('input', { type: 'text', value: p.lang_group || '', placeholder: 'G2' }),
-          weapons: h('input', { type: 'text', value: p.weapons || '', placeholder: t('Banana, Watering can') }),
+          weapons: h('input', { type: 'text', value: p.weapons || '', placeholder: t('Banana, Watering can'), oninput: function () { drawLevels(); } }),
           points: h('input', { type: 'number', min: '0', inputmode: 'numeric', value: String(p.points || 0) }),
           is_ally: h('input', { type: 'checkbox', checked: !!p.is_ally }),
           address: h('input', { type: 'text', value: p.address || '', placeholder: t('e.g. 12 High Street, Town'), autocomplete: 'off', oninput: function () { if (!typeTouched && !p.address) f.address_type.value = L.guessAddressType(f.address.value); } }),
@@ -441,9 +465,11 @@
           h('div', { class: 'grid-2' }, ui.field('TD', f.td), ui.field('TP', f.tp)),
           h('div', { class: 'grid-2' }, ui.field(t('Option'), f.option), ui.field(t('Language group'), f.lang_group)),
           h('div', { class: 'grid-2 grid-align-start' }, ui.field(t('Weapons in hand'), f.weapons, t('Comma-separated')), ui.field(t('Points'), f.points)),
+          levelsBox,
           h('label', { class: 'check' }, f.is_ally, t('Alliance member')),
           ui.field(t('Address'), f.address, t('Include the town so the marker lands in the right place.')),
           ui.field(t('Housing type'), f.address_type, t('Sets the icon and the layer on the map.')), ui.field(t('Notes'), f.notes)));
+        drawLevels();
         var actions = h('div', { class: 'actions' });
         if (playerId) actions.appendChild(h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
           ui.confirm({ title: t('Delete {name}?', { name: p.name }), text: t('Their sheet, photo, links and kill (if any) are erased.'), action: t('Delete'), danger: true })
@@ -455,6 +481,7 @@
           if (!row.name) { f.name.focus(); return ui.toast(t('A name is required.'), 'error'); }
           row.points = Math.max(0, parseInt(row.points, 10) || 0);
           row.is_ally = f.is_ally.checked;
+          saveLevels(L.weaponList(row.weapons));
           var moved = (p.address || '') !== row.address;
           if (moved) { row.lat = null; row.lng = null; }
           var saved = playerId ? store.update('players', playerId, row).then(function () { return playerId; })

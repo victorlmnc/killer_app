@@ -404,7 +404,7 @@
     rounds: { name: '', position: 0, created_at: NOW },
     links: { round_id: null, hunter_id: null, target_id: null, confidence: 'sur', source: '', created_at: NOW },
     kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', points: 0, admin_reason: '', note: '', happened_at: NOW },
-    weapons: { name: '', difficulty: 'facile' },
+    weapons: { name: '', difficulty: 'facile', owned: false, note: '' },
     events: { text: '', actor: '', details: {}, created_at: NOW },
     spots: { name: '', note: '', address: '', lat: 0, lng: 0, created_at: NOW }
   };

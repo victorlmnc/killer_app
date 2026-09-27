@@ -127,6 +127,10 @@ select:disabled { opacity: .6; }
 .tag-ally { background: var(--ink); color: var(--bg); }
 .tag-points, .price { color: var(--brass); background: rgba(224, 180, 90, .12); }
 .tag-facile { color: var(--alive); background: rgba(122, 215, 164, .12); } .tag-difficile { color: var(--brass); background: rgba(224, 180, 90, .12); } .tag-none { color: var(--muted); }
+.tag-weapon { white-space: normal; } .tag-weapon-level { opacity: .75; font-size: .92em; } .tag-weapon-level::before { content: "· "; }
+.tag-sm { padding: .05rem .45rem; font-size: .72rem; gap: .2rem; } .row-sub.tags { gap: .25rem; margin-top: .15rem; }
+.weapon-levels { display: grid; gap: .4rem; } .weapon-levels:empty { display: none; }
+.weapon-level { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; } .weapon-level select { width: auto; min-width: 9rem; }
 .tag-conf { cursor: pointer; background: none; min-height: 26px; border: 1px solid; }
 .tag-conf.tag-sur { color: var(--alive); } .tag-conf.tag-probable { color: var(--brass); border-style: dashed; } .tag-conf.tag-rumeur { color: var(--thread); border-style: dotted; }
 .tag-conf::after { content: "✎"; font-size: .72rem; opacity: .6; } .tag-conf:hover { background: var(--pill); }
@@ -271,14 +275,20 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; user-select:
 .cols-shop { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); gap: 1rem; align-items: start; }
 @media (max-width: 900px) { .cols-shop { grid-template-columns: 1fr; } }
 .weapon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: .6rem; }
-.weapon-card { appearance: none; text-align: left; cursor: pointer; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-left: 3px solid var(--line-2); border-radius: var(--radius-sm); padding: .6rem .75rem; display: grid; gap: .45rem; min-width: 0; }
+.weapon-card { appearance: none; text-align: left; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-left: 3px solid var(--line-2); border-radius: var(--radius-sm); padding: .6rem .75rem; display: grid; gap: .45rem; min-width: 0; }
 .weapon-card:hover { border-color: var(--line-2); } .weapon-facile { border-left-color: var(--alive); } .weapon-difficile { border-left-color: var(--brass); }
 .weapon-name { font: 500 1.05rem/1.2 var(--display); overflow-wrap: anywhere; }
+.weapon-open { appearance: none; background: none; border: 0; padding: 0; margin: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; display: grid; gap: .45rem; min-width: 0; }
+.weapon-add { justify-self: start; display: inline-flex; align-items: center; gap: .3rem; }
 .weapon-meta { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
 .weapon-holder { display: inline-flex; align-items: center; gap: .3rem; font-size: .8rem; color: var(--muted); min-width: 0; } .weapon-holder > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
 .weapon-cloud { display: flex; flex-wrap: wrap; gap: .4rem; }
 .weapon-cloud .chip { min-height: 32px; padding: .3rem .75rem; font-size: .86rem; white-space: normal; text-align: left; color: var(--ink); }
 .chip.is-held { border-color: var(--thread); }
+.chip.is-owned { background: color-mix(in srgb, var(--alive) 14%, transparent); } .owned-mark { color: var(--alive); font-weight: 600; }
+.chip-note { display: block; font-size: .76rem; color: var(--muted); margin-top: .1rem; overflow-wrap: anywhere; }
+.tag-owned { margin-left: .4rem; vertical-align: middle; font-family: var(--body); color: var(--alive); background: color-mix(in srgb, var(--alive) 14%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--alive) 45%, transparent); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .shop-item { border-top: 1px solid var(--line); padding-top: .8rem; display: grid; gap: .45rem; } .shop-item:first-of-type { border-top: 0; padding-top: 0; }
 .shop-head { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; } .shop-head h3 { margin: 0; font-size: 1.15rem; } .shop-head .linkish { margin-left: auto; font-size: .85rem; color: var(--muted); }
 details.desc summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: .35rem; color: var(--ink); font-size: .85rem; padding: .3rem .75rem .3rem .55rem; border: 1px solid var(--line); border-radius: 99px; width: max-content; }

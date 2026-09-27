@@ -129,6 +129,16 @@
     var text = [p.year, p.dept, p.td].filter(Boolean).join(' ');
     return text ? h('span', { class: 'tag tag-year', style: { '--year': ui.yearColor(p.year) } }, text) : null;
   };
+  /* A weapon as a tag coloured by its catalogue difficulty (green easy, brass hard, grey unknown); the text says it too. */
+  ui.weaponDifficulty = function (name) {
+    var n = K.logic.norm(name), w = K.store.state.weapons.find(function (x) { return K.logic.norm(x.name) === n; });
+    return w ? w.difficulty : null;
+  };
+  ui.weaponTag = function (name, small) {
+    var d = ui.weaponDifficulty(name), label = d === 'difficile' ? t('hard') : d === 'facile' ? t('easy') : t('unknown difficulty');
+    return h('span', { class: 'tag tag-weapon tag-' + (d || 'none') + (small ? ' tag-sm' : ''), title: name + ' (' + label + ')' },
+      K.icon('weapons', 'ic-sm'), name, small ? h('span', { class: 'sr-only' }, ' (' + label + ')') : h('span', { class: 'tag-weapon-level' }, label));
+  };
   ui.confLabel = function (c) { return { sur: t('Confirmed'), probable: t('Likely'), rumeur: t('Rumour') }[c] || t('Confirmed'); };
 
   /* Player picker with search. opts: { title, filter(p), extra: [{label, value}] } -> Promise(id | value | undefined) */
