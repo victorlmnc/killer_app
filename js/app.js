@@ -66,11 +66,12 @@
     var nav = h('nav', { class: 'nav', 'aria-label': t('Sections') });
     var title = h('h1', {}), game = h('span', { class: 'game-name' }), status = h('dl', { class: 'status' });
     var whoami = h('button', { type: 'button', class: 'whoami', title: t('My profile'), onclick: K.actions.profileDialog });
+    var meTop = h('button', { type: 'button', class: 'me-top', 'aria-label': t('My profile'), onclick: K.actions.profileDialog });   // phone: the tab bar has no room left
     var main = h('main', { class: 'view', id: 'view', tabindex: '-1' });
     app.appendChild(h('div', { class: 'shell' },
       h('aside', { class: 'side' }, brand('a', { href: '#/dashboard' }), game, nav, whoami, store.mode !== 'supabase' ? h('p', { class: 'demo-flag' }, t('Demo data, stored in this browser.')) : null),
-      h('div', { class: 'content' }, h('header', { class: 'topbar' }, title, status), main)));
-    shell = { nav: nav, title: title, main: main, game: game, status: status, whoami: whoami };
+      h('div', { class: 'content' }, h('header', { class: 'topbar' }, h('div', { class: 'topbar-title' }, title, meTop), status), main)));
+    shell = { nav: nav, title: title, main: main, game: game, status: status, whoami: whoami, meTop: meTop };
   }
   function tabs() { return store.allowedTabs(NAV.map(function (n) { return n[0]; })); }
 
@@ -91,6 +92,7 @@
     var me = store.me(), name = store.displayName();
     shell.whoami.appendChild(ui.avatar({ name: name, avatar_path: me && me.avatar_path }, 'sm'));
     shell.whoami.appendChild(h('span', {}, h('span', { class: 'whoami-name' }, name || t('Guest')), h('span', { class: 'whoami-sub' }, { admin: t('Administrator'), member: t('Alliance member'), observer: t('Observer') }[store.role] || '')));
+    ui.clear(shell.meTop).appendChild(ui.avatar({ name: name, avatar_path: me && me.avatar_path }, 'sm'));
     markActive();
   }
   function markActive() {
