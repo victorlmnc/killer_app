@@ -229,11 +229,13 @@
   function sameDay(a, b) { return K.logic.parisDay(a) === K.logic.parisDay(b); }
   function dayStart(date, plusDays) { var p = K.logic.parisParts(date); return K.logic.parisDate(p.y, p.m, p.d + (plusDays || 0), 0, 0); }
   function classText(e) { return [e.subject || e.summary, e.location].filter(Boolean).join(' · '); }
+  function shortDate(d) { return fmt(d, { weekday: 'short', day: 'numeric', month: 'short' }); }
   function whenNext(e, now) {
+    if (e.allDay) return t('from {date}', { date: shortDate(e.start) });   // holidays: a date, no time
     var tomorrow = dayStart(now, 1);
     if (sameDay(e.start, now)) return t('at {time}', { time: hm(e.start) });
     if (sameDay(e.start, tomorrow)) return t('tomorrow at {time}', { time: hm(e.start) });
-    return fmt(e.start, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(e.start);
+    return shortDate(e.start) + ' ' + hm(e.start);
   }
   /* Where a player is now and next, from every timetable layer that applies to them (year, department, TD, TP,
      language group, options). compact: short lines, and nothing at all when no layer applies. */
@@ -248,7 +250,7 @@
       if (!box.isConnected && box.parentNode) return;
       var events = res.events, now = new Date(), s = K.logic.scheduleAt(events, now);
       ui.clear(box);
-      if (s.current) box.appendChild(h('p', { class: 'sched-line sched-now' }, h('span', { class: 'sched-label' }, t('Now')), classText(s.current), h('span', { class: 'muted' }, ' · ' + t('until {time}', { time: hm(s.current.end) }))));
+      if (s.current) box.appendChild(h('p', { class: 'sched-line sched-now' }, h('span', { class: 'sched-label' }, t('Now')), classText(s.current), h('span', { class: 'muted' }, ' · ' + (s.current.allDay ? t('until {date}', { date: shortDate(new Date(s.current.end - 1)) }) : t('until {time}', { time: hm(s.current.end) })))));
       if (s.next && (!compact || !s.current)) box.appendChild(h('p', { class: 'sched-line' }, h('span', { class: 'sched-label' }, t('Next')), classText(s.next), h('span', { class: 'muted' }, ' · ' + whenNext(s.next, now))));
       if (!s.current && !s.next) box.appendChild(h('p', { class: 'muted small' }, t('No upcoming class in this timetable.')));
       if (res.failed) box.appendChild(h('p', { class: 'muted small' }, K.n(res.failed, '{n} timetable could not be loaded.', '{n} timetables could not be loaded.')));
@@ -273,12 +275,12 @@
         if (!week.length) body.appendChild(h('p', { class: 'empty' }, t('No class this week.')));
         for (var d = 0; d < 7; d++) {
           var day = dayStart(monday, d);
-          var list = week.filter(function (e) { return sameDay(e.start, day); });
+          var dayEnd = dayStart(day, 1), list = week.filter(function (e) { return e.allDay ? e.start < dayEnd && e.end > day : sameDay(e.start, day); });   // holidays: every day they cover
           if (!list.length) continue;
           body.appendChild(h('h3', { class: 'week-day' + (sameDay(day, now) ? ' is-today' : '') }, dayLabel(day)));
           body.appendChild(h('div', { class: 'stack-tight' }, list.map(function (e) {
             var live = e.start <= now && now < e.end;
-            return h('div', { class: 'week-class' + (live ? ' is-now' : '') }, h('span', { class: 'week-time' }, hm(e.start) + '–' + hm(e.end)),
+            return h('div', { class: 'week-class' + (live ? ' is-now' : '') }, h('span', { class: 'week-time' }, e.allDay ? t('All day') : hm(e.start) + '–' + hm(e.end)),
               h('span', {}, h('strong', {}, e.subject || e.summary || '—'), e.location ? h('span', { class: 'muted small' }, ' · ' + e.location) : null,
                 e.teacher ? h('span', { class: 'muted small week-desc' }, e.teacher) : e.subject ? null : e.description ? h('span', { class: 'muted small week-desc' }, e.description) : null));
           })));

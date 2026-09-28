@@ -529,6 +529,7 @@
   function calendarScope(name, knownDepts) {
     var parts = [], re = /<([^>]*)>([^<]*)/g, m;
     while ((m = re.exec(String(name || '')))) parts.push({ tag: m[1].trim(), text: m[2].trim() });
+    if (!parts.length && /\b\d+\s*A\b/i.test(String(name || ''))) parts.push({ tag: String(name).trim(), text: '' });   // "STI 3A": a whole promotion
     if (!parts.length) return null;
     var known = (knownDepts || []).filter(function (d) { return norm(d); });
     function deptOf(word) {   // the department a word names, written as in the game; null if it is not one
@@ -599,7 +600,7 @@
     lines.forEach(function (line) {
       if (line === 'BEGIN:VEVENT') { cur = {}; return; }
       if (line === 'END:VEVENT') {
-        if (cur && cur.start) events.push({ uid: cur.uid || '', start: cur.start, end: cur.end || cur.start, summary: cur.summary || '', location: cur.location || '', description: cur.description || '',
+        if (cur && cur.start) events.push({ uid: cur.uid || '', start: cur.start, end: cur.end || cur.start, allDay: !!cur.allDay, summary: cur.summary || '', location: cur.location || '', description: cur.description || '',
           subject: descField(cur.description, 'Matière'), teacher: descField(cur.description, 'Enseignant') });
         cur = null; return;
       }
@@ -608,7 +609,7 @@
       for (var i = 0; i < line.length; i++) { if (line[i] === '"') quoted = !quoted; else if (line[i] === ':' && !quoted) { colon = i; break; } }
       if (colon < 0) return;
       var name = line.slice(0, colon).split(';')[0].toUpperCase(), value = line.slice(colon + 1);
-      if (name === 'DTSTART') cur.start = icsDate(value);
+      if (name === 'DTSTART') { cur.start = icsDate(value); cur.allDay = /^\d{8}$/.test(value.trim()); }   // a date alone: holidays, bank holidays
       else if (name === 'DTEND') cur.end = icsDate(value);
       else if (name === 'SUMMARY') cur.summary = icsText(value);
       else if (name === 'LOCATION') cur.location = icsText(value);
@@ -622,7 +623,7 @@
     now = now || new Date();
     var current = null, next = null;
     (events || []).forEach(function (e) {
-      if (e.start <= now && now < e.end) { if (!current) current = e; }
+      if (e.start <= now && now < e.end) { if (!current || (current.allDay && !e.allDay)) current = e; }   // a class beats a holiday
       else if (e.start > now && (!next || e.start < next.start)) next = e;
     });
     return { current: current, next: next };

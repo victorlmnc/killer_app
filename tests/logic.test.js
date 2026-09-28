@@ -233,6 +233,11 @@ t('timetable layers: HyperPlanning names, who each layer applies to, merge', () 
   assert.deepEqual(L.calendarScope('<MRI 2A><TP>TP3'), { year: '2A', dept: 'MRI', field: 'tp', value: 'TP3' });
   assert.equal(L.calendarScope('<2A><Groupe>G1').field, 'lang_group');
   assert.equal(L.calendarScope('plain name'), null);
+  assert.deepEqual(L.calendarScope('STI 3A', ['MRI', 'STI']), { year: '3A', dept: 'STI', field: '', value: '' }, 'a promotion export has no brackets');
+  const hol = L.parseIcs('BEGIN:VEVENT\nDTSTART;VALUE=DATE:20261024\nDTEND;VALUE=DATE:20261102\nSUMMARY:Vacances\nEND:VEVENT\nBEGIN:VEVENT\nDTSTART:20261026T080000Z\nDTEND:20261026T100000Z\nSUMMARY:Rattrapage\nEND:VEVENT');
+  assert.equal(hol[0].allDay, true); assert.equal(hol[1].allDay, false);
+  assert.equal(L.scheduleAt(hol, new Date('2026-10-26T09:00:00Z')).current.summary, 'Rattrapage', 'a class beats a holiday');
+  assert.equal(L.scheduleAt(hol, new Date('2026-10-27T09:00:00Z')).current.summary, 'Vacances');
   // 2nd year (STPI): the promotion name holds no department; departments come from the game
   const D = ['MRI', 'STI'];
   assert.deepEqual(L.calendarScope('<STPI 2A><BOURGES - COURS>COURS 2A STPI BOURGES', D), { year: '2A', dept: '', field: '', value: '' });
