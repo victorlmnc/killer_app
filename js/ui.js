@@ -213,6 +213,75 @@
       get value() { var pending = input.value.trim() && resolve(input.value), all = names.slice(); if (pending && !all.some(function (n) { return L.norm(n) === L.norm(pending); })) all.push(pending); return all.join(', '); }
     };
   };
+  /* Special status of a sheet: dangerous (red) or priority target (brass). */
+  ui.STATUSES = [{ id: 'dangerous', label: 'Dangerous' }, { id: 'priority', label: 'Priority target' }];
+  ui.statusTag = function (p, small) {
+    var s = p && ui.STATUSES.find(function (x) { return x.id === p.status; });
+    return s ? h('span', { class: 'tag tag-status tag-' + s.id + (small ? ' tag-sm' : '') }, t(s.label)) : null;
+  };
+
+  /* ----- timetable ----- */
+  function hm(d) { return d.toLocaleTimeString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { hour: '2-digit', minute: '2-digit' }); }
+  function dayLabel(d) { var s = d.toLocaleDateString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+  function classText(e) { return [e.summary, e.location].filter(Boolean).join(' · '); }
+  function whenNext(e, now) {
+    var tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+    if (sameDay(e.start, now)) return t('at {time}', { time: hm(e.start) });
+    if (sameDay(e.start, tomorrow)) return t('tomorrow at {time}', { time: hm(e.start) });
+    return e.start.toLocaleDateString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(e.start);
+  }
+  /* Where a player is now and next, from their group's timetable. compact: one line, nothing when there is no link. */
+  ui.schedule = function (p, compact) {
+    var group = K.logic.calendarGroup(p), url = K.store.calendarUrl(p);
+    if (!url) {
+      if (compact) return null;
+      return h('p', { class: 'muted small sched' }, group ? t('No timetable linked for {group}.', { group: group }) : t('Year and TP (or TD) are needed for the timetable.'),
+        group && K.store.isAdmin() ? [' ', h('a', { class: 'linkish', href: '#/settings' }, t('Add the link'))] : null);
+    }
+    var box = h('div', { class: 'sched' + (compact ? ' sched-compact' : '') }, h('span', { class: 'muted small' }, t('Loading the timetable…')));
+    K.store.calendar(url).then(function (events) {
+      if (!box.isConnected && box.parentNode) return;
+      var now = new Date(), s = K.logic.scheduleAt(events, now);
+      ui.clear(box);
+      if (s.current) box.appendChild(h('p', { class: 'sched-line sched-now' }, h('span', { class: 'sched-label' }, t('Now')), classText(s.current), h('span', { class: 'muted' }, ' · ' + t('until {time}', { time: hm(s.current.end) }))));
+      if (s.next && (!compact || !s.current)) box.appendChild(h('p', { class: 'sched-line' }, h('span', { class: 'sched-label' }, t('Next')), classText(s.next), h('span', { class: 'muted' }, ' · ' + whenNext(s.next, now))));
+      if (!s.current && !s.next) box.appendChild(h('p', { class: 'muted small' }, t('No upcoming class in this timetable.')));
+      if (!compact) box.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { ui.weekDialog(p, events); } }, t('See the week')));
+    }).catch(function (err) {
+      ui.clear(box).appendChild(h('p', { class: 'muted small' }, t('Timetable unavailable: {err}', { err: err.message || err })));
+    });
+    return box;
+  };
+  ui.weekDialog = function (p, events) {
+    var monday = new Date(); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    ui.dialog({ title: t('Timetable of {name}', { name: p.name }), render: function (body) {
+      function draw() {
+        ui.clear(body);
+        var end = new Date(monday); end.setDate(monday.getDate() + 7);
+        var head = h('div', { class: 'row week-nav' },
+          h('button', { type: 'button', class: 'btn', 'aria-label': t('Previous week'), onclick: function () { monday.setDate(monday.getDate() - 7); draw(); } }, K.icon('chevron', 'ic-left')),
+          h('strong', { class: 'row-main' }, t('Week of {date}', { date: monday.toLocaleDateString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'long' }) })),
+          h('button', { type: 'button', class: 'btn', 'aria-label': t('Next week'), onclick: function () { monday.setDate(monday.getDate() + 7); draw(); } }, K.icon('chevron', 'ic-right')));
+        body.appendChild(head);
+        var week = events.filter(function (e) { return e.end > monday && e.start < end; }), now = new Date();
+        if (!week.length) body.appendChild(h('p', { class: 'empty' }, t('No class this week.')));
+        for (var d = 0; d < 7; d++) {
+          var day = new Date(monday); day.setDate(monday.getDate() + d);
+          var list = week.filter(function (e) { return sameDay(e.start, day); });
+          if (!list.length) continue;
+          body.appendChild(h('h3', { class: 'week-day' + (sameDay(day, now) ? ' is-today' : '') }, dayLabel(day)));
+          body.appendChild(h('div', { class: 'stack-tight' }, list.map(function (e) {
+            var live = e.start <= now && now < e.end;
+            return h('div', { class: 'week-class' + (live ? ' is-now' : '') }, h('span', { class: 'week-time' }, hm(e.start) + '–' + hm(e.end)),
+              h('span', {}, h('strong', {}, e.summary || '—'), e.location ? h('span', { class: 'muted small' }, ' · ' + e.location) : null,
+                e.description ? h('span', { class: 'muted small week-desc' }, e.description) : null));
+          })));
+        }
+      }
+      draw();
+    } });
+  };
   ui.confLabel = function (c) { return { sur: t('Confirmed'), probable: t('Likely'), rumeur: t('Rumour') }[c] || t('Confirmed'); };
 
   /* Player picker with search. opts: { title, filter(p), extra: [{label, value}] } -> Promise(id | value | undefined) */

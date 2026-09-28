@@ -67,6 +67,33 @@
     requestAnimationFrame(function () { pageTick = false; if (fitPage) fitPage(); });
   }, { passive: true });
 
+  /* The signed-in player's own situation, when their account is linked to a sheet (profile > My sheet). */
+  function meBar(st, round) {
+    var me = store.me(), p = store.myPlayer();
+    if (!p) {
+      if (!me || !store.canEdit()) return null;
+      return h('p', { class: 'me-hint muted small' }, t('Link your account to your player sheet to see your target and act quickly.'), ' ',
+        h('button', { type: 'button', class: 'linkish', onclick: K.actions.profileDialog }, t('Choose my sheet')));
+    }
+    var dead = L.deadSet(st).has(p.id), open = K.actions.openPlayer;
+    function who(label, res) {
+      var other = res && res.id && store.player(res.id);
+      return h('div', { class: 'me-rel' }, h('span', { class: 'relation-label' }, label),
+        other ? h('button', { type: 'button', class: 'row row-btn', onclick: function () { open(other.id); } }, ui.avatar(other, 'sm'),
+          h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, other.name), h('span', { class: 'row-sub' }, ui.confLabel(res.confidence))), ui.statusTag(other, true))
+          : h('p', { class: 'muted small' }, label === t('My target') ? t('Unknown target') : t('Unknown killer')));
+    }
+    var target = round && !dead ? L.resolveTarget(st, round.id, p.id) : null, hunter = round && !dead ? L.resolveHunter(st, round.id, p.id) : null;
+    var targetPlayer = target && target.id && store.player(target.id);
+    return h('section', { class: 'panel me' },
+      h('div', { class: 'me-head' }, ui.avatar(p), h('div', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name), h('span', { class: 'row-sub' }, dead ? t('Dead') : K.n(p.points || 0, '{n} pt', '{n} pts'))),
+        h('div', { class: 'me-actions' },
+          h('button', { type: 'button', class: 'btn', onclick: function () { open(p.id); } }, t('My sheet')),
+          !dead && store.canEdit() ? h('button', { type: 'button', class: 'btn btn-danger', onclick: function () { K.actions.killDialog(p.id); } }, t('I am dead')) : null)),
+      dead ? null : h('div', { class: 'me-rels' }, who(t('My target'), target), who(t('My hunter'), hunter)),
+      targetPlayer ? h('div', { class: 'me-sched' }, h('span', { class: 'relation-label' }, t('Where is my target')), ui.schedule(targetPlayer, true) || h('p', { class: 'muted small' }, t('No timetable linked for {group}.', { group: L.calendarGroup(targetPlayer) || '—' }))) : null);
+  }
+
   K.views = K.views || {};
   K.views.dashboard = {
     title: t('Dashboard'),
@@ -136,6 +163,8 @@
           return;
         }
         var official = Number(set.official_players) || 0, school = Number(set.school_total) || 0;
+        var mine = meBar(st, round);
+        if (mine) root.appendChild(mine);
         root.appendChild(h('section', { class: 'panel hero' },
           h('div', { class: 'hero-ring' }, round ? ring(st, round) : null,
             h('div', { class: 'hero-center' }, h('span', { class: 'hero-figure' }, ui.pct(stats.coverage)), h('span', { class: 'hero-caption' }, t('of the loop known')))),
@@ -164,6 +193,20 @@
               h('p', {}, h('span', { class: 'muted' }, t('Hunts') + ' '), target ? h('button', { type: 'button', class: 'linkish', onclick: function () { K.actions.openPlayer(target.id); } }, target.name) : t('unknown')))));
         });
         grid.appendChild(box);
+
+        /* Where the players we are after are right now: the alliance's targets, then priority targets. */
+        var wanted = [];
+        function want(p, why) { if (p && !dead.has(p.id) && !p.is_ally && !wanted.some(function (w) { return w.p.id === p.id; })) wanted.push({ p: p, why: why }); }
+        allies.forEach(function (a) { var tg = round && !dead.has(a.id) ? L.resolveTarget(st, round.id, a.id) : null; if (tg && tg.id) want(store.player(tg.id), t('target of {name}', { name: a.name })); });
+        st.players.filter(function (p) { return p.status === 'priority'; }).forEach(function (p) { want(p, t('Priority target')); });
+        var where = h('section', { class: 'panel' }, h('h2', {}, t('Where are the targets')));
+        if (!(set.calendars || []).length) where.appendChild(h('p', { class: 'empty' }, t('Add the timetable links in Settings to see where the targets are.')));
+        else if (!wanted.length) where.appendChild(h('p', { class: 'empty' }, t('No known target yet for the alliance.')));
+        else wanted.forEach(function (w) {
+          where.appendChild(h('div', { class: 'ally' }, personRow(w.p, ui.statusTag(w.p, true)),
+            h('div', { class: 'ally-lines' }, h('p', { class: 'muted small' }, w.why), ui.schedule(w.p, true) || h('p', { class: 'muted small' }, t('No timetable linked for {group}.', { group: L.calendarGroup(w.p) || '—' })))));
+        });
+        grid.appendChild(where);
 
         var board = L.leaderboard(st), visibleBoard = board.slice(0, 12), adminRow = board.find(function (r) { return r.admin; });
         if (adminRow && visibleBoard.indexOf(adminRow) < 0) visibleBoard.push(adminRow);

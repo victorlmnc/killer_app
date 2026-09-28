@@ -9,7 +9,7 @@
     title: t('Players'),
     render: function (root) {
       var view = { q: '', list: 'alive', year: '', dept: '', sort: 'name' };
-      var LISTS = [['all', t('All')], ['alive', t('Alive')], ['dead', t('Dead')], ['allies', t('Alliance')], ['notarget', t('Unknown target')], ['weapons', t('Known weapons')], ['noaddress', t('Unknown address')]];
+      var LISTS = [['all', t('All')], ['alive', t('Alive')], ['dead', t('Dead')], ['allies', t('Alliance')], ['notarget', t('Unknown target')], ['weapons', t('Known weapons')], ['noaddress', t('Unknown address')], ['flagged', t('Special status')]];
       var search = h('input', { type: 'search', placeholder: t('Search a name, a note, an address'), 'aria-label': t('Search a player'), oninput: function (e) { view.q = e.target.value; paint(); } });
       var chips = h('div', { class: 'chips', role: 'group', 'aria-label': t('List') }), filters = h('div', { class: 'toolbar' }), count = h('p', { class: 'muted small' }), list = h('div', { class: 'list' });
       root.appendChild(h('div', { class: 'toolbar' }, search,
@@ -50,6 +50,7 @@
           if (view.list === 'allies' && !p.is_ally) return false;
           if (view.list === 'notarget' && (d || targets.get(p.id))) return false;
           if (view.list === 'weapons' && (d || !p.weapons)) return false;
+          if (view.list === 'flagged' && !p.status) return false;
           if (view.list === 'noaddress' && (p.is_ally || L.hasAddress(p))) return false;   // same scope as the dashboard statistics
           if (view.year && p.year !== view.year) return false;
           if (view.dept && p.dept !== view.dept) return false;
@@ -68,7 +69,7 @@
             ui.avatar(p), h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name),
               h('span', { class: 'row-sub' }, d ? t('Dead') : tg ? t('Hunts {name}', { name: tg.name }) : t('Unknown target')),
               p.weapons && !d ? h('span', { class: 'row-sub tags' }, L.weaponList(p.weapons).map(function (w) { return ui.weaponTag(w, true); })) : null),
-            h('span', { class: 'row-side' }, h('span', { class: 'tags' }, p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, ui.yearTag(p)),
+            h('span', { class: 'row-side' }, h('span', { class: 'tags' }, p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, ui.statusTag(p, true), ui.yearTag(p)),
               h('span', { class: 'muted small' }, K.n(p.points || 0, '{n} pt', '{n} pts') + (n ? ', ' + K.n(n, '{n} kill', '{n} kills') : '')))));
         });
       }

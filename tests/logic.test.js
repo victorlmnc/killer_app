@@ -210,6 +210,25 @@ t('weapons: catalogue suggestions and merge renaming', () => {
   assert.equal(L.renameWeapon('Ecocup, Écocup', 'ecocup', 'Écocup'), 'Écocup', 'duplicates collapse');
   assert.equal(L.renameWeapon('Lacet', 'ecocup', 'Écocup'), null);
 });
+t('timetable: iCal parsing, class in progress and next one', () => {
+  const ics = ['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:b', 'DTSTART:20260929T060000Z', 'DTEND:20260929T080000Z', 'SUMMARY:Maths - CM',
+    'LOCATION:Amphi A\\, bât. 1', 'DESCRIPTION:Enseignant : X\\nGroupe : 2A TP5', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:a', 'DTSTART;TZID=Europe/Paris:20261005T100000', 'DTEND;TZID=Europe/Paris:20261005T120000',
+    'SUMMARY:Physique très longue', ' suite', 'END:VEVENT', 'BEGIN:VEVENT', 'SUMMARY:no date', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const ev = L.parseIcs(ics);
+  assert.equal(ev.length, 2, 'an event without a date is ignored');
+  const b = ev.find(e => e.uid === 'b'), a = ev.find(e => e.uid === 'a');
+  assert.equal(b.start.toISOString(), '2026-09-29T06:00:00.000Z');
+  assert.equal(b.location, 'Amphi A, bât. 1'); assert.equal(b.description, 'Enseignant : X\nGroupe : 2A TP5');
+  assert.equal(a.summary, 'Physique très longuesuite', 'folded lines are joined');
+  assert.equal(a.start.getHours(), 10, 'times without Z are local');
+  let s = L.scheduleAt(ev, new Date('2026-09-29T07:00:00Z'));
+  assert.equal(s.current.uid, 'b'); assert.equal(s.next.uid, 'a');
+  s = L.scheduleAt(ev, new Date('2026-10-10T00:00:00Z')); assert.equal(s.current, null); assert.equal(s.next, null);
+  assert.equal(L.calendarGroup({ year: '2A', tp: 'TP5', td: 'TD2' }), '2A TP5');
+  assert.equal(L.calendarGroup({ year: '5A', tp: '', td: 'TD1' }), '5A TD1', 'no TP: the TD');
+  assert.equal(L.calendarGroup({ year: '', tp: 'TP5' }), '');
+});
 t('backup: round trip, demo ids remapped, dangling references dropped', () => {
   let k = 0; const uuid = () => `00000000-0000-4000-8000-${String(++k).padStart(12, '0')}`;
   const s = base(); s.links = [link('r0', 'a', 'b', 'bogus'), link('r0', 'b', 'zz'), link('rX', 'c', 'd')];

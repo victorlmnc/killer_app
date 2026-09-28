@@ -80,6 +80,31 @@
         ls.appendChild(h('button', { type: 'button', class: 'btn', onclick: function () { store.setSetting('links', (s.links || []).concat([{ label: '', url: '' }])); } }, t('Add a link')));
         root.appendChild(ls);
 
+        /* Timetables: one iCal link per group found on the sheets (year + TP, or TD) */
+        var groups = {};
+        st.players.forEach(function (p) { var g = L.calendarGroup(p); if (g) { var k = L.norm(g); groups[k] = groups[k] || { label: g, n: 0 }; groups[k].n++; } });
+        var cal = s.calendars || [];
+        function linkOf(k) { var c = cal.find(function (x) { return L.norm(x.group) === k; }); return c ? c.url : ''; }
+        function saveLink(label, url) {
+          var k = L.norm(label), rest = cal.filter(function (x) { return L.norm(x.group) !== k; });
+          store.setSetting('calendars', url ? rest.concat([{ group: label, url: url }]) : rest);
+        }
+        var keys = Object.keys(groups).sort(function (a, b) { return groups[a].label.localeCompare(groups[b].label, 'fr', { numeric: true }); });
+        var linked = keys.filter(linkOf).length;
+        var tt = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Timetables')), h('span', { class: 'muted small' }, t('{a} of {b} groups linked', { a: linked, b: keys.length }))),
+          h('p', { class: 'prose muted small' }, t('On the school timetable (HyperPlanning), each student can export their own timetable as an iCal link: paste one link per group here. Every player of that group then shows their class in progress and the next one. The links go through the "edt" function of the database (see the README).')));
+        if (!keys.length) tt.appendChild(h('p', { class: 'empty' }, t('Fill in the year and TP (or TD) on the sheets to see the groups here.')));
+        keys.forEach(function (k) {
+          var g = groups[k], input = h('input', { type: 'url', value: linkOf(k), placeholder: 'https://edt.insa-cvl.fr/…ics', 'aria-label': t('iCal link of {group}', { group: g.label }), onchange: function (e) { saveLink(g.label, e.target.value.trim()); } });
+          tt.appendChild(h('div', { class: 'row row-wrap cal-row' },
+            h('span', { class: 'cal-group' }, h('strong', {}, g.label), h('span', { class: 'muted small' }, ' ' + K.n(g.n, '{n} player', '{n} players'))), input,
+            h('button', { type: 'button', class: 'btn', onclick: function () {
+              var url = input.value.trim(); if (!url) return input.focus();
+              store.calendar(url).then(function (ev) { ui.toast(t('{n} classes found in this timetable.', { n: ev.length })); }, function (err) { ui.toast(t('Timetable unavailable: {err}', { err: err.message || err }), 'error'); });
+            } }, t('Test'))));
+        });
+        root.appendChild(tt);
+
         /* Accounts */
         var me = String((store.user && store.user.email) || '').toLowerCase();
         var ROLE_LABEL = { admin: t('Administrator'), member: t('Alliance member'), observer: t('Observer') };

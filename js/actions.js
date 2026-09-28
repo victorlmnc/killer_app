@@ -425,7 +425,7 @@
         h('div', { class: 'profile-meta' },
           h('div', { class: 'tags' }, ui.yearTag(p), p.tp ? h('span', { class: 'tag' }, p.tp) : null, p.lang_group ? h('span', { class: 'tag' }, p.lang_group) : null, p.option ? h('span', { class: 'tag' }, p.option) : null),
           h('div', { class: 'tags' }, h('span', { class: 'tag ' + (dead ? 'tag-dead' : 'tag-alive') }, dead ? t('Dead') : t('Alive')),
-            p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, h('span', { class: 'tag tag-points' }, K.n(p.points || 0, '{n} pt', '{n} pts'))))));
+            p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, ui.statusTag(p), h('span', { class: 'tag tag-points' }, K.n(p.points || 0, '{n} pt', '{n} pts'))))));
 
       if (dead && kill) {
         body.appendChild(h('button', { type: 'button', class: 'death', title: act.killSummary(kill), onclick: function () { act.killDetails(kill.id); } }, h('span', { class: 'stamp', 'aria-hidden': 'true' }, t('Eliminated')),
@@ -433,6 +433,7 @@
       } else {
         body.appendChild(roundId ? h('div', { class: 'relations' }, person(t('Killer'), hunter, 'hunter'), person(t('Target'), target, 'target'))
           : h('p', { class: 'muted' }, t('Start the loop from the Chain tab to record targets and killers.')));
+        body.appendChild(h('div', { class: 'sched-block' }, h('span', { class: 'relation-label' }, t('Timetable') + (L.calendarGroup(p) ? ' · ' + L.calendarGroup(p) : '')), ui.schedule(p)));
       }
 
       var weapons = L.weaponList(p.weapons);
@@ -519,6 +520,7 @@
           weapons: ui.weaponPicker(p.weapons || '', { onChange: function () { drawLevels(); }, check: weaponRule, max: 2 }),
           points: h('input', { type: 'number', min: '0', inputmode: 'numeric', value: String(p.points || 0) }),
           is_ally: h('input', { type: 'checkbox', checked: !!p.is_ally }),
+          status: ui.select([{ value: '', label: t('None') }].concat(ui.STATUSES.map(function (x) { return { value: x.id, label: t(x.label) }; })), p.status || ''),
           address: h('input', { type: 'text', value: p.address || '', placeholder: t('e.g. 12 High Street, Town'), autocomplete: 'off', oninput: function () { if (!typeTouched && !p.address) f.address_type.value = L.guessAddressType(f.address.value); } }),
           address_type: ui.select(L.ADDRESS_TYPES.slice().reverse().map(function (x) { return { value: x.id, label: t(x.label) }; }), L.addressType(p.address_type), { onchange: function () { typeTouched = true; } }),
           notes: h('textarea', { rows: '3', value: p.notes || '', placeholder: t('Habits on campus, clubs, who could save them…') })
@@ -532,7 +534,7 @@
             h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Weapons in hand')), f.weapons.el, h('span', { class: 'field-hint' }, t('Pick from the catalogue; a new weapon is added only if it is not there.'))),   // not a <label>: it holds buttons
             ui.field(t('Points'), f.points)),
           levelsBox,
-          h('label', { class: 'check' }, f.is_ally, t('Alliance member')),
+          h('div', { class: 'grid-2 grid-align-start' }, h('label', { class: 'check' }, f.is_ally, t('Alliance member')), ui.field(t('Special status'), f.status)),
           ui.field(t('Address'), f.address, t('Include the town so the marker lands in the right place.')),
           ui.field(t('Housing type'), f.address_type, t('Sets the icon and the layer on the map.')), ui.field(t('Notes'), f.notes)));
         drawLevels();
@@ -746,6 +748,18 @@
   /* ---------------------------------------------------------- my profile */
   act.profileDialog = function () {
     var me = store.me();
+    /* Link this account to its player sheet (or unlink it). */
+    function mySheetButton() {
+      var btn = h('button', { type: 'button', class: 'btn btn-block' });
+      function label() { var mine = store.myPlayer(); ui.clear(btn); if (mine) { btn.appendChild(ui.avatar(mine, 'sm')); btn.appendChild(h('span', {}, mine.name)); } else btn.appendChild(h('span', {}, t('Choose my sheet'))); }
+      btn.addEventListener('click', function () {
+        var allies = store.state.players.some(function (x) { return x.is_ally; });
+        ui.pickPlayer({ title: t('Which sheet is yours?'), filter: allies ? function (x) { return x.is_ally; } : null, extra: store.myPlayer() ? [{ label: t('None (unlink)'), value: null }] : [] })
+          .then(function (v) { if (v === undefined) return; store.updateMember(me.email, { player_id: v }).then(label); label(); });
+      });
+      label();
+      return btn;
+    }
     ui.dialog({
       title: t('My profile'),
       render: function (body, api) {
@@ -760,6 +774,7 @@
           h('div', { class: 'profile-meta' }, h('strong', {}, store.displayName()), h('span', { class: 'muted small' }, email), h('span', { class: 'tag' }, roleLabel))));
         body.appendChild(h('div', { class: 'stack' },
           ui.field(t('Display name'), nameIn, t('Shown in the activity log next to what you record.')),
+          me && store.state.players.length ? h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('My sheet')), mySheetButton(), h('span', { class: 'field-hint' }, t('Your own player sheet: the dashboard then shows your target, your hunter and your quick actions.'))) : null,
           ui.field(t('Language'), lang),
           store.mode === 'supabase' ? ui.field(t('New password'), pass, t('Leave empty to keep the current one.')) : null));
         body.appendChild(h('div', { class: 'actions' },

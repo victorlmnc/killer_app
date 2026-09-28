@@ -116,6 +116,8 @@
   }
 
   window.addEventListener('hashchange', route);
+  // Installable app (home screen) and offline shell; only over https or on this machine.
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(function () { /* optional */ });
   store.on(function () { chrome(); if (refreshView) refreshView(); });
 
   ui.clear(app).appendChild(h('p', { class: 'boot' }, t('Loading…')));

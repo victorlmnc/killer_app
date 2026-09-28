@@ -15,9 +15,9 @@
 
       function bubble(p, dead, fi, pos) {
         var q = L.norm(view.q), match = q && L.norm(p.name).indexOf(q) >= 0;
-        var el = h('button', { type: 'button', class: 'bubble' + (dead ? ' is-dead' : '') + (p.is_ally ? ' is-ally' : '') + (match ? ' is-match' : '') + (q && !match ? ' is-dim' : ''),
+        var el = h('button', { type: 'button', class: 'bubble' + (dead ? ' is-dead' : '') + (p.is_ally ? ' is-ally' : '') + (p.status ? ' is-' + p.status : '') + (match ? ' is-match' : '') + (q && !match ? ' is-dim' : ''),
           'data-drag': store.canEdit() ? 'bubble' : null, 'data-id': p.id, 'data-frag': String(fi), 'data-pos': String(pos), title: store.canEdit() ? t('Drag to move, click to open the sheet') : null,
-          onclick: function () { if (!justDragged) K.actions.openPlayer(p.id, { roundId: view.roundId }); } }, ui.avatar(p, 'lg'), h('span', { class: 'bubble-name' }, p.name));
+          onclick: function () { if (!justDragged) K.actions.openPlayer(p.id, { roundId: view.roundId }); } }, ui.avatar(p, 'lg'), h('span', { class: 'bubble-name' }, p.name, ui.statusTag(p) ? h('span', { class: 'sr-only' }, ' (' + ui.statusTag(p).textContent + ')') : null));
         return el;
       }
       function arrow(edge) {

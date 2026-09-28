@@ -5,6 +5,8 @@
 *.json
 !package.json
 data/bus.js.bak
+# Someone else's site, kept locally for reference only
+kill3r_exemple_autre_site/
 __pycache__/
 node_modules/
 .DS_Store

@@ -12,9 +12,16 @@ create table if not exists public.accounts (
   created_at  timestamptz not null default now()
 );
 
-insert into public.accounts (email, role)
-values ('victor.lemanceau02@gmail.com', 'admin')          -- <<< CHANGE THIS
-on conflict (email) do update set role = 'admin';
+-- Put the administrator's email in place of the placeholder before running (do not commit it).
+-- Left as is, nothing is inserted: an existing database keeps its accounts.
+do $$
+declare admin_email text := 'admin@example.com';          -- <<< CHANGE THIS
+begin
+  if admin_email <> 'admin@example.com' then
+    insert into public.accounts (email, role) values (lower(admin_email), 'admin')
+    on conflict (email) do update set role = 'admin';
+  end if;
+end $$;
 
 -- Migration from the earlier "allowed_emails" table, if present.
 do $$ begin
@@ -63,6 +70,7 @@ create table if not exists public.players (
   weapons      text default '',
   points       integer not null default 0,
   is_ally      boolean not null default false,
+  status       text not null default '' check (status in ('', 'dangerous', 'priority')),   -- special status shown in colour
   photo_path   text,
   created_at   timestamptz not null default now()
 );
@@ -75,6 +83,7 @@ end $$;
 alter table public.players add column if not exists lat double precision;
 alter table public.players add column if not exists lng double precision;
 alter table public.players add column if not exists address_type text not null default 'normale';
+alter table public.players add column if not exists status text not null default '' check (status in ('', 'dangerous', 'priority'));
 
 create table if not exists public.rounds (
   id         uuid primary key default gen_random_uuid(),
@@ -112,6 +121,9 @@ create table if not exists public.kills (
 );
 alter table public.kills add column if not exists killer_weapons text;
 alter table public.kills add column if not exists admin_reason text check (admin_reason is null or admin_reason in ('cheating', 'other'));
+
+-- Each account can be linked to its own player sheet (quick actions: my target, my hunter, I am dead).
+alter table public.accounts add column if not exists player_id uuid references public.players(id) on delete set null;
 
 create table if not exists public.weapons (
   id         uuid primary key default gen_random_uuid(),

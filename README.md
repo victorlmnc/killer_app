@@ -18,8 +18,13 @@ screen and in the profile dialog.
   (confirmed / likely / rumour) and a source. Rerolls archive the previous loop.
 - **Kills** – recording a kill credits the points, passes the victim's weapons to the killer, shows the killer's
   new target and completes the chain if the link was unknown.
-- **Players** – sheets with class, weapons, address, notes and photo; filters; import from a spreadsheet or CSV
-  with column mapping; export as CSV or printable report (PDF).
+- **Players** – sheets with class, weapons, address, notes and photo; a special status (dangerous, priority
+  target) shown in colour on the chain and the lists; filters; import from a spreadsheet or CSV with column
+  mapping; export as CSV or printable report (PDF).
+- **Timetables** – the class each player is in right now and the next one, from their group's iCal link
+  (year + TP). The dashboard shows where the alliance's targets are.
+- **My sheet** – each account can be linked to its own player sheet: the dashboard then shows your target,
+  your hunter, where your target is, and an "I am dead" button.
 - **Saved games** – the whole game in one JSON file (sheets, photos, rounds, links, kills, full log, catalogue,
   spots, settings). *Settings → Import a saved game* replaces the current game with it, in the shared database
   or in the demo.
@@ -30,7 +35,7 @@ screen and in the profile dialog.
 - **Roles** – *administrator* (everything, including settings and accounts), *member* (edits the game) and
   *observer* (read-only, on the tabs the administrator picks). Everyone manages their own name, photo and
   password from the profile button.
-- Realtime sync between teammates, phone-first layout.
+- Realtime sync between teammates, phone-first layout, installable on the home screen (PWA).
 
 ## Try it
 
@@ -51,6 +56,23 @@ stored in the browser only.
    under *Settings → Accounts*. Load the weapon catalogue from the Weapons tab and import the player list.
 
 After updating the app, run `supabase/schema.sql` again: it migrates an existing database in place.
+
+### Timetables
+
+The school's HyperPlanning serves iCal files without CORS headers, so they go through a small edge function,
+`supabase/functions/edt`, which only answers members of the team and only fetches links from `edt.insa-cvl.fr`.
+
+1. Deploy it: *Edge Functions → Deploy a new function → Via editor*, name it `edt`, paste
+   `supabase/functions/edt/index.ts`, deploy. (Or with the CLI: `supabase functions deploy edt`.)
+2. Each teammate exports the iCal link of their own timetable from HyperPlanning and gives it to the
+   administrator, who pastes it under *Settings → Timetables*, next to the matching group. One link per group
+   is enough for every player of that group; *Test* checks it.
+
+To accept another host, set the `EDT_HOSTS` secret of the function (comma-separated).
+
+### Install on a phone
+
+Open the site, then *Share → Add to Home Screen* (iPhone, Safari) or *⋮ → Install app* (Android, Chrome).
 
 ## Bus lines
 
@@ -84,6 +106,8 @@ js/store.js             data layer: Supabase adapter, local demo adapter, roles,
 js/actions.js           links, kills, rounds, player sheet, import/export, profile
 js/views/               one file per tab
 supabase/schema.sql     tables, roles, row-level security, storage, realtime
+supabase/functions/edt  timetable relay (iCal links of the school's HyperPlanning)
+manifest.webmanifest, sw.js, icons/   installable app
 tools/                  GTFS converter, single-file demo bundler
 ```
 

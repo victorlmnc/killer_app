@@ -435,7 +435,7 @@
      Defaults give the type; null = required reference; NOW = the import time when the backup has no date. */
   var BACKUP_FORMAT = 'killer-backup', NOW = {};
   var BACKUP_TABLES = {
-    players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, photo_path: '', created_at: NOW },
+    players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, status: '', photo_path: '', created_at: NOW },
     rounds: { name: '', position: 0, created_at: NOW },
     links: { round_id: null, hunter_id: null, target_id: null, confidence: 'sur', source: '', created_at: NOW },
     kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', points: 0, admin_reason: '', note: '', killer_weapons: null, happened_at: NOW },
@@ -444,7 +444,7 @@
     spots: { name: '', note: '', address: '', lat: 0, lng: 0, created_at: NOW }
   };
   var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1 };   // empty -> null rather than the default
-  var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile'], admin_reason: ['cheating', 'other'] };
+  var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile'], admin_reason: ['cheating', 'other'], status: ['', 'dangerous', 'priority'] };
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   function cleanValue(key, v, def, now) {
@@ -502,6 +502,55 @@
     return out;
   }
 
+  /* ---------- Timetables (iCal) ----------
+     One link per group: the year plus the TP (or the TD when the year has no TP), written as on the timetable. */
+  function calendarGroup(p) {
+    var year = String((p && p.year) || '').trim(), group = String((p && (p.tp || p.td)) || '').trim();
+    return year && group ? year + ' ' + group : '';
+  }
+  function icsDate(value) {
+    var m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/.exec(String(value || '').trim());
+    if (!m) return null;
+    var y = +m[1], mo = +m[2] - 1, d = +m[3], hh = +(m[4] || 0), mi = +(m[5] || 0), ss = +(m[6] || 0);
+    // UTC when marked Z; otherwise the school's local time, which is the players' time too (Europe/Paris).
+    return m[7] ? new Date(Date.UTC(y, mo, d, hh, mi, ss)) : new Date(y, mo, d, hh, mi, ss);
+  }
+  function icsText(v) { return String(v || '').replace(/\\([nN,;\\])/g, function (x, c) { return c === 'n' || c === 'N' ? '\n' : c; }).trim(); }
+  /* VEVENTs of an iCal file, sorted by start: { uid, start, end, summary, location, description }. */
+  function parseIcs(text) {
+    var lines = String(text || '').replace(/\r\n|\r/g, '\n').replace(/\n[ \t]/g, '').split('\n');   // unfold continuation lines
+    var events = [], cur = null;
+    lines.forEach(function (line) {
+      if (line === 'BEGIN:VEVENT') { cur = {}; return; }
+      if (line === 'END:VEVENT') {
+        if (cur && cur.start) events.push({ uid: cur.uid || '', start: cur.start, end: cur.end || cur.start, summary: cur.summary || '', location: cur.location || '', description: cur.description || '' });
+        cur = null; return;
+      }
+      if (!cur) return;
+      var colon = -1, quoted = false;
+      for (var i = 0; i < line.length; i++) { if (line[i] === '"') quoted = !quoted; else if (line[i] === ':' && !quoted) { colon = i; break; } }
+      if (colon < 0) return;
+      var name = line.slice(0, colon).split(';')[0].toUpperCase(), value = line.slice(colon + 1);
+      if (name === 'DTSTART') cur.start = icsDate(value);
+      else if (name === 'DTEND') cur.end = icsDate(value);
+      else if (name === 'SUMMARY') cur.summary = icsText(value);
+      else if (name === 'LOCATION') cur.location = icsText(value);
+      else if (name === 'DESCRIPTION') cur.description = icsText(value);
+      else if (name === 'UID') cur.uid = value.trim();
+    });
+    return events.filter(function (e) { return e.start && !isNaN(e.start); }).sort(function (a, b) { return a.start - b.start; });
+  }
+  /* What a player is doing at a given moment: the class in progress and the next one. */
+  function scheduleAt(events, now) {
+    now = now || new Date();
+    var current = null, next = null;
+    (events || []).forEach(function (e) {
+      if (e.start <= now && now < e.end) { if (!current) current = e; }
+      else if (e.start > now && (!next || e.start < next.start)) next = e;
+    });
+    return { current: current, next: next };
+  }
+
   /* ---------- Map ---------- */
   // Housing types, most collective first: a shared marker takes the most collective type.
   var ADDRESS_TYPES = [
@@ -540,7 +589,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, calendarGroup: calendarGroup, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

@@ -170,6 +170,31 @@
     return guard(sb.from('events').delete().neq('id', '00000000-0000-0000-0000-000000000000').then(check), K.t('Clear log'));
   };
   store.player = function (id) { return store.state.players.find(function (p) { return p.id === id; }) || null; };
+  /* The player sheet linked to the signed-in account, if any. */
+  store.myPlayer = function () { var me = store.me(); return me && me.player_id ? store.player(me.player_id) : null; };
+
+  /* ----- timetables: iCal links per group (settings.calendars), fetched through the "edt" edge function ----- */
+  var calendars = new Map(), CALENDAR_TTL = 30 * 6e4;
+  store.calendarUrl = function (p) {
+    var group = K.logic.norm(K.logic.calendarGroup(p));
+    var hit = group && (store.state.settings.calendars || []).find(function (c) { return K.logic.norm(c.group) === group && c.url; });
+    return hit ? hit.url : null;
+  };
+  /* Resolves to the events of that link (cached 30 min, shared by every player of the group). */
+  store.calendar = function (url) {
+    var hit = calendars.get(url);
+    if (hit && Date.now() - hit.at < CALENDAR_TTL) return hit.promise;
+    var job = store.mode === 'supabase'
+      ? sb.functions.invoke('edt', { body: { url: url } }).then(function (res) {
+          if (res.error) return (res.error.context && res.error.context.text ? res.error.context.text() : Promise.resolve(res.error.message)).then(function (m) { throw new Error(m); });
+          return res.data;
+        })
+      : fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });   // demo: works only if the server allows it
+    var promise = job.then(function (text) { return K.logic.parseIcs(typeof text === 'string' ? text : ''); });
+    promise.catch(function () { calendars.delete(url); });   // failures are retried next time
+    calendars.set(url, { at: Date.now(), promise: promise });
+    return promise;
+  };
 
   /* ----- accounts (email allow-list with roles) ----- */
   function memberJob(promise, what) { if (store.mode !== 'supabase') return local.member(); return guard(promise.then(check), what); }
@@ -182,7 +207,7 @@
   store.updateMember = function (email, patch) {
     var mine = store.me() && store.me().email === email;
     if (!store.isAdmin() && !mine) return denied();
-    if (!store.isAdmin()) patch = { name: patch.name, avatar_path: patch.avatar_path }; // only the admin touches roles and tabs
+    if (!store.isAdmin()) patch = { name: patch.name, avatar_path: patch.avatar_path, player_id: patch.player_id }; // only the admin touches roles and tabs
     Object.keys(patch).forEach(function (k) { if (patch[k] === undefined) delete patch[k]; });
     var m = store.state.members.find(function (x) { return x.email === email; });
     if (m) Object.assign(m, patch);
