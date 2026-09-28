@@ -575,6 +575,7 @@
   "Who killed {name}?": "Qui a tué {name} ?",
   "Whole year": "Toute la promo",
   "Why it matters: hours, who goes there…": "Pourquoi c'est stratégique : horaires, qui y passe…",
+  "With a timetable": "Emploi du temps",
   "With the rest": "Avec la suite",
   "Without a timetable: {list}": "Sans emploi du temps : {list}",
   "Witnessed +4": "Organisateur +4",
