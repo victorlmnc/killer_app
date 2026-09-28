@@ -69,6 +69,7 @@
   "Also replace the weapon catalogue, spots and settings": "Remplacer aussi le catalogue d'armes, les lieux et les réglages",
   "applies to {n} player": "s'applique à {n} joueur",
   "applies to {n} players": "s'applique à {n} joueurs",
+  "As on the timetable. Several groups: separate them with commas (e.g. TD 2, TD 1 MRI).": "Comme sur l’emploi du temps. Plusieurs groupes : sépare-les par des virgules (ex. TD 2, TD 1 MRI).",
   "at {time}": "à {time}",
   "Choose my sheet": "Choisir ma fiche",
   "Choose ranking": "Choisir un classement",

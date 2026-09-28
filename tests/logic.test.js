@@ -233,6 +233,23 @@ t('timetable layers: HyperPlanning names, who each layer applies to, merge', () 
   assert.deepEqual(L.calendarScope('<MRI 2A><TP>TP3'), { year: '2A', dept: 'MRI', field: 'tp', value: 'TP3' });
   assert.equal(L.calendarScope('<2A><Groupe>G1').field, 'lang_group');
   assert.equal(L.calendarScope('plain name'), null);
+  // 2nd year (STPI): the promotion name holds no department; departments come from the game
+  const D = ['MRI', 'STI'];
+  assert.deepEqual(L.calendarScope('<STPI 2A><BOURGES - COURS>COURS 2A STPI BOURGES', D), { year: '2A', dept: '', field: '', value: '' });
+  assert.deepEqual(L.calendarScope('<COURS 2A STPI BOURGES>', D), { year: '2A', dept: '', field: '', value: '' });
+  assert.deepEqual(L.calendarScope('<STPI 2A><BOURGES - P.O>MRI', D), { year: '2A', dept: 'MRI', field: '', value: '' });
+  assert.deepEqual(L.calendarScope('<STPI 2A><BOURGES - P.O TD>TD 1 MRI', D), { year: '2A', dept: 'MRI', field: 'td', value: 'TD 1 MRI' });
+  assert.deepEqual(L.calendarScope('<STPI 2A><BOURGES - P.O TP>TP STI 3', D), { year: '2A', dept: 'STI', field: 'tp', value: 'TP STI 3' });
+  assert.deepEqual(L.calendarScope('<STPI 2A><BOURGES - TD>TD 1', D), { year: '2A', dept: '', field: 'td', value: 'TD 1' });
+  assert.deepEqual(L.calendarScope('<STPI 2A><BOURGES - LV>Espagnol débutant G1', D), { year: '2A', dept: '', field: 'lang_group', value: 'Espagnol débutant G1' });
+  assert.deepEqual(L.calendarScope('<STPI 2A><BOURGES - P.O TD>TD 1 MRI'), { year: '2A', dept: 'MRI', field: 'td', value: 'TD 1 MRI' }, 'real name, even without known departments');
+  assert.deepEqual(L.calendarScope('<STI 3A><TD>TD1', D), { year: '3A', dept: 'STI', field: 'td', value: 'TD1' });
+  // group names: same group whatever the spaces, the order of the words or leading zeros
+  assert.equal(L.groupKey('TD 1 MRI'), L.groupKey('MRI td01')); assert.notEqual(L.groupKey('TD 1'), L.groupKey('TD 1 MRI'));
+  const mri = { year: '2A', dept: 'MRI', td: 'TD 2, TD1 MRI', tp: 'TP5, TP MRI 1', lang_group: 'G3' };
+  const layers = [{ url: 'po', year: '2A', dept: 'MRI' }, { url: 'potd', year: '2A', dept: 'MRI', field: 'td', value: 'TD 1 MRI' }, { url: 'td1', year: '2A', field: 'td', value: 'TD 1' },
+    { url: 'td2', year: '2A', field: 'td', value: 'TD 2' }, { url: 'potp', year: '2A', dept: 'MRI', field: 'tp', value: 'TP MRI 1' }, { url: 'sti', year: '2A', dept: 'STI' }];
+  assert.deepEqual(L.calendarsFor(mri, layers).map(c => c.url), ['po', 'potd', 'td2', 'potp'], 'MRI TD 1 is not the general TD 1');
   assert.equal(L.calendarLabel('<STI 3A><TD>TD1'), 'STI 3A · TD1'); assert.equal(L.calendarLabel('<2A>'), '2A');
   const ics = 'BEGIN:VCALENDAR\r\nX-WR-CALNAME;LANGUAGE=fr:HYP - <STI 3A><TD>TD1 - du 24 août au 13 décembre \r\n 2026\r\nEND:VCALENDAR';
   assert.equal(L.icsCalendarName(ics), '<STI 3A><TD>TD1');

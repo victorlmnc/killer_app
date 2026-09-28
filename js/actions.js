@@ -529,6 +529,7 @@
           ui.field(t('Name'), f.name),
           h('div', { class: 'grid-2' }, ui.field(t('Year'), f.year), ui.field(t('Department'), f.dept)),
           h('div', { class: 'grid-2' }, ui.field('TD', f.td), ui.field('TP', f.tp)),
+          h('p', { class: 'field-hint' }, t('As on the timetable. Several groups: separate them with commas (e.g. TD 2, TD 1 MRI).')),
           h('div', { class: 'grid-2' }, ui.field(t('Option'), f.option), ui.field(t('Language group'), f.lang_group)),
           h('div', { class: 'grid-2 grid-align-start' },
             h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Weapons in hand')), f.weapons.el, h('span', { class: 'field-hint' }, t('Pick from the catalogue; a new weapon is added only if it is not there.'))),   // not a <label>: it holds buttons

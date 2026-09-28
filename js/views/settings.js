@@ -90,7 +90,8 @@
           url = url.trim(); if (!url) return;
           if (cal.some(function (c) { return c.url === url; })) return ui.toast(t('This link is already in the list.'), 'error');
           store.calendar(url).then(function (res) {
-            var c = Object.assign({ url: url, name: res.name, year: '', dept: '', field: '', value: '' }, L.calendarScope(res.name) || {});
+            var depts = (s.depts || []).concat(st.players.map(function (p) { return p.dept; })).filter(function (d, i, all) { return d && all.indexOf(d) === i; });
+            var c = Object.assign({ url: url, name: res.name, year: '', dept: '', field: '', value: '' }, L.calendarScope(res.name, depts) || {});
             saveCal(cal.concat([c]));
             ui.toast(t('{n} classes; applies to {m} players.', { n: res.events.length, m: audience(c) }));
           }, function (err) {

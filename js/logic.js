@@ -508,27 +508,48 @@
      { url, name, year, dept, field, value }: it applies to the players of that year (and department, when set)
      whose field ('td', 'tp', 'lang_group', 'option', or '' for everyone) contains that value. */
   var CAL_FIELDS = ['td', 'tp', 'lang_group', 'option'];
-  function splitValues(v) { return String(v || '').split(/[,;/]+/).map(norm).filter(Boolean); }
+  /* Group names are compared word by word, in any order: "TD 1 MRI", "TD1 MRI" and "MRI TD1" are the same group. */
+  function groupKey(v) {
+    return (String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().match(/[a-z]+|\d+/g) || [])
+      .map(function (w) { return /^\d+$/.test(w) ? String(+w) : w; }).sort().join(' ');
+  }
+  function splitValues(v) { return String(v || '').split(/[,;/]+/).map(groupKey).filter(Boolean); }
   function calendarMatches(c, p) {
     if (!c || !c.url || !p || !norm(c.year) || norm(c.year) !== norm(p.year)) return false;
     if (norm(c.dept) && norm(c.dept) !== norm(p.dept)) return false;
     if (!c.field) return true;
-    return splitValues(p[c.field]).indexOf(norm(c.value)) >= 0;
+    return splitValues(p[c.field]).indexOf(groupKey(c.value)) >= 0;
   }
   function calendarsFor(p, calendars) { return (calendars || []).filter(function (c) { return calendarMatches(c, p); }); }
-  /* HyperPlanning names its exports "<STI 3A><TD>TD1": the promotion (department and year), then the group. */
-  function calendarScope(name) {
+  /* HyperPlanning names its exports "<promotion><category>group", e.g. "<STI 3A><TD>TD1" or, in 2nd year,
+     "<STPI 2A><BOURGES - P.O TD>TD 1 MRI". knownDepts (the departments of the game) tells a department apart from
+     the other words of a promotion name (STPI, BOURGES...). Categories: TD, TP, LV (language groups), P.O
+     (the department itself), P.O TD / P.O TP (a TD or TP inside a department), COURS (the whole year). */
+  var NOT_DEPT = ['stpi', 'bourges', 'blois', 'cours', 'insa', 'cvl', 'promo', 'promotion'];
+  function calendarScope(name, knownDepts) {
     var parts = [], re = /<([^>]*)>([^<]*)/g, m;
     while ((m = re.exec(String(name || '')))) parts.push({ tag: m[1].trim(), text: m[2].trim() });
     if (!parts.length) return null;
-    var out = { year: '', dept: '', field: '', value: '' }, promo = parts[0].tag.split(/\s+/).filter(Boolean);
-    promo.forEach(function (w) { if (/^\d+\s*A$/i.test(w) || /^\d$/.test(w)) out.year = w.toUpperCase(); else out.dept = (out.dept ? out.dept + ' ' : '') + w; });
-    var group = parts[1];
-    if (group) {
-      var type = norm(group.tag), value = group.text || group.tag;
-      out.value = value;
-      out.field = type === 'td' ? 'td' : type === 'tp' ? 'tp' : /^g\d/.test(norm(value)) || /lang|angl|groupe/.test(type) ? 'lang_group' : 'option';
+    var known = (knownDepts || []).filter(function (d) { return norm(d); });
+    function deptOf(word) {   // the department a word names, written as in the game; null if it is not one
+      var n = norm(word);
+      if (!n || /^\d/.test(n) || /^(td|tp|g)\d*$/.test(n)) return null;
+      if (known.length) return known.find(function (d) { return norm(d) === n; }) || null;
+      return NOT_DEPT.indexOf(n) < 0 ? word : null;
     }
+    var out = { year: '', dept: '', field: '', value: '' };
+    parts[0].tag.split(/\s+/).filter(Boolean).forEach(function (w) {
+      if (/^\d+\s*A$/i.test(w) || /^\d$/.test(w)) out.year = w.toUpperCase();
+      else if (!out.dept && deptOf(w)) out.dept = deptOf(w);
+    });
+    var group = parts[1];
+    if (!group) return out;
+    var type = norm(group.tag.replace(/^.*\s-\s*/, '')), value = group.text || group.tag, words = value.split(/\s+/);   // "BOURGES - P.O TD": drop the campus
+    if (/^(cours|promo|promotion)$/.test(type)) return out;   // the whole year
+    if (type === 'po') { out.dept = deptOf(value) || value; return out; }   // a department of the year
+    if (/^po/.test(type) || known.length) words.forEach(function (w) { if (!out.dept) out.dept = deptOf(w) || ''; });   // "TD 1 MRI": a TD of MRI
+    out.value = value;
+    out.field = /td$/.test(type) ? 'td' : /tp$/.test(type) ? 'tp' : /^(lv|langue|langues|anglais|groupe)/.test(type) || /^g\d/.test(norm(value)) ? 'lang_group' : 'option';
     return out;
   }
   /* "<STI 3A><TD>TD1" -> "STI 3A · TD1", for display. */
@@ -631,7 +652,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });
