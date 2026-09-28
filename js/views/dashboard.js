@@ -60,6 +60,13 @@
     return box;
   }
 
+  // One page-scroll listener for the dashboard carousel: scrolling up lets a tall track shrink to its current block.
+  var fitPage = null, pageTick = false;
+  window.addEventListener('scroll', function () {
+    if (!fitPage || pageTick) return; pageTick = true;
+    requestAnimationFrame(function () { pageTick = false; if (fitPage) fitPage(); });
+  }, { passive: true });
+
   K.views = K.views || {};
   K.views.dashboard = {
     title: t('Dashboard'),
@@ -84,18 +91,25 @@
           Array.prototype.forEach.call(dots.children, function (d, i) { d.classList.toggle('is-on', i === slide); d.setAttribute('aria-selected', String(i === slide)); });
           Array.prototype.forEach.call(track.children, function (c, i) { c.classList.toggle('is-current', i === slide); });
           prev.disabled = slide === 0; next.disabled = slide === slides.length - 1;
-          fit();
+          if (!swiping) fit();
         }
-        /* The track takes the height of the current block, not the tallest one; it follows the block when its content changes. */
-        var ro = window.ResizeObserver ? new ResizeObserver(function () { fit(); }) : null;
+        /* The track takes the height of the current block, not the tallest one, and follows it when its content changes.
+           It never shrinks by more than the page can lose without moving (arriving on a short block must not throw the
+           page back to the top); the rest goes as the reader scrolls up. No resize mid-swipe: it breaks the snapping. */
+        var ro = window.ResizeObserver ? new ResizeObserver(function () { fit(); }) : null, swiping = false, settle = null;
         function fit() {
-          if (!track.isConnected) { if (ro) ro.disconnect(); return; }   // replaced by a re-render
+          if (!track.isConnected) { if (ro) ro.disconnect(); if (fitPage === fit) fitPage = null; return; }   // replaced by a re-render
           var cs = getComputedStyle(track), c = slides[slide].el;
-          track.style.height = (c.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) + 'px';
+          var want = c.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom), now = track.offsetHeight;
+          if (want < now) { var slack = document.documentElement.scrollHeight - window.innerHeight - window.scrollY; want = Math.max(want, now - Math.max(0, slack)); }
+          if (Math.abs(want - now) > 1) track.style.height = want + 'px';
         }
         if (ro) slides.forEach(function (sl) { ro.observe(sl.el); });
+        fitPage = fit;
         var ticking = false;
         track.addEventListener('scroll', function () {   // swiping: the slide nearest to the centre becomes current
+          swiping = true; clearTimeout(settle);
+          settle = setTimeout(function () { swiping = false; fit(); }, 160);   // scroll (and snap) has come to rest
           if (ticking) return; ticking = true;
           requestAnimationFrame(function () {
             ticking = false;

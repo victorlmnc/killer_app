@@ -238,9 +238,13 @@
       function refresh() {
         var st = store.state, dead = L.deadSet(st), g = GROUPS.find(function (x) { return x.id === view.group; });
         ui.clear(bar);
-        bar.appendChild(h('div', { class: 'segmented segmented-wrap', role: 'group', 'aria-label': t('Group by') }, GROUPS.map(function (x) {
+        var seg = bar.appendChild(h('div', { class: 'segmented segmented-wrap', role: 'group', 'aria-label': t('Group by') }, GROUPS.map(function (x) {
           return h('button', { type: 'button', class: view.group === x.id ? 'is-on' : '', 'aria-pressed': String(view.group === x.id), onclick: function () { view.group = x.id; refresh(); } }, x.label);
         })));
+        requestAnimationFrame(function () {   // on a phone the options scroll sideways: keep the chosen one in view
+          var on = seg.querySelector('.is-on'); if (!on || seg.scrollWidth <= seg.clientWidth) return;
+          seg.scrollLeft += on.getBoundingClientRect().left - seg.getBoundingClientRect().left - (seg.clientWidth - on.offsetWidth) / 2;
+        });
         bar.appendChild(h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: view.alive, onchange: function (e) { view.alive = e.target.checked; refresh(); } }), t('Alive only')));
         bar.appendChild(h('input', { type: 'search', placeholder: t('Find someone'), value: view.q, 'aria-label': t('Find a player'), oninput: function (e) { view.q = e.target.value; paint(); } }));
         ui.clear(chips);
