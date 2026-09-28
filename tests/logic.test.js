@@ -221,7 +221,7 @@ t('timetable: iCal parsing, class in progress and next one', () => {
   assert.equal(b.start.toISOString(), '2026-09-29T06:00:00.000Z');
   assert.equal(b.location, 'Amphi A, bât. 1'); assert.equal(b.description, 'Enseignant : X\nGroupe : 2A TP5');
   assert.equal(a.summary, 'Physique très longuesuite', 'folded lines are joined');
-  assert.equal(a.start.getHours(), 10, 'times without Z are local');
+  assert.equal(L.parisParts(a.start).hh, 10, 'times without Z are Paris times');
   let s = L.scheduleAt(ev, new Date('2026-09-29T07:00:00Z'));
   assert.equal(s.current.uid, 'b'); assert.equal(s.next.uid, 'a');
   s = L.scheduleAt(ev, new Date('2026-10-10T00:00:00Z')); assert.equal(s.current, null); assert.equal(s.next, null);
@@ -262,6 +262,15 @@ t('timetable layers: HyperPlanning names, who each layer applies to, merge', () 
   assert.deepEqual(L.mergeEvents([[e(10, 'Maths'), e(8, 'CM')], [e(8, 'CM'), e(9, 'TP')]]).map(x => x.summary), ['CM', 'TP', 'Maths'], 'sorted, a class in two layers kept once');
   const hp = L.parseIcs('BEGIN:VEVENT\nDTSTART:20260929T060000Z\nDTEND:20260929T070000Z\nSUMMARY:TD1 - EPS - M. X\nDESCRIPTION:TD : TD1\\nMatière : EPS\\nEnseignant : M. X\\n\nEND:VEVENT');
   assert.deepEqual([hp[0].subject, hp[0].teacher], ['EPS', 'M. X']);
+});
+t('Paris time whatever the time zone of the phone', () => {
+  const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
+  assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');
+  assert.equal(L.parisParts(new Date('2026-12-01T11:40:00Z')).hh, 12, 'winter time: UTC+1');
+  assert.equal(L.parisDate(2026, 8, 28, 13, 40).toISOString(), '2026-09-28T11:40:00.000Z');
+  assert.equal(L.parisDate(2026, 8, 30 + 2, 0, 0).toISOString(), '2026-10-01T22:00:00.000Z', 'day overflow: 32 Sept = 2 Oct');
+  assert.equal(L.parisDay(new Date('2026-09-28T22:30:00Z')), '2026-9-29', 'already the next day in Paris');
+  assert.equal(L.parseIcs('BEGIN:VEVENT\nDTSTART;TZID=Europe/Paris:20261005T100000\nEND:VEVENT')[0].start.toISOString(), '2026-10-05T08:00:00.000Z', 'iCal local times are Paris times');
 });
 t('backup: round trip, demo ids remapped, dangling references dropped', () => {
   let k = 0; const uuid = () => `00000000-0000-4000-8000-${String(++k).padStart(12, '0')}`;

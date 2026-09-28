@@ -221,15 +221,19 @@
   };
 
   /* ----- timetable ----- */
-  function hm(d) { return d.toLocaleTimeString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { hour: '2-digit', minute: '2-digit' }); }
-  function dayLabel(d) { var s = d.toLocaleDateString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1); }
-  function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+  // Times are Paris times (K.logic.TIME_ZONE), wherever the phone is: the game is in France.
+  function loc() { return K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB'; }
+  function fmt(d, o) { return d.toLocaleString(loc(), Object.assign({ timeZone: K.logic.TIME_ZONE }, o)); }
+  function hm(d) { return fmt(d, { hour: '2-digit', minute: '2-digit' }); }
+  function dayLabel(d) { var s = fmt(d, { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function sameDay(a, b) { return K.logic.parisDay(a) === K.logic.parisDay(b); }
+  function dayStart(date, plusDays) { var p = K.logic.parisParts(date); return K.logic.parisDate(p.y, p.m, p.d + (plusDays || 0), 0, 0); }
   function classText(e) { return [e.subject || e.summary, e.location].filter(Boolean).join(' · '); }
   function whenNext(e, now) {
-    var tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+    var tomorrow = dayStart(now, 1);
     if (sameDay(e.start, now)) return t('at {time}', { time: hm(e.start) });
     if (sameDay(e.start, tomorrow)) return t('tomorrow at {time}', { time: hm(e.start) });
-    return e.start.toLocaleDateString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(e.start);
+    return fmt(e.start, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(e.start);
   }
   /* Where a player is now and next, from every timetable layer that applies to them (year, department, TD, TP,
      language group, options). compact: short lines, and nothing at all when no layer applies. */
@@ -255,20 +259,20 @@
     return box;
   };
   ui.weekDialog = function (p, events) {
-    var monday = new Date(); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    var today = new Date(), monday = dayStart(today, -K.logic.parisParts(today).wd);   // Monday 00:00, Paris time
     ui.dialog({ title: t('Timetable of {name}', { name: p.name }), render: function (body) {
       function draw() {
         ui.clear(body);
-        var end = new Date(monday); end.setDate(monday.getDate() + 7);
+        var end = dayStart(monday, 7);
         var head = h('div', { class: 'row week-nav' },
-          h('button', { type: 'button', class: 'btn', 'aria-label': t('Previous week'), onclick: function () { monday.setDate(monday.getDate() - 7); draw(); } }, K.icon('chevron', 'ic-left')),
-          h('strong', { class: 'row-main' }, t('Week of {date}', { date: monday.toLocaleDateString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'long' }) })),
-          h('button', { type: 'button', class: 'btn', 'aria-label': t('Next week'), onclick: function () { monday.setDate(monday.getDate() + 7); draw(); } }, K.icon('chevron', 'ic-right')));
+          h('button', { type: 'button', class: 'btn', 'aria-label': t('Previous week'), onclick: function () { monday = dayStart(monday, -7); draw(); } }, K.icon('chevron', 'ic-left')),
+          h('strong', { class: 'row-main' }, t('Week of {date}', { date: fmt(monday, { day: 'numeric', month: 'long' }) })),
+          h('button', { type: 'button', class: 'btn', 'aria-label': t('Next week'), onclick: function () { monday = dayStart(monday, 7); draw(); } }, K.icon('chevron', 'ic-right')));
         body.appendChild(head);
         var week = events.filter(function (e) { return e.end > monday && e.start < end; }), now = new Date();
         if (!week.length) body.appendChild(h('p', { class: 'empty' }, t('No class this week.')));
         for (var d = 0; d < 7; d++) {
-          var day = new Date(monday); day.setDate(monday.getDate() + d);
+          var day = dayStart(monday, d);
           var list = week.filter(function (e) { return sameDay(e.start, day); });
           if (!list.length) continue;
           body.appendChild(h('h3', { class: 'week-day' + (sameDay(day, now) ? ' is-today' : '') }, dayLabel(day)));
@@ -333,7 +337,7 @@
     if (s < 86400) return t('{n} h ago', { n: Math.round(s / 3600) });
     return t('{n} d ago', { n: Math.round(s / 86400) });
   };
-  ui.when = function (iso) { return new Date(iso).toLocaleString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }); };
+  ui.when = function (iso) { return new Date(iso).toLocaleString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: K.logic.TIME_ZONE }); };   // Paris time
   ui.pct = function (x) { return Math.round((x || 0) * 100) + ' %'; };
   ui.download = function (name, text, type) {
     var a = h('a', { href: URL.createObjectURL(new Blob([text], { type: type || 'application/octet-stream' })), download: name });

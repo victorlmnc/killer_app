@@ -199,14 +199,16 @@
             var reason = adminAllowed && adminKill.checked ? adminReason.value : null;
             if (reason === 'other' && !note.value.trim()) { note.focus(); return ui.toast(t('Specify the reason in the note.'), 'error'); }
             api.close();
-            act.recordKill({ victimId: victimId, killerId: reason ? null : killerId, adminReason: reason, weapon: reason ? '' : weapon.value.trim(), note: note.value.trim(), when: when.value ? new Date(when.value).toISOString() : null,
+            act.recordKill({ victimId: victimId, killerId: reason ? null : killerId, adminReason: reason, weapon: reason ? '' : weapon.value.trim(), note: note.value.trim(), when: when.value ? parisInput(when.value).toISOString() : null,
               points: !reason && killerId ? L.killPoints({ difficulty: diff.value, bonus: bonus.value, firstBlood: fb.checked, mates: mates.value }) : 0 });
           } }, t('Record the kill'))));
         refreshKiller(); total();
       }
     });
   };
-  function localIso(d) { var p = function (n) { return (n < 10 ? '0' : '') + n; }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+  // The time of a kill is typed and shown in Paris time, wherever the phone is.
+  function localIso(d) { var p = function (n) { return (n < 10 ? '0' : '') + n; }, x = L.parisParts(d); return x.y + '-' + p(x.m + 1) + '-' + p(x.d) + 'T' + p(x.hh) + ':' + p(x.mi); }
+  function parisInput(v) { var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(v); return m ? L.parisDate(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : new Date(v); }
 
   act.recordKill = function (k) {
     var adminReason = k.adminReason === 'cheating' || k.adminReason === 'other' ? k.adminReason : null;

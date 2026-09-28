@@ -570,12 +570,26 @@
   }
   /* "Matière : X" and "Enseignant : Y" from HyperPlanning descriptions, for a shorter title than the summary. */
   function descField(desc, label) { var m = new RegExp('(?:^|\\n)' + label + '\\s*:\\s*([^\\n]*)', 'i').exec(desc || ''); return m ? m[1].trim() : ''; }
+  /* The game happens in France: times are always read and shown in Paris time, wherever the phone is. */
+  var TIME_ZONE = 'Europe/Paris', parisFormat = null;
+  function parisParts(date) {   // -> { y, m (0-11), d, hh, mi, wd (0 = Monday) } in Paris
+    parisFormat = parisFormat || new Intl.DateTimeFormat('en-GB', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' });
+    var o = {};
+    parisFormat.formatToParts(date).forEach(function (x) { o[x.type] = x.value; });
+    return { y: +o.year, m: +o.month - 1, d: +o.day, hh: +o.hour % 24, mi: +o.minute, wd: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(o.weekday) };
+  }
+  function parisDate(y, mo, d, hh, mi, ss) {   // the moment when Paris clocks show that date and time (day overflow allowed)
+    var wall = Date.UTC(y, mo, d, hh || 0, mi || 0, ss || 0), t = wall;
+    for (var i = 0; i < 2; i++) { var p = parisParts(new Date(t)); t = t - (Date.UTC(p.y, p.m, p.d, p.hh, p.mi, (ss || 0)) - wall); }
+    return new Date(t);
+  }
+  function parisDay(date) { var p = parisParts(date); return p.y + '-' + (p.m + 1) + '-' + p.d; }
   function icsDate(value) {
     var m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/.exec(String(value || '').trim());
     if (!m) return null;
     var y = +m[1], mo = +m[2] - 1, d = +m[3], hh = +(m[4] || 0), mi = +(m[5] || 0), ss = +(m[6] || 0);
-    // UTC when marked Z; otherwise the school's local time, which is the players' time too (Europe/Paris).
-    return m[7] ? new Date(Date.UTC(y, mo, d, hh, mi, ss)) : new Date(y, mo, d, hh, mi, ss);
+    // UTC when marked Z; otherwise the school's local time (Europe/Paris), whatever the phone's time zone.
+    return m[7] ? new Date(Date.UTC(y, mo, d, hh, mi, ss)) : parisDate(y, mo, d, hh, mi, ss);
   }
   function icsText(v) { return String(v || '').replace(/\\([nN,;\\])/g, function (x, c) { return c === 'n' || c === 'N' ? '\n' : c; }).trim(); }
   /* VEVENTs of an iCal file, sorted by start: { uid, start, end, summary, location, description }. */
@@ -652,7 +666,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });
