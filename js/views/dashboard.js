@@ -91,7 +91,7 @@
           h('button', { type: 'button', class: 'btn', onclick: function () { open(p.id); } }, t('My sheet')),
           !dead && store.canEdit() ? h('button', { type: 'button', class: 'btn btn-danger', onclick: function () { K.actions.killDialog(p.id); } }, t('I am dead')) : null)),
       dead ? null : h('div', { class: 'me-rels' }, who(t('My target'), target), who(t('My hunter'), hunter)),
-      targetPlayer ? h('div', { class: 'me-sched' }, h('span', { class: 'relation-label' }, t('Where is my target')), ui.schedule(targetPlayer, true) || h('p', { class: 'muted small' }, t('No timetable linked for {group}.', { group: L.calendarGroup(targetPlayer) || '—' }))) : null);
+      targetPlayer ? h('div', { class: 'me-sched' }, h('span', { class: 'relation-label' }, t('Where is my target')), ui.schedule(targetPlayer, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.'))) : null);
   }
 
   K.views = K.views || {};
@@ -204,7 +204,7 @@
         else if (!wanted.length) where.appendChild(h('p', { class: 'empty' }, t('No known target yet for the alliance.')));
         else wanted.forEach(function (w) {
           where.appendChild(h('div', { class: 'ally' }, personRow(w.p, ui.statusTag(w.p, true)),
-            h('div', { class: 'ally-lines' }, h('p', { class: 'muted small' }, w.why), ui.schedule(w.p, true) || h('p', { class: 'muted small' }, t('No timetable linked for {group}.', { group: L.calendarGroup(w.p) || '—' })))));
+            h('div', { class: 'ally-lines' }, h('p', { class: 'muted small' }, w.why), ui.schedule(w.p, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.')))));
         });
         grid.appendChild(where);
 

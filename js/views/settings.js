@@ -80,29 +80,60 @@
         ls.appendChild(h('button', { type: 'button', class: 'btn', onclick: function () { store.setSetting('links', (s.links || []).concat([{ label: '', url: '' }])); } }, t('Add a link')));
         root.appendChild(ls);
 
-        /* Timetables: one iCal link per group found on the sheets (year + TP, or TD) */
-        var groups = {};
-        st.players.forEach(function (p) { var g = L.calendarGroup(p); if (g) { var k = L.norm(g); groups[k] = groups[k] || { label: g, n: 0 }; groups[k].n++; } });
-        var cal = s.calendars || [];
-        function linkOf(k) { var c = cal.find(function (x) { return L.norm(x.group) === k; }); return c ? c.url : ''; }
-        function saveLink(label, url) {
-          var k = L.norm(label), rest = cal.filter(function (x) { return L.norm(x.group) !== k; });
-          store.setSetting('calendars', url ? rest.concat([{ group: label, url: url }]) : rest);
+        /* Timetables: HyperPlanning iCal links, one per layer (whole year, department, TD, TP, language group, option) */
+        var cal = (s.calendars || []).filter(function (c) { return c && c.url; });
+        var FIELD_LABEL = { '': t('Whole year'), td: 'TD', tp: 'TP', lang_group: t('Language group'), option: t('Option') };
+        function saveCal(list) { store.setSetting('calendars', list); }
+        function patchCal(c, patch) { saveCal(cal.map(function (x) { return x === c ? Object.assign({}, x, patch) : x; })); }
+        function audience(c) { return st.players.filter(function (p) { return L.calendarMatches(c, p); }).length; }
+        function addCal(url) {
+          url = url.trim(); if (!url) return;
+          if (cal.some(function (c) { return c.url === url; })) return ui.toast(t('This link is already in the list.'), 'error');
+          store.calendar(url).then(function (res) {
+            var c = Object.assign({ url: url, name: res.name, year: '', dept: '', field: '', value: '' }, L.calendarScope(res.name) || {});
+            saveCal(cal.concat([c]));
+            ui.toast(t('{n} classes; applies to {m} players.', { n: res.events.length, m: audience(c) }));
+          }, function (err) {
+            saveCal(cal.concat([{ url: url, name: '', year: '', dept: '', field: '', value: '' }]));
+            ui.toast(t('Link added but not readable yet ({err}): fill in who it applies to.', { err: err.message || err }), 'error');
+          });
         }
-        var keys = Object.keys(groups).sort(function (a, b) { return groups[a].label.localeCompare(groups[b].label, 'fr', { numeric: true }); });
-        var linked = keys.filter(linkOf).length;
-        var tt = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Timetables')), h('span', { class: 'muted small' }, t('{a} of {b} groups linked', { a: linked, b: keys.length }))),
-          h('p', { class: 'prose muted small' }, t('On the school timetable (HyperPlanning), each student can export their own timetable as an iCal link: paste one link per group here. Every player of that group then shows their class in progress and the next one. The links go through the "edt" function of the database (see the README).')));
-        if (!keys.length) tt.appendChild(h('p', { class: 'empty' }, t('Fill in the year and TP (or TD) on the sheets to see the groups here.')));
-        keys.forEach(function (k) {
-          var g = groups[k], input = h('input', { type: 'url', value: linkOf(k), placeholder: 'https://edt.insa-cvl.fr/…ics', 'aria-label': t('iCal link of {group}', { group: g.label }), onchange: function (e) { saveLink(g.label, e.target.value.trim()); } });
-          tt.appendChild(h('div', { class: 'row row-wrap cal-row' },
-            h('span', { class: 'cal-group' }, h('strong', {}, g.label), h('span', { class: 'muted small' }, ' ' + K.n(g.n, '{n} player', '{n} players'))), input,
-            h('button', { type: 'button', class: 'btn', onclick: function () {
-              var url = input.value.trim(); if (!url) return input.focus();
-              store.calendar(url).then(function (ev) { ui.toast(t('{n} classes found in this timetable.', { n: ev.length })); }, function (err) { ui.toast(t('Timetable unavailable: {err}', { err: err.message || err }), 'error'); });
-            } }, t('Test'))));
+        var covered = st.players.filter(function (p) { return L.calendarsFor(p, cal).length; }).length;
+        var tt = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Timetables')),
+          h('span', { class: 'muted small' }, t('{a} of {b} players have a timetable', { a: covered, b: st.players.length }))),
+          h('p', { class: 'prose muted small' }, t('A timetable is several layers: the whole year, the department, the TD, the TP, the language group, options. On HyperPlanning, open Promotions, choose the promotion (e.g. STI 3A) and a group (or none for the whole promotion), click the iCal icon and copy the address under "Synchronise". Paste it here: who it applies to is read from the timetable name, and every player of that layer gets it. The links go through the "edt" function of the database (see the README).')));
+        var addInput = h('input', { type: 'url', placeholder: 'https://edt.insa-cvl.fr/Telechargements/ical/…', 'aria-label': t('iCal link to add'), onkeydown: function (e) { if (e.key === 'Enter') { e.preventDefault(); addCal(addInput.value); } } });
+        tt.appendChild(h('div', { class: 'row row-wrap' }, addInput, h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { addCal(addInput.value); } }, K.icon('plus'), t('Add this timetable'))));
+        var order = ['', 'td', 'tp', 'lang_group', 'option'];
+        cal.slice().sort(function (a, b) {
+          return String(a.year).localeCompare(String(b.year), 'fr', { numeric: true }) || String(a.dept || '').localeCompare(String(b.dept || '')) ||
+            order.indexOf(a.field || '') - order.indexOf(b.field || '') || String(a.value || '').localeCompare(String(b.value || ''), 'fr', { numeric: true });
+        }).forEach(function (c) {
+          var n = audience(c);
+          var value = h('input', { type: 'text', value: c.value || '', placeholder: t('e.g. TD1'), disabled: !c.field, 'aria-label': t('Group'), onchange: function (e) { patchCal(c, { value: e.target.value.trim() }); } });
+          tt.appendChild(h('div', { class: 'cal-layer' },
+            h('div', { class: 'row' }, h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, c.name ? L.calendarLabel(c.name) : t('Unnamed timetable')),
+              h('span', { class: 'row-sub' + (n ? '' : ' danger') }, K.n(n, 'applies to {n} player', 'applies to {n} players'))),
+              h('button', { type: 'button', class: 'btn', onclick: function () {
+                store.calendar(c.url).then(function (res) { ui.toast(t('{n} classes found in this timetable.', { n: res.events.length })); if (res.name && res.name !== c.name) patchCal(c, { name: res.name }); },
+                  function (err) { ui.toast(t('Timetable unavailable: {err}', { err: err.message || err }), 'error'); });
+              } }, t('Test')),
+              h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('Remove this timetable'), onclick: function () { saveCal(cal.filter(function (x) { return x !== c; })); } }, K.icon('close'))),
+            h('div', { class: 'cal-scope' },
+              ui.field(t('Year'), h('input', { type: 'text', value: c.year || '', placeholder: '3A', onchange: function (e) { patchCal(c, { year: e.target.value.trim() }); } })),
+              ui.field(t('Department'), h('input', { type: 'text', value: c.dept || '', placeholder: t('all'), onchange: function (e) { patchCal(c, { dept: e.target.value.trim() }); } })),
+              ui.field(t('For'), ui.select(order.map(function (f) { return { value: f, label: FIELD_LABEL[f] }; }), c.field || '', { onchange: function (e) { patchCal(c, { field: e.target.value, value: e.target.value ? c.value : '' }); } })),
+              ui.field(t('Group'), value))));
         });
+        // who still has nothing, grouped by class so the missing links are easy to spot
+        var missing = {};
+        st.players.forEach(function (p) {
+          if (L.calendarsFor(p, cal).length) return;
+          var k = [p.year, p.dept, p.td].filter(Boolean).join(' ') || t('No year');
+          missing[k] = (missing[k] || 0) + 1;
+        });
+        var gaps = Object.keys(missing).sort(function (a, b) { return a.localeCompare(b, 'fr', { numeric: true }); });
+        if (cal.length && gaps.length) tt.appendChild(h('p', { class: 'muted small' }, t('Without a timetable: {list}', { list: gaps.map(function (k) { return k + ' (' + missing[k] + ')'; }).join(' · ') })));
         root.appendChild(tt);
 
         /* Accounts */

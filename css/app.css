@@ -282,7 +282,8 @@ select:disabled { opacity: .6; }
 .me-rel .row-btn { padding: .3rem .4rem; margin-inline: -.4rem; width: calc(100% + .8rem); }
 .me-sched { display: grid; gap: .25rem; border-top: 1px solid var(--line); padding-top: .6rem; }
 .me-hint { margin: 0 0 .8rem; }
-.cal-row { border-top: 1px solid var(--line); padding-block: .45rem; } .cal-group { flex: 0 0 9rem; min-width: 0; }
+.cal-layer { display: grid; gap: .4rem; border-top: 1px solid var(--line); padding-block: .6rem; }
+.cal-scope { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .5rem; }
 /* timetable */
 .sched-block { display: grid; gap: .3rem; }
 .sched { display: grid; gap: .2rem; } .sched p { margin: 0; }

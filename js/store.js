@@ -173,14 +173,10 @@
   /* The player sheet linked to the signed-in account, if any. */
   store.myPlayer = function () { var me = store.me(); return me && me.player_id ? store.player(me.player_id) : null; };
 
-  /* ----- timetables: iCal links per group (settings.calendars), fetched through the "edt" edge function ----- */
+  /* ----- timetables: iCal layers (settings.calendars), fetched through the "edt" edge function ----- */
   var calendars = new Map(), CALENDAR_TTL = 30 * 6e4;
-  store.calendarUrl = function (p) {
-    var group = K.logic.norm(K.logic.calendarGroup(p));
-    var hit = group && (store.state.settings.calendars || []).find(function (c) { return K.logic.norm(c.group) === group && c.url; });
-    return hit ? hit.url : null;
-  };
-  /* Resolves to the events of that link (cached 30 min, shared by every player of the group). */
+  store.calendarsFor = function (p) { return K.logic.calendarsFor(p, store.state.settings.calendars); };
+  /* One link -> { name, events } (cached 30 min, shared by every player of that layer). */
   store.calendar = function (url) {
     var hit = calendars.get(url);
     if (hit && Date.now() - hit.at < CALENDAR_TTL) return hit.promise;
@@ -190,10 +186,20 @@
           return res.data;
         })
       : fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });   // demo: works only if the server allows it
-    var promise = job.then(function (text) { return K.logic.parseIcs(typeof text === 'string' ? text : ''); });
+    var promise = job.then(function (text) { text = typeof text === 'string' ? text : ''; return { name: K.logic.icsCalendarName(text), events: K.logic.parseIcs(text) }; });
     promise.catch(function () { calendars.delete(url); });   // failures are retried next time
     calendars.set(url, { at: Date.now(), promise: promise });
     return promise;
+  };
+  /* A player's whole timetable: every layer that applies to them, merged. Fails only if every layer fails. */
+  store.playerEvents = function (p) {
+    var layers = store.calendarsFor(p), errors = [];
+    return Promise.all(layers.map(function (c) { return store.calendar(c.url).then(function (cal) { return cal.events; }, function (e) { errors.push(e); return null; }); }))
+      .then(function (lists) {
+        var ok = lists.filter(Boolean);
+        if (!ok.length && errors.length) throw errors[0];
+        return { events: K.logic.mergeEvents(ok), layers: layers.length, failed: errors.length };
+      });
   };
 
   /* ----- accounts (email allow-list with roles) ----- */

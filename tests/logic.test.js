@@ -225,9 +225,26 @@ t('timetable: iCal parsing, class in progress and next one', () => {
   let s = L.scheduleAt(ev, new Date('2026-09-29T07:00:00Z'));
   assert.equal(s.current.uid, 'b'); assert.equal(s.next.uid, 'a');
   s = L.scheduleAt(ev, new Date('2026-10-10T00:00:00Z')); assert.equal(s.current, null); assert.equal(s.next, null);
-  assert.equal(L.calendarGroup({ year: '2A', tp: 'TP5', td: 'TD2' }), '2A TP5');
-  assert.equal(L.calendarGroup({ year: '5A', tp: '', td: 'TD1' }), '5A TD1', 'no TP: the TD');
-  assert.equal(L.calendarGroup({ year: '', tp: 'TP5' }), '');
+  assert.equal(b.subject, '', 'no "Matière" line: no subject');
+});
+t('timetable layers: HyperPlanning names, who each layer applies to, merge', () => {
+  assert.deepEqual(L.calendarScope('<STI 3A><TD>TD1'), { year: '3A', dept: 'STI', field: 'td', value: 'TD1' });
+  assert.deepEqual(L.calendarScope('<2A>'), { year: '2A', dept: '', field: '', value: '' });
+  assert.deepEqual(L.calendarScope('<MRI 2A><TP>TP3'), { year: '2A', dept: 'MRI', field: 'tp', value: 'TP3' });
+  assert.equal(L.calendarScope('<2A><Groupe>G1').field, 'lang_group');
+  assert.equal(L.calendarScope('plain name'), null);
+  assert.equal(L.calendarLabel('<STI 3A><TD>TD1'), 'STI 3A · TD1'); assert.equal(L.calendarLabel('<2A>'), '2A');
+  const ics = 'BEGIN:VCALENDAR\r\nX-WR-CALNAME;LANGUAGE=fr:HYP - <STI 3A><TD>TD1 - du 24 août au 13 décembre \r\n 2026\r\nEND:VCALENDAR';
+  assert.equal(L.icsCalendarName(ics), '<STI 3A><TD>TD1');
+  const cals = [{ url: 'a', year: '2A' }, { url: 'b', year: '2A', dept: 'MRI' }, { url: 'c', year: '2A', field: 'td', value: 'TD2' },
+    { url: 'd', year: '2A', field: 'lang_group', value: 'G1' }, { url: 'e', year: '3A', field: 'lang_group', value: 'G1' }, { url: '', year: '2A' }];
+  const p = { year: '2A', dept: 'MRI', td: 'TD2', tp: 'TP1', lang_group: 'G1, G4' };
+  assert.deepEqual(L.calendarsFor(p, cals).map(c => c.url), ['a', 'b', 'c', 'd'], 'every layer of the year, not the 3A G1, not without a link');
+  assert.deepEqual(L.calendarsFor({ year: '2A', dept: 'STI', td: 'TD1' }, cals).map(c => c.url), ['a']);
+  const e = (h, s) => ({ start: new Date(Date.UTC(2026, 8, 29, h)), end: new Date(Date.UTC(2026, 8, 29, h + 1)), summary: s });
+  assert.deepEqual(L.mergeEvents([[e(10, 'Maths'), e(8, 'CM')], [e(8, 'CM'), e(9, 'TP')]]).map(x => x.summary), ['CM', 'TP', 'Maths'], 'sorted, a class in two layers kept once');
+  const hp = L.parseIcs('BEGIN:VEVENT\nDTSTART:20260929T060000Z\nDTEND:20260929T070000Z\nSUMMARY:TD1 - EPS - M. X\nDESCRIPTION:TD : TD1\\nMatière : EPS\\nEnseignant : M. X\\n\nEND:VEVENT');
+  assert.deepEqual([hp[0].subject, hp[0].teacher], ['EPS', 'M. X']);
 });
 t('backup: round trip, demo ids remapped, dangling references dropped', () => {
   let k = 0; const uuid = () => `00000000-0000-4000-8000-${String(++k).padStart(12, '0')}`;

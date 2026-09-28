@@ -503,11 +503,52 @@
   }
 
   /* ---------- Timetables (iCal) ----------
-     One link per group: the year plus the TP (or the TD when the year has no TP), written as on the timetable. */
-  function calendarGroup(p) {
-    var year = String((p && p.year) || '').trim(), group = String((p && (p.tp || p.td)) || '').trim();
-    return year && group ? year + ' ' + group : '';
+     A student's timetable is several layers on top of each other, each with its own iCal link on HyperPlanning:
+     the whole year, the department, the TD, the TP, the language group, options. A layer is
+     { url, name, year, dept, field, value }: it applies to the players of that year (and department, when set)
+     whose field ('td', 'tp', 'lang_group', 'option', or '' for everyone) contains that value. */
+  var CAL_FIELDS = ['td', 'tp', 'lang_group', 'option'];
+  function splitValues(v) { return String(v || '').split(/[,;/]+/).map(norm).filter(Boolean); }
+  function calendarMatches(c, p) {
+    if (!c || !c.url || !p || !norm(c.year) || norm(c.year) !== norm(p.year)) return false;
+    if (norm(c.dept) && norm(c.dept) !== norm(p.dept)) return false;
+    if (!c.field) return true;
+    return splitValues(p[c.field]).indexOf(norm(c.value)) >= 0;
   }
+  function calendarsFor(p, calendars) { return (calendars || []).filter(function (c) { return calendarMatches(c, p); }); }
+  /* HyperPlanning names its exports "<STI 3A><TD>TD1": the promotion (department and year), then the group. */
+  function calendarScope(name) {
+    var parts = [], re = /<([^>]*)>([^<]*)/g, m;
+    while ((m = re.exec(String(name || '')))) parts.push({ tag: m[1].trim(), text: m[2].trim() });
+    if (!parts.length) return null;
+    var out = { year: '', dept: '', field: '', value: '' }, promo = parts[0].tag.split(/\s+/).filter(Boolean);
+    promo.forEach(function (w) { if (/^\d+\s*A$/i.test(w) || /^\d$/.test(w)) out.year = w.toUpperCase(); else out.dept = (out.dept ? out.dept + ' ' : '') + w; });
+    var group = parts[1];
+    if (group) {
+      var type = norm(group.tag), value = group.text || group.tag;
+      out.value = value;
+      out.field = type === 'td' ? 'td' : type === 'tp' ? 'tp' : /^g\d/.test(norm(value)) || /lang|angl|groupe/.test(type) ? 'lang_group' : 'option';
+    }
+    return out;
+  }
+  /* "<STI 3A><TD>TD1" -> "STI 3A · TD1", for display. */
+  function calendarLabel(name) {
+    var parts = [], re = /<([^>]*)>([^<]*)/g, m;
+    while ((m = re.exec(String(name || '')))) parts.push((m[2].trim() || m[1].trim()));
+    return parts.length ? parts.join(' · ') : String(name || '');
+  }
+  function icsCalendarName(text) {
+    var m = /(?:^|\n)X-WR-CALNAME[^:]*:([^\n]*(?:\n[ \t][^\n]*)*)/.exec(String(text || '').replace(/\r\n|\r/g, '\n'));
+    return m ? m[1].replace(/\n[ \t]/g, '').replace(/^HYP\s*-\s*/, '').replace(/\s+-\s+du\s.*$/, '').trim() : '';
+  }
+  /* Several layers merged: a class present in two of them (same start and title) is kept once. */
+  function mergeEvents(lists) {
+    var seen = new Set(), out = [];
+    lists.forEach(function (list) { (list || []).forEach(function (e) { var k = +e.start + '|' + norm(e.summary); if (!seen.has(k)) { seen.add(k); out.push(e); } }); });
+    return out.sort(function (a, b) { return a.start - b.start; });
+  }
+  /* "Matière : X" and "Enseignant : Y" from HyperPlanning descriptions, for a shorter title than the summary. */
+  function descField(desc, label) { var m = new RegExp('(?:^|\\n)' + label + '\\s*:\\s*([^\\n]*)', 'i').exec(desc || ''); return m ? m[1].trim() : ''; }
   function icsDate(value) {
     var m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/.exec(String(value || '').trim());
     if (!m) return null;
@@ -523,7 +564,8 @@
     lines.forEach(function (line) {
       if (line === 'BEGIN:VEVENT') { cur = {}; return; }
       if (line === 'END:VEVENT') {
-        if (cur && cur.start) events.push({ uid: cur.uid || '', start: cur.start, end: cur.end || cur.start, summary: cur.summary || '', location: cur.location || '', description: cur.description || '' });
+        if (cur && cur.start) events.push({ uid: cur.uid || '', start: cur.start, end: cur.end || cur.start, summary: cur.summary || '', location: cur.location || '', description: cur.description || '',
+          subject: descField(cur.description, 'Matière'), teacher: descField(cur.description, 'Enseignant') });
         cur = null; return;
       }
       if (!cur) return;
@@ -589,7 +631,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, calendarGroup: calendarGroup, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

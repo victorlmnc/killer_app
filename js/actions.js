@@ -433,7 +433,7 @@
       } else {
         body.appendChild(roundId ? h('div', { class: 'relations' }, person(t('Killer'), hunter, 'hunter'), person(t('Target'), target, 'target'))
           : h('p', { class: 'muted' }, t('Start the loop from the Chain tab to record targets and killers.')));
-        body.appendChild(h('div', { class: 'sched-block' }, h('span', { class: 'relation-label' }, t('Timetable') + (L.calendarGroup(p) ? ' · ' + L.calendarGroup(p) : '')), ui.schedule(p)));
+        body.appendChild(h('div', { class: 'sched-block' }, h('span', { class: 'relation-label' }, t('Timetable')), ui.schedule(p)));
       }
 
       var weapons = L.weaponList(p.weapons);

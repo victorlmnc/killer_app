@@ -224,29 +224,30 @@
   function hm(d) { return d.toLocaleTimeString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { hour: '2-digit', minute: '2-digit' }); }
   function dayLabel(d) { var s = d.toLocaleDateString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1); }
   function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
-  function classText(e) { return [e.summary, e.location].filter(Boolean).join(' · '); }
+  function classText(e) { return [e.subject || e.summary, e.location].filter(Boolean).join(' · '); }
   function whenNext(e, now) {
     var tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
     if (sameDay(e.start, now)) return t('at {time}', { time: hm(e.start) });
     if (sameDay(e.start, tomorrow)) return t('tomorrow at {time}', { time: hm(e.start) });
     return e.start.toLocaleDateString(K.i18n.lang === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(e.start);
   }
-  /* Where a player is now and next, from their group's timetable. compact: one line, nothing when there is no link. */
+  /* Where a player is now and next, from every timetable layer that applies to them (year, department, TD, TP,
+     language group, options). compact: short lines, and nothing at all when no layer applies. */
   ui.schedule = function (p, compact) {
-    var group = K.logic.calendarGroup(p), url = K.store.calendarUrl(p);
-    if (!url) {
+    if (!K.store.calendarsFor(p).length) {
       if (compact) return null;
-      return h('p', { class: 'muted small sched' }, group ? t('No timetable linked for {group}.', { group: group }) : t('Year and TP (or TD) are needed for the timetable.'),
-        group && K.store.isAdmin() ? [' ', h('a', { class: 'linkish', href: '#/settings' }, t('Add the link'))] : null);
+      return h('p', { class: 'muted small sched' }, p.year ? t('No timetable applies to this player yet.') : t('The year is needed for the timetable.'),
+        p.year && K.store.isAdmin() ? [' ', h('a', { class: 'linkish', href: '#/settings' }, t('Add the links'))] : null);
     }
     var box = h('div', { class: 'sched' + (compact ? ' sched-compact' : '') }, h('span', { class: 'muted small' }, t('Loading the timetable…')));
-    K.store.calendar(url).then(function (events) {
+    K.store.playerEvents(p).then(function (res) {
       if (!box.isConnected && box.parentNode) return;
-      var now = new Date(), s = K.logic.scheduleAt(events, now);
+      var events = res.events, now = new Date(), s = K.logic.scheduleAt(events, now);
       ui.clear(box);
       if (s.current) box.appendChild(h('p', { class: 'sched-line sched-now' }, h('span', { class: 'sched-label' }, t('Now')), classText(s.current), h('span', { class: 'muted' }, ' · ' + t('until {time}', { time: hm(s.current.end) }))));
       if (s.next && (!compact || !s.current)) box.appendChild(h('p', { class: 'sched-line' }, h('span', { class: 'sched-label' }, t('Next')), classText(s.next), h('span', { class: 'muted' }, ' · ' + whenNext(s.next, now))));
       if (!s.current && !s.next) box.appendChild(h('p', { class: 'muted small' }, t('No upcoming class in this timetable.')));
+      if (res.failed) box.appendChild(h('p', { class: 'muted small' }, K.n(res.failed, '{n} timetable could not be loaded.', '{n} timetables could not be loaded.')));
       if (!compact) box.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { ui.weekDialog(p, events); } }, t('See the week')));
     }).catch(function (err) {
       ui.clear(box).appendChild(h('p', { class: 'muted small' }, t('Timetable unavailable: {err}', { err: err.message || err })));
@@ -274,8 +275,8 @@
           body.appendChild(h('div', { class: 'stack-tight' }, list.map(function (e) {
             var live = e.start <= now && now < e.end;
             return h('div', { class: 'week-class' + (live ? ' is-now' : '') }, h('span', { class: 'week-time' }, hm(e.start) + '–' + hm(e.end)),
-              h('span', {}, h('strong', {}, e.summary || '—'), e.location ? h('span', { class: 'muted small' }, ' · ' + e.location) : null,
-                e.description ? h('span', { class: 'muted small week-desc' }, e.description) : null));
+              h('span', {}, h('strong', {}, e.subject || e.summary || '—'), e.location ? h('span', { class: 'muted small' }, ' · ' + e.location) : null,
+                e.teacher ? h('span', { class: 'muted small week-desc' }, e.teacher) : e.subject ? null : e.description ? h('span', { class: 'muted small week-desc' }, e.description) : null));
           })));
         }
       }

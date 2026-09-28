@@ -21,8 +21,10 @@ screen and in the profile dialog.
 - **Players** – sheets with class, weapons, address, notes and photo; a special status (dangerous, priority
   target) shown in colour on the chain and the lists; filters; import from a spreadsheet or CSV with column
   mapping; export as CSV or printable report (PDF).
-- **Timetables** – the class each player is in right now and the next one, from their group's iCal link
-  (year + TP). The dashboard shows where the alliance's targets are.
+- **Timetables** – the class each player is in right now and the next one, and their week. A student's timetable
+  is several HyperPlanning layers stacked (whole year, department, TD, TP, language group, options); each layer
+  is one iCal link, and each player gets every layer that matches their sheet. The dashboard shows where the
+  alliance's targets are.
 - **My sheet** – each account can be linked to its own player sheet: the dashboard then shows your target,
   your hunter, where your target is, and an "I am dead" button.
 - **Saved games** – the whole game in one JSON file (sheets, photos, rounds, links, kills, full log, catalogue,
@@ -64,9 +66,11 @@ The school's HyperPlanning serves iCal files without CORS headers, so they go th
 
 1. Deploy it: *Edge Functions → Deploy a new function → Via editor*, name it `edt`, paste
    `supabase/functions/edt/index.ts`, deploy. (Or with the CLI: `supabase functions deploy edt`.)
-2. Each teammate exports the iCal link of their own timetable from HyperPlanning and gives it to the
-   administrator, who pastes it under *Settings → Timetables*, next to the matching group. One link per group
-   is enough for every player of that group; *Test* checks it.
+2. On HyperPlanning, open *Promotions*, choose a promotion (e.g. STI 3A) and a group (TD1, TP2, G1… or none
+   for the whole promotion), click the iCal icon and copy the address under *Synchronise*. Paste it under
+   *Settings → Timetables*: who the layer applies to (year, department, TD / TP / language group / option) is
+   read from the timetable name and can be corrected. The panel lists the classes still without a timetable.
+   The links contain a private key: they stay in the database settings, never in the repository.
 
 To accept another host, set the `EDT_HOSTS` secret of the function (comma-separated).
 
