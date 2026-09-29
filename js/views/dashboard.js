@@ -33,7 +33,7 @@
     });
     return svg;
   }
-  function personRow(p, right) { return h('button', { type: 'button', class: 'row row-btn', onclick: function () { K.actions.openPlayer(p.id); } }, ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, p.name), right); }
+  function personRow(p, right) { return h('button', { type: 'button', class: 'row row-btn', onclick: function () { K.actions.openPlayer(p.id); } }, ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, p.name), right ? h('span', { class: 'row-aside' }, right) : null); }   // the aside wraps instead of overflowing
 
   /* What we know about the players outside the alliance: one bar per piece of information, then addresses by year. */
   function meter(label, value, total, color) {
