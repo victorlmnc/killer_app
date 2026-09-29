@@ -585,7 +585,7 @@
     if (!e.groups || !e.groups.length) return true;
     var keys = e.groups.map(groupKey);
     if (keys.some(function (k) { return /(^| )cours( |$)/.test(k); })) return true;
-    var mine = [];
+    var mine = splitValues(p && p.dept);   // "MRI", "STI": classes of a department (2nd-year orientation)
     CAL_FIELDS.forEach(function (f) { mine = mine.concat(splitValues(p && p[f])); });
     return keys.some(function (k) { return mine.indexOf(k) >= 0; });
   }
@@ -595,8 +595,9 @@
   function classKind(e) {
     if (!e || e.allDay) return 'event';
     var keys = (e.groups || []).map(groupKey);
-    if (keys.some(function (k) { return /(^| )cours( |$)/.test(k); })) return 'event';
-    if (keys.length) return keys.some(function (k) { return k.split(' ').indexOf('tp') >= 0; }) ? 'tp' : 'td';
+    // for a whole promotion ("COURS 2A STPI BOURGES") or a whole department ("MRI"): like no group at all
+    var wide = keys.length && keys.every(function (k) { return /(^| )cours( |$)/.test(k) || /^[a-z]+$/.test(k); });
+    if (keys.length && !wide) return keys.some(function (k) { return k.split(' ').indexOf('tp') >= 0; }) ? 'tp' : 'td';
     return e.teacher ? 'cm' : 'event';
   }
   /* An export that names many different groups is the whole promotion seen from one of them: it should apply to

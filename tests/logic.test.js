@@ -289,6 +289,10 @@ t('timetable: a whole-promotion export keeps the groups of each player', () => {
   assert.deepEqual(['b', 'e', 'g', 'h'].map(kind), ['td', 'td', 'tp', 'event'], 'TD, language group, TP, whole promotion');
   assert.equal(L.classKind({ groups: [], teacher: 'M. X' }), 'cm', 'no group but a teacher: a lecture');
   assert.equal(L.classKind({ groups: [], teacher: '' }), 'event'); assert.equal(L.classKind({ allDay: true }), 'event');
+  // 2nd year: classes for the whole promotion ("COURS 2A STPI BOURGES") and for a department ("MRI")
+  assert.equal(L.classKind({ groups: ['COURS 2A STPI BOURGES'], teacher: 'M. X' }), 'cm'); assert.equal(L.classKind({ groups: ['COURS 2A STPI BOURGES'], teacher: '' }), 'event');
+  assert.equal(L.classKind({ groups: ['MRI'], teacher: 'M. X' }), 'cm'); assert.equal(L.classKind({ groups: ['TD 1 MRI'], teacher: 'M. X' }), 'td');
+  assert.ok(L.eventForPlayer({ groups: ['MRI'] }, { dept: 'MRI' }) && !L.eventForPlayer({ groups: ['MRI'] }, { dept: 'STI' }), 'department classes follow the department');
   assert.equal(L.parseIcs('BEGIN:VEVENT\nDTSTART:20260929T060000Z\nDESCRIPTION:Matière : X\\nEnseignants : M. A, M. B\nEND:VEVENT')[0].teacher, 'M. A, M. B');
   assert.equal(L.isPromotionView(list.filter(e => e.uid === 'b')), false);
 });
