@@ -146,7 +146,7 @@
         var toFind = 0, rows = 0;
         st.players.filter(function (p) { return p.is_ally && !dead.has(p.id); }).sort(byName).forEach(function (ally) {
           var tg = round && L.resolveTarget(st, round.id, ally.id).id, target = tg && store.player(tg);
-          if (!target) return;
+          if (!target || target.is_ally) return;   // no point gathering weapons against one of us
           rows++;
           var ws = L.weaponList(target.weapons);
           plan.appendChild(h('div', { class: 'preshot-row' },
@@ -159,7 +159,7 @@
                 c && c.note ? h('span', { class: 'muted small' }, c.note) : null);
             })) : h('p', { class: 'muted small' }, t('Weapons unknown: note them on the sheet of the target.'))));
         });
-        if (!rows) plan.appendChild(h('p', { class: 'empty' }, t('No known target for the alliance yet.')));
+        if (!rows) plan.appendChild(h('p', { class: 'empty' }, t('No known target outside the alliance yet.')));
         else plan.querySelector('.panel-head').appendChild(h('span', { class: 'tag ' + (toFind ? 'tag-tofind' : 'tag-owned') }, toFind ? K.n(toFind, '{n} weapon to find', '{n} weapons to find') : t('Everything is ready')));
         body.appendChild(plan);
         var inPlay = [];

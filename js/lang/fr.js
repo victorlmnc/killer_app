@@ -332,6 +332,7 @@
   "No bonus in effect or to come.": "Aucun bonus actif ou à venir.",
   "No class this week.": "Aucun cours cette semaine.",
   "No known target for the alliance yet.": "Aucune cible connue pour l'alliance pour l'instant.",
+  "No known target outside the alliance yet.": "Aucune cible connue hors de l’alliance pour l’instant.",
   "No known target yet for the alliance.": "Aucune cible connue pour l'alliance pour l'instant.",
   "No moment found in the coming week.": "Aucun moment trouvé cette semaine.",
   "No player outside the alliance.": "Aucun joueur hors alliance.",
