@@ -135,6 +135,19 @@ create table if not exists public.weapons (
 alter table public.weapons add column if not exists owned boolean not null default false;
 alter table public.weapons add column if not exists note text default '';
 
+-- Shop bonuses bought by players: what, when it takes effect and until when (ends_at null = one-off, e.g. a reveal).
+create table if not exists public.bonuses (
+  id         uuid primary key default gen_random_uuid(),
+  player_id  uuid not null references public.players(id) on delete cascade,
+  name       text not null,
+  price      integer not null default 0,
+  bought_at  timestamptz not null default now(),
+  starts_at  timestamptz not null default now(),
+  ends_at    timestamptz,
+  note       text default '',
+  created_at timestamptz not null default now()
+);
+
 -- Places rather than people (canteen, gym, bus stop). Kept from one year to the next.
 create table if not exists public.spots (
   id         uuid primary key default gen_random_uuid(),
@@ -167,7 +180,7 @@ alter table public.events add column if not exists details jsonb;
 do $$
 declare t text;
 begin
-  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots'] loop
+  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots', 'bonuses'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "membres" on public.%I', t);
     execute format('drop policy if exists "read" on public.%I', t);
@@ -232,7 +245,7 @@ create policy "photos delete" on storage.objects for delete to authenticated usi
 do $$
 declare t text;
 begin
-  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'settings', 'events', 'spots', 'accounts'] loop
+  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'settings', 'events', 'spots', 'accounts', 'bonuses'] loop
     if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
       execute format('alter publication supabase_realtime add table public.%I', t);
     end if;

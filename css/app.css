@@ -394,6 +394,7 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .notes { white-space: pre-wrap; background: var(--surface-2); padding: .6rem .75rem; border-radius: var(--radius-sm); border-left: 2px solid var(--brass); }
 .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; } .action-grid .btn { white-space: normal; text-align: center; font-size: .86rem; line-height: 1.2; }
 .pick-list { display: grid; max-height: 50dvh; overflow-y: auto; } .pick-list .row { padding: .45rem .3rem; }
+.pick-sep { margin: .5rem .3rem .1rem; text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; } .pick-list .row.is-dead .row-main { color: var(--muted); text-decoration: line-through; }
 .map-cols { display: grid; gap: .6rem; } .map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .6rem; }
 .map-col { display: grid; gap: .25rem; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: .5rem; min-width: 0; } .map-col-head { font-weight: 600; font-size: .86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .map-col .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -465,3 +466,12 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
   .class-who, .layer-name, .weapon-holder > span:last-child { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; max-width: none; }
   .row-sub { white-space: normal; overflow-wrap: anywhere; }
 }
+/* shop bonuses: in effect (green), to come (brass) */
+.tag-bonus { white-space: normal; } .tag-bonus-when { opacity: .8; }
+.tag-bonus-active { color: var(--alive); background: color-mix(in srgb, var(--alive) 14%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--alive) 45%, transparent); }
+.tag-bonus-upcoming { color: var(--brass); background: color-mix(in srgb, var(--brass) 14%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brass) 45%, transparent); }
+.tag-bonus-over { color: var(--muted); }
+.bonus-tags { margin-top: .2rem; } .bonus-line { display: block; margin-block: .15rem; } .sheet-bonuses { display: grid; gap: .3rem; }
+.bonus-row { border-top: 1px solid var(--line); padding-block: .45rem; } .bonus-row:first-of-type { border-top: 0; }
+.linkish-row { appearance: none; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; padding: 0; }
+.bonus-history summary { cursor: pointer; color: var(--muted); font-size: .88rem; padding-block: .3rem; }

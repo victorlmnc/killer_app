@@ -296,6 +296,22 @@ t('timetable: a whole-promotion export keeps the groups of each player', () => {
   assert.equal(L.parseIcs('BEGIN:VEVENT\nDTSTART:20260929T060000Z\nDESCRIPTION:Matière : X\\nEnseignants : M. A, M. B\nEND:VEVENT')[0].teacher, 'M. A, M. B');
   assert.equal(L.isPromotionView(list.filter(e => e.uid === 'b')), false);
 });
+t('shop bonuses: timing, window, status, backup', () => {
+  assert.deepEqual(L.bonusTiming({ start: 'next_day', hours: 24 }), { start: 'next_day', hours: 24 });
+  assert.deepEqual(L.bonusTiming({ description: 'Active from 00:10 the day after purchase, for 24 hours.' }), { start: 'next_day', hours: 24 }, 'older items: from the description');
+  assert.deepEqual(L.bonusTiming({ description: 'Désactive les notifications pendant 2 heures. Actif immédiatement.' }), { start: 'now', hours: 2 });
+  const w = L.bonusWindow({ start: 'next_day', hours: 24 }, '2026-09-28T19:30:00Z');   // 21:30 in Paris
+  assert.deepEqual([w.starts.toISOString(), w.ends.toISOString()], ['2026-09-28T22:10:00.000Z', '2026-09-29T22:10:00.000Z'], '00:10 the next day, Paris time');
+  assert.equal(L.bonusWindow({ start: 'now', hours: 0 }, '2026-09-28T19:30:00Z').ends, null, 'one-off');
+  const b = { player_id: 'a', starts_at: '2026-09-28T22:10:00Z', ends_at: '2026-09-29T22:10:00Z' };
+  assert.deepEqual(['2026-09-28T20:00:00Z', '2026-09-29T08:00:00Z', '2026-09-30T08:00:00Z'].map(d => L.bonusStatus(b, new Date(d))), ['upcoming', 'active', 'over']);
+  assert.equal(L.bonusStatus({ starts_at: '2026-09-28T19:30:00Z', ends_at: null }, new Date('2026-09-28T19:31:00Z')), 'over', 'a one-off is used at once');
+  assert.equal(L.currentBonuses({ bonuses: [b, { player_id: 'b', starts_at: b.starts_at, ends_at: b.ends_at }] }, 'a', new Date('2026-09-29T08:00:00Z')).length, 1);
+  const s = base(); s.bonuses = [{ id: 'x', player_id: 'a', name: 'Immunité', price: 3, starts_at: b.starts_at, ends_at: null }, { id: 'y', player_id: 'gone', name: 'X' }];
+  const r = L.readBackup(JSON.stringify(L.makeBackup(s)), { uuid: () => '00000000-0000-4000-8000-' + String(Math.random()).slice(2, 14).padEnd(12, '0') });
+  assert.equal(r.data.bonuses.length, 1, 'a bonus of an unknown player is dropped'); assert.equal(r.data.bonuses[0].ends_at, null);
+  assert.equal(r.data.bonuses[0].player_id, r.data.players.find(p => p.name === 'A').id, 'follows the player id');
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');

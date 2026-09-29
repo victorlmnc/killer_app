@@ -80,7 +80,7 @@
       var other = res && res.id && store.player(res.id);
       return h('div', { class: 'me-rel' }, h('span', { class: 'relation-label' }, label),
         other ? h('button', { type: 'button', class: 'row row-btn', onclick: function () { open(other.id); } }, ui.avatar(other, 'sm'),
-          h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, other.name), h('span', { class: 'row-sub' }, ui.confLabel(res.confidence))), ui.statusTag(other, true))
+          h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, other.name), h('span', { class: 'row-sub' }, ui.confLabel(res.confidence)), ui.bonusTags(other, true)), ui.statusTag(other, true))
           : h('p', { class: 'muted small' }, label === t('My target') ? t('Unknown target') : t('Unknown killer')));
     }
     var target = round && !dead ? L.resolveTarget(st, round.id, p.id) : null, hunter = round && !dead ? L.resolveHunter(st, round.id, p.id) : null;
@@ -204,7 +204,7 @@
         else if (!wanted.length) where.appendChild(h('p', { class: 'empty' }, t('No known target yet for the alliance.')));
         else wanted.forEach(function (w) {
           where.appendChild(h('div', { class: 'ally' }, personRow(w.p, ui.statusTag(w.p, true)),
-            h('div', { class: 'ally-lines' }, h('p', { class: 'muted small' }, w.why), ui.schedule(w.p, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.')))));
+            h('div', { class: 'ally-lines' }, h('p', { class: 'muted small' }, w.why), ui.bonusTags(w.p, true), ui.schedule(w.p, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.')))));
         });
         grid.appendChild(where);
 

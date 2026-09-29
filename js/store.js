@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   var K = (window.K = window.K || {});
-  var TABLES = ['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots'];
+  var TABLES = ['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots', 'bonuses'];
   var LOCAL_KEY = 'killer.local.v1';
   var PHOTO_BUCKET = 'photos';
   var ROLES = ['admin', 'member', 'observer'];
@@ -12,7 +12,7 @@
   var listeners = [];
   var store = K.store = {
     mode: 'local',
-    state: { players: [], rounds: [], links: [], kills: [], weapons: [], events: [], spots: [], settings: {}, members: [] },
+    state: { players: [], rounds: [], links: [], kills: [], weapons: [], events: [], spots: [], bonuses: [], settings: {}, members: [] },
     user: null, role: null,
     ROLES: ROLES,
     on: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
@@ -72,7 +72,11 @@
     load: function (table) {
       var q = sb.from(table).select('*');
       if (table === 'events') q = q.order('created_at', { ascending: false }).limit(80);
-      return q.then(check).then(function (rows) { store.state[table] = rows || []; });
+      return q.then(check).then(function (rows) { store.state[table] = rows || []; }, function (err) {
+        // a table added by a newer version while supabase/schema.sql has not been run again: empty, the rest works
+        if (/does not exist|schema cache|42P01|PGRST20[45]/i.test((err && (err.code + ' ' + err.message)) || '')) { console.warn('Table missing, run supabase/schema.sql again:', table); store.state[table] = []; return; }
+        throw err;
+      });
     },
     loadSettings: function () {
       return sb.from('settings').select('*').then(check).then(function (rows) {
@@ -306,12 +310,13 @@
   store.purge = function () {
     if (!store.isAdmin()) return denied();
     var paths = store.state.players.map(function (p) { return p.photo_path; }).filter(function (p) { return p && p.indexOf('data:') !== 0; });
-    ['players', 'rounds', 'links', 'kills', 'events'].forEach(function (t) { store.state[t] = []; });
+    ['players', 'rounds', 'links', 'kills', 'events', 'bonuses'].forEach(function (t) { store.state[t] = []; });
     store.emit();
     if (store.mode !== 'supabase') { local.persist(); return Promise.resolve(); }
     var all = '00000000-0000-0000-0000-000000000000';
     var jobs = paths.length ? [sb.storage.from(PHOTO_BUCKET).remove(paths)] : [];
     return guard(Promise.all(jobs)
+      .then(function () { return sb.from('bonuses').delete().neq('id', all).then(check); })
       .then(function () { return sb.from('links').delete().neq('id', all).then(check); })   // order matters: links and kills reference players and rounds
       .then(function () { return sb.from('kills').delete().neq('id', all).then(check); })
       .then(function () { return sb.from('players').delete().neq('id', all).then(check); })
@@ -357,7 +362,7 @@
   store.restore = function (data, opts) {
     if (!store.isAdmin()) return denied().then(function () { return false; });
     opts = opts || {};
-    var GAME = ['players', 'rounds', 'links', 'kills', 'events'], tables = opts.catalogue ? GAME.concat(['weapons', 'spots']) : GAME;
+    var GAME = ['players', 'rounds', 'links', 'kills', 'events', 'bonuses'], tables = opts.catalogue ? GAME.concat(['weapons', 'spots']) : GAME;
     if (store.mode !== 'supabase') {
       tables.forEach(function (t) { store.state[t] = data[t]; });
       store.state.players.forEach(function (p) { if (p.photo_path && p.photo_path.indexOf('data:') !== 0) p.photo_path = null; });   // storage paths mean nothing here
@@ -383,8 +388,8 @@
       return old.length ? sb.storage.from(PHOTO_BUCKET).remove(old) : null;
     })
       // 3. empty the tables, references first; 4. refill, referenced tables first
-      .then(function () { return ['links', 'kills', 'events', 'players', 'rounds'].concat(opts.catalogue ? ['weapons', 'spots'] : []).reduce(function (p, t) { return p.then(function () { return wipe(t); }); }, Promise.resolve()); })
-      .then(function () { return ['rounds', 'players', 'links', 'kills', 'events'].concat(opts.catalogue ? ['weapons', 'spots'] : []).reduce(function (p, t) { return p.then(function () { return fill(t); }); }, Promise.resolve()); })
+      .then(function () { return ['bonuses', 'links', 'kills', 'events', 'players', 'rounds'].concat(opts.catalogue ? ['weapons', 'spots'] : []).reduce(function (p, t) { return p.then(function () { return wipe(t); }); }, Promise.resolve()); })
+      .then(function () { return ['rounds', 'players', 'links', 'kills', 'events', 'bonuses'].concat(opts.catalogue ? ['weapons', 'spots'] : []).reduce(function (p, t) { return p.then(function () { return fill(t); }); }, Promise.resolve()); })
       .then(function () {
         if (!opts.catalogue) return;
         var rows = Object.keys(data.settings).map(function (k) { return { key: k, value: data.settings[k] }; });

@@ -5,7 +5,7 @@ from _common import URL, context, collect_errors
 from playwright.sync_api import sync_playwright, expect
 FAKE = r"""
 window.__calls = []; window.__db = { players: [{id:'p1',name:'VALJEAN Jean',year:'3A',td:'TD1',points:2,photo_path:'p1.jpg'},{id:'p2',name:'JAVERT Émile',year:'4A',td:'TD2',points:0}],
-  rounds: [], links: [], kills: [], weapons: [], events: [], spots: [], settings: [{key:'game_name', value:'Killer test'}], accounts: [{email:'moi@test.fr', name:'', role:'admin', tabs:null, avatar_path:null}] };
+  rounds: [], links: [], kills: [], weapons: [], events: [], spots: [], bonuses: [], settings: [{key:'game_name', value:'Killer test'}], accounts: [{email:'moi@test.fr', name:'', role:'admin', tabs:null, avatar_path:null}] };
 window.supabase = { createClient: function (url, key) {
   window.__calls.push(['createClient', url, key]);
   var authCb = null, session = null;

@@ -130,26 +130,36 @@
   var SHOP = [
       {
           "name": "Super Coupe-Gorge",
+          "start": "next_day",
+          "hours": 24,
           "price": 8,
           "description": "Your target cannot be saved by other players or by an immunity. Active from 00:10 the day after purchase, for 24 hours. Does not override truces."
       },
       {
           "name": "Coupe-Gorge",
+          "start": "next_day",
+          "hours": 24,
           "price": 6,
           "description": "Your target cannot be saved by other players, unless they have an active immunity. Active from 00:10 the day after purchase, for 24 hours. Does not override truces."
       },
       {
           "name": "Révélation",
+          "start": "now",
+          "hours": 0,
           "price": 3,
           "description": "Reveals who is currently hunting you. Once the window is closed it cannot be reopened without buying the bonus again. Active immediately."
       },
       {
           "name": "Brouilleur",
+          "start": "now",
+          "hours": 2,
           "price": 1,
           "description": "Disables kill and bonus notifications for every player for 2 hours. Stacks: a new jammer resets the timer. Active immediately."
       },
       {
           "name": "Immunité",
+          "start": "next_day",
+          "hours": 24,
           "price": 3,
           "description": "You cannot be killed for 24 hours, except by a Super Coupe-Gorge. Active from 00:10 the day after purchase."
       }

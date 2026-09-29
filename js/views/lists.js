@@ -69,7 +69,8 @@
           list.appendChild(h('button', { type: 'button', class: 'row row-btn row-player' + (d ? ' is-dead' : ''), onclick: function () { K.actions.openPlayer(p.id); } },
             ui.avatar(p), h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name),
               h('span', { class: 'row-sub' }, d ? t('Dead') : tg ? t('Hunts {name}', { name: tg.name }) : t('Unknown target')),
-              p.weapons && !d ? h('span', { class: 'row-sub tags' }, L.weaponList(p.weapons).map(function (w) { return ui.weaponTag(w, true); })) : null),
+              p.weapons && !d ? h('span', { class: 'row-sub tags' }, L.weaponList(p.weapons).map(function (w) { return ui.weaponTag(w, true); })) : null,
+              d ? null : ui.bonusTags(p, true)),
             h('span', { class: 'row-side' }, h('span', { class: 'tags' }, p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, ui.statusTag(p, true), ui.yearTag(p)),
               h('span', { class: 'muted small' }, K.n(p.points || 0, '{n} pt', '{n} pts') + (n ? ', ' + K.n(n, '{n} kill', '{n} kills') : '')))));
         });
@@ -183,15 +184,18 @@
     render: function (root) {
       function editItem(i) {
         if (!store.isAdmin()) return;
-        var s = store.state.settings, items = (s.shop || []).slice(), it = i == null ? { name: '', price: 1, description: '' } : items[i];
+        var s = store.state.settings, items = (s.shop || []).slice(), it = i == null ? { name: '', price: 1, description: '', start: 'now', hours: 0 } : items[i];
         ui.dialog({ title: i == null ? t('Add a bonus') : t('Edit bonus'), render: function (b, api) {
           var name = h('input', { type: 'text', value: it.name }), price = h('input', { type: 'number', min: '0', value: String(it.price) }), desc = h('textarea', { rows: '6', value: it.description });
-          b.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Price in points'), price), ui.field(t('Description'), desc)));
+          var tm = L.bonusTiming(it), start = ui.select([{ value: 'now', label: t('As soon as it is bought') }, { value: 'next_day', label: t('At 00:10 the next day') }], tm.start);
+          var hours = h('input', { type: 'number', min: '0', step: '0.5', value: String(tm.hours) });
+          b.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Price in points'), price), ui.field(t('Description'), desc),
+            h('div', { class: 'grid-2 grid-align-start' }, ui.field(t('In effect'), start), ui.field(t('Duration (hours)'), hours, t('0 for a one-off bonus.')))));
           b.appendChild(h('div', { class: 'actions' },
             i != null ? h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () { items.splice(i, 1); store.setSetting('shop', items); api.close(); } }, t('Delete')) : null,
             h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
             h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
-              var row = { name: name.value.trim(), price: Math.max(0, parseInt(price.value, 10) || 0), description: desc.value.trim() }; if (!row.name) return name.focus();
+              var row = { name: name.value.trim(), price: Math.max(0, parseInt(price.value, 10) || 0), description: desc.value.trim(), start: start.value, hours: Math.max(0, parseFloat(hours.value) || 0) }; if (!row.name) return name.focus();
               if (i == null) items.push(row); else items[i] = row; store.setSetting('shop', items); api.close();
             } }, t('Save'))));
         } });
@@ -202,12 +206,30 @@
         if (round) st.players.forEach(function (p) { if (p.is_ally && !dead.has(p.id)) { var k = L.resolveHunter(st, round.id, p.id).id; if (k) hunters.add(k); } });
         var rivals = st.players.filter(function (p) { return !dead.has(p.id) && !p.is_ally; });
         ui.clear(root);
+        /* Bonuses bought and still to come or in effect, then the history */
+        var edit = store.canEdit(), cur = L.currentBonuses(st), past = (st.bonuses || []).filter(function (b) { return cur.indexOf(b) < 0; }).sort(function (a, b) { return new Date(b.bought_at) - new Date(a.bought_at); });
+        function bonusRow(b) {
+          var p = store.player(b.player_id);
+          return h('div', { class: 'row bonus-row' }, p ? ui.avatar(p, 'sm') : null,
+            h('button', { type: 'button', class: 'row-main linkish-row', onclick: function () { if (p) K.actions.openPlayer(p.id); } }, h('span', { class: 'row-title' }, p ? p.name : '?'),
+              h('span', { class: 'bonus-line' }, ui.bonusTag(b, true)),
+              h('span', { class: 'row-sub' }, t('bought {date}', { date: ui.whenShort(b.bought_at) }) + (b.note ? ' · ' + b.note : ''))),
+            edit ? h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('Remove this purchase'), onclick: function () { K.actions.removeBonus(b); } }, K.icon('close')) : null);
+        }
+        var active = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Bonuses in play'), h('small', { class: 'muted' }, ' ' + cur.length)),
+          h('span', { class: 'muted small' }, t('Record a purchase from the bonus below.'))));
+        if (!cur.length) active.appendChild(h('p', { class: 'empty' }, t('No bonus in effect or to come.')));
+        cur.forEach(function (b) { active.appendChild(bonusRow(b)); });
+        if (past.length) active.appendChild(h('details', { class: 'bonus-history' }, h('summary', {}, K.icon('chevron', 'ic-sm'), t('History ({n})', { n: past.length })), past.slice(0, 40).map(bonusRow)));
+        root.appendChild(active);
         var cols = root.appendChild(h('div', { class: 'cols-shop' }));
         var items = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Bonuses')), admin ? h('button', { type: 'button', class: 'btn', onclick: function () { editItem(null); } }, K.icon('plus'), t('Add a bonus')) : null));
         (s.shop || []).forEach(function (it, i) {
           var can = rivals.filter(function (p) { return (p.points || 0) >= it.price; }).sort(function (a, b) { return hunters.has(b.id) - hunters.has(a.id) || b.points - a.points; });
           items.appendChild(h('article', { class: 'shop-item' },
             h('div', { class: 'shop-head' }, h('h3', {}, it.name), h('span', { class: 'price' }, K.n(it.price, '{n} pt', '{n} pts')), admin ? h('button', { type: 'button', class: 'linkish', onclick: function () { editItem(i); } }, t('Edit')) : null),
+            h('p', { class: 'muted small' }, (function () { var tm = L.bonusTiming(it); return (tm.start === 'next_day' ? t('From 00:10 the next day') : t('Immediately')) + ' · ' + (tm.hours ? K.n(tm.hours, '{n} hour', '{n} hours') : t('one-off')); })()),
+            edit ? h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.recordBonus(it); } }, K.icon('plus'), t('Record a purchase')) : null,
             h('details', { class: 'desc' }, h('summary', {}, K.icon('chevron', 'ic-sm'), t('What it does')), h('p', { class: 'prose' }, it.description)),
             h('p', { class: 'small' }, can.length ? h('span', { class: 'muted' }, K.n(can.length, '{n} rival can afford it: ', '{n} rivals can afford it: ')) : h('span', { class: 'muted' }, t('No known rival has enough points.')),
               can.slice(0, 8).map(function (p, j) { return [j ? ', ' : '', h('button', { type: 'button', class: 'linkish' + (hunters.has(p.id) ? ' threat' : ''), onclick: function () { K.actions.openPlayer(p.id); } }, p.name + ' (' + p.points + ')')]; }))));

@@ -267,6 +267,20 @@
     });
     return box;
   };
+  /* A bought bonus: "Immunité · until Tue 00:10" when in effect, "from Tue 00:10" when still to come. */
+  ui.whenShort = function (d) { return shortDate(new Date(d)) + ' ' + hm(new Date(d)); };
+  ui.bonusTag = function (b, small) {
+    var st = K.logic.bonusStatus(b), now = new Date(), s = new Date(b.starts_at), e = b.ends_at && new Date(b.ends_at);
+    var label = st === 'active' ? (sameDay(e, now) ? t('until {time}', { time: hm(e) }) : t('until {date}', { date: ui.whenShort(e) }))
+      : st === 'upcoming' ? (sameDay(s, now) ? t('at {time}', { time: hm(s) }) : sameDay(s, dayStart(now, 1)) ? t('tomorrow at {time}', { time: hm(s) }) : t('from {date}', { date: ui.whenShort(s) }))
+      : t('used');
+    return h('span', { class: 'tag tag-bonus tag-bonus-' + st + (small ? ' tag-sm' : ''), title: b.name + ' · ' + label }, b.name, h('span', { class: 'tag-bonus-when' }, ' · ' + label));
+  };
+  /* Bonuses of a player still to come or in effect (nothing when there are none). */
+  ui.bonusTags = function (p, small) {
+    var list = p ? K.logic.currentBonuses(K.store.state, p.id) : [];
+    return list.length ? h('span', { class: 'tags bonus-tags' }, list.map(function (b) { return ui.bonusTag(b, small); })) : null;
+  };
   ui.weekDialog = function (p, events) {
     var today = new Date(), monday = dayStart(today, -K.logic.parisParts(today).wd);   // Monday 00:00, Paris time
     ui.dialog({ title: t('Timetable of {name}', { name: p.name }), render: function (body) {
@@ -314,10 +328,15 @@
             var q = L.norm(input.value);
             ui.clear(list);
             (opts.extra || []).forEach(function (x) { list.appendChild(h('button', { type: 'button', class: 'row row-btn', onclick: function () { choose(x.value); } }, h('span', { class: 'row-main muted' }, x.label))); });
+            // opts.prefer(p): players listed first (e.g. the alliance), then the others under a heading
+            var dead = L.deadSet(K.store.state), first = function (p) { return opts.prefer && opts.prefer(p) ? 0 : 1; };
             var pool = K.store.state.players.filter(function (p) { return (!opts.filter || opts.filter(p)) && (!q || L.norm(p.name).indexOf(q) >= 0); })
-              .sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', K.i18n.lang); });
-            pool.slice(0, 60).forEach(function (p) {
-              list.appendChild(h('button', { type: 'button', class: 'row row-btn', onclick: function () { choose(p.id); } }, ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, p.name), ui.yearTag(p)));
+              .sort(function (a, b) { return first(a) - first(b) || (a.name || '').localeCompare(b.name || '', K.i18n.lang); });
+            pool.slice(0, 60).forEach(function (p, i) {
+              if (opts.prefer && i && first(p) !== first(pool[i - 1])) list.appendChild(h('p', { class: 'pick-sep muted small' }, opts.otherLabel || t('Other players')));
+              var isDead = dead.has(p.id);
+              list.appendChild(h('button', { type: 'button', class: 'row row-btn' + (isDead ? ' is-dead' : ''), onclick: function () { choose(p.id); } }, ui.avatar(p, 'sm'),
+                h('span', { class: 'row-main' }, p.name), isDead ? h('span', { class: 'tag tag-dead' }, t('Dead')) : null, ui.yearTag(p)));
             });
             if (!pool.length) list.appendChild(h('p', { class: 'empty' }, t('No match. Check the spelling or add the player from the Players tab.')));
             else if (pool.length > 60) list.appendChild(h('p', { class: 'empty' }, t('{n} more: narrow the search.', { n: pool.length - 60 })));

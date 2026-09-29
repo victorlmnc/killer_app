@@ -441,9 +441,10 @@
     kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', points: 0, admin_reason: '', note: '', killer_weapons: null, happened_at: NOW },
     weapons: { name: '', difficulty: 'facile', owned: false, note: '' },
     events: { text: '', actor: '', details: {}, created_at: NOW },
-    spots: { name: '', note: '', address: '', lat: 0, lng: 0, created_at: NOW }
+    spots: { name: '', note: '', address: '', lat: 0, lng: 0, created_at: NOW },
+    bonuses: { player_id: null, name: '', price: 0, bought_at: NOW, starts_at: NOW, ends_at: NOW, note: '', created_at: NOW }
   };
-  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1 };   // empty -> null rather than the default
+  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1, ends_at: 1 };   // empty -> null rather than the default
   var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile'], admin_reason: ['cheating', 'other'], status: ['', 'dangerous', 'priority'] };
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -486,6 +487,7 @@
     data.links = data.links.map(function (l) { l.round_id = ref(l.round_id, 'rounds'); l.hunter_id = ref(l.hunter_id, 'players'); l.target_id = ref(l.target_id, 'players'); return l; })
       .filter(function (l) { return l.round_id && l.hunter_id && l.target_id && l.hunter_id !== l.target_id; });
     var victims = new Set();
+    data.bonuses = data.bonuses.map(function (b) { b.player_id = ref(b.player_id, 'players'); return b; }).filter(function (b) { return b.player_id; });
     data.kills = data.kills.map(function (k) { k.round_id = ref(k.round_id, 'rounds'); k.killer_id = ref(k.killer_id, 'players'); k.victim_id = ref(k.victim_id, 'players'); return k; })
       .filter(function (k) { return k.victim_id && !victims.has(k.victim_id) && victims.add(k.victim_id); });
     data.events.forEach(function (e) {
@@ -674,6 +676,36 @@
     return { current: current, next: next };
   }
 
+  /* ---------- Shop bonuses ----------
+     Timing of a shop item: start 'now' or 'next_day' (00:10 the day after purchase, Paris time) and a duration in
+     hours (0 = one-off, like a reveal). Items saved before these fields existed get them from their description. */
+  function bonusTiming(item) {
+    item = item || {};
+    var d = String(item.description || '');
+    var start = item.start || (/00[:h]10|day after|lendemain/i.test(d) ? 'next_day' : 'now');
+    var hours = item.hours != null && item.hours !== '' ? +item.hours : null;
+    if (hours == null || isNaN(hours)) { var m = /(\d+)\s*(?:hours?|heures?|h\b)/i.exec(d); hours = m ? +m[1] : 0; }
+    return { start: start === 'next_day' ? 'next_day' : 'now', hours: Math.max(0, hours) };
+  }
+  /* -> { starts, ends } (ends null for a one-off) for an item bought at boughtAt. */
+  function bonusWindow(item, boughtAt) {
+    var tm = bonusTiming(item), bought = new Date(boughtAt || Date.now()), starts = bought;
+    if (tm.start === 'next_day') { var p = parisParts(bought); starts = parisDate(p.y, p.m, p.d + 1, 0, 10); }
+    return { starts: starts, ends: tm.hours ? new Date(+starts + tm.hours * 3600e3) : null };
+  }
+  /* 'upcoming', 'active', 'over' (a one-off is over as soon as it is used) */
+  function bonusStatus(b, now) {
+    now = +(now || new Date());
+    var s = +new Date(b.starts_at), e = b.ends_at ? +new Date(b.ends_at) : null;
+    if (now < s) return 'upcoming';
+    return e && now < e ? 'active' : 'over';
+  }
+  /* Bonuses of a player (or of everyone) still to come or in effect, soonest first. */
+  function currentBonuses(state, playerId, now) {
+    return (state.bonuses || []).filter(function (b) { return (!playerId || b.player_id === playerId) && bonusStatus(b, now) !== 'over'; })
+      .sort(function (a, b) { return new Date(a.starts_at) - new Date(b.starts_at); });
+  }
+
   /* ---------- Map ---------- */
   // Housing types, most collective first: a shared marker takes the most collective type.
   var ADDRESS_TYPES = [
@@ -712,7 +744,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });
