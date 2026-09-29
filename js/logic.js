@@ -706,6 +706,63 @@
       .sort(function (a, b) { return new Date(a.starts_at) - new Date(b.starts_at); });
   }
 
+  /* ---------- Danger alerts ----------
+     What threatens the alliance right now, from what the app already knows: an ally's known hunter holding a
+     Coupe-Gorge, marked dangerous, or rich enough to buy the strongest bonus; an ally's target that is immune.
+     -> [{ level: 'high'|'warn'|'info', kind, allyId, otherId, bonus }] most serious first. */
+  function dangerAlerts(state, now) {
+    now = now || new Date();
+    var round = currentRound(state), out = [];
+    if (!round) return out;
+    var dead = deadSet(state), maps = linkMaps(state, round.id);
+    var shop = (state.settings && state.settings.shop) || [];
+    var richestItem = shop.filter(function (i) { return /coupe/i.test(i.name); }).sort(function (a, b) { return (b.price || 0) - (a.price || 0); })[0], richest = richestItem ? richestItem.price || 0 : 0;
+    function bonusesOf(id, re) { return currentBonuses(state, id, now).filter(function (b) { return re.test(b.name); }); }
+    state.players.forEach(function (ally) {
+      if (!ally.is_ally || dead.has(ally.id)) return;
+      var hunter = resolveHunter(state, round.id, ally.id, maps, dead).id, h = hunter && state.players.find(function (p) { return p.id === hunter; });
+      if (h && !h.is_ally) {
+        bonusesOf(h.id, /coupe/i).forEach(function (b) { out.push({ level: bonusStatus(b, now) === 'active' ? 'high' : 'warn', kind: 'cutthroat', allyId: ally.id, otherId: h.id, bonus: b }); });
+        if (h.status === 'dangerous') out.push({ level: 'warn', kind: 'dangerous', allyId: ally.id, otherId: h.id });
+        if (richest && (h.points || 0) >= richest && !bonusesOf(h.id, /coupe/i).length) out.push({ level: 'warn', kind: 'rich', allyId: ally.id, otherId: h.id, points: h.points, price: richest, item: richestItem.name });
+      }
+      var target = resolveTarget(state, round.id, ally.id, maps, dead).id;
+      if (target) bonusesOf(target, /immun/i).forEach(function (b) { out.push({ level: 'info', kind: 'immune', allyId: ally.id, otherId: target, bonus: b }); });
+    });
+    var rank = { high: 0, warn: 1, info: 2 };
+    return out.sort(function (a, b) { return rank[a.level] - rank[b.level]; });
+  }
+
+  /* ---------- Moments to catch a target ----------
+     From the target's timetable (and mine, when my account is linked to my sheet): when they come out of a
+     class or go into one, while I am not in the middle of a class myself (between classes counts: corridors). Same building as my previous or next class ranks first.
+     -> [{ at, kind: 'leaves'|'arrives', where, event, near }] soonest first, weekdays 7:00-20:00 Paris time. */
+  function building(location) { var m = /^[A-Za-zÀ-ÿ]+\d?/.exec(String(location || '').trim()); return m ? m[0].toUpperCase() : ''; }   // building and floor: "SA2.04" -> "SA2"
+  function killWindows(targetEvents, myEvents, from, days) {
+    from = from || new Date(); days = days || 7;
+    var until = +from + days * 864e5, mine = (myEvents || []).filter(function (e) { return !e.allDay && !e.cancelled; });
+    function busy(t) { return mine.some(function (e) { return +e.start + 5 * 6e4 < t && t < +e.end - 5 * 6e4; }); }   // in the middle of one of my classes; between two, I am in the corridors too
+    function nearby(t) {   // the building of my class just before or just after
+      var before = mine.filter(function (e) { return +e.end <= t && t - e.end <= 90 * 6e4; }).pop(), after = mine.filter(function (e) { return +e.start >= t && e.start - t <= 90 * 6e4; })[0];
+      return [before, after].filter(Boolean).map(function (e) { return building(e.location); });
+    }
+    var out = [];
+    (targetEvents || []).forEach(function (e) {
+      if (e.allDay || e.cancelled) return;
+      [['arrives', +e.start], ['leaves', +e.end]].forEach(function (x) {
+        var t = x[1], p = parisParts(new Date(t));
+        if (t < +from || t > until || p.wd > 4 || p.hh < 7 || p.hh >= 20 || busy(t)) return;
+        var b = building(e.location);
+        out.push({ at: new Date(t), kind: x[0], where: e.location || '', event: e, near: !!b && nearby(t).indexOf(b) >= 0 });
+      });
+    });
+    // a class followed by another in the same room is one stay, not two chances
+    out = out.filter(function (w) {
+      return !(targetEvents || []).some(function (e) { return e !== w.event && !e.allDay && e.location === w.where && (w.kind === 'leaves' ? Math.abs(e.start - w.at) < 20 * 6e4 : Math.abs(e.end - w.at) < 20 * 6e4); });
+    });
+    return out.sort(function (a, b) { return a.at - b.at; });
+  }
+
   /* ---------- Map ---------- */
   // Housing types, most collective first: a shared marker takes the most collective type.
   var ADDRESS_TYPES = [
@@ -744,7 +801,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

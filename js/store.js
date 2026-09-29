@@ -20,8 +20,8 @@
   };
 
   /* ----- permissions ----- */
-  store.isAdmin = function () { return store.role === 'admin'; };
-  store.canEdit = function () { return store.role === 'admin' || store.role === 'member'; };
+  store.isAdmin = function () { return store.role === 'admin' && !store.offline; };
+  store.canEdit = function () { return (store.role === 'admin' || store.role === 'member') && !store.offline; };   // offline copy: read-only
   store.me = function () {
     var email = String((store.user && store.user.email) || '').toLowerCase();
     return store.state.members.find(function (m) { return String(m.email).toLowerCase() === email; }) || null;
@@ -179,6 +179,7 @@
 
   /* ----- timetables: iCal layers (settings.calendars), fetched through the "edt" edge function ----- */
   var calendars = new Map(), CALENDAR_TTL = 30 * 6e4;
+  function hashString(str) { var h = 5381; for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
   store.calendarsFor = function (p) { return K.logic.calendarsFor(p, store.state.settings.calendars); };
   /* One link -> { name, events } (cached 30 min, shared by every player of that layer). */
   store.calendar = function (url) {
@@ -190,6 +191,15 @@
           return res.data;
         })
       : fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });   // demo: works only if the server allows it
+    var key = 'killer.cal.' + hashString(url);
+    job = job.then(function (text) {
+      if (store.mode === 'supabase' && typeof text === 'string') { try { localStorage.setItem(key, text); } catch (e) { /* quota */ } }
+      return text;
+    }, function (err) {   // offline: the last copy of that timetable, if any
+      var kept = null; try { kept = localStorage.getItem(key); } catch (e) { /* none */ }
+      if (kept) return kept;
+      throw err;
+    });
     var promise = job.then(function (text) { text = typeof text === 'string' ? text : ''; return { name: K.logic.icsCalendarName(text), events: K.logic.parseIcs(text) }; });
     promise.catch(function () { calendars.delete(url); });   // failures are retried next time
     calendars.set(url, { at: Date.now(), promise: promise });
@@ -325,6 +335,14 @@
   };
   store.resetDemo = function () { return local.reset().then(store.emit); };
 
+  /* ----- nightly backups (supabase/schema.sql: game_backups, take_backup, pg_cron) ----- */
+  store.nightly = {
+    available: function () { return store.mode === 'supabase' && store.isAdmin(); },
+    list: function () { return sb.from('game_backups').select('id, taken_at').order('taken_at', { ascending: false }).limit(30).then(check); },
+    get: function (id) { return sb.from('game_backups').select('data').eq('id', id).single().then(check).then(function (row) { return row.data; }); },
+    take: function () { return sb.rpc('take_backup').then(check); }
+  };
+
   /* ----- full backup: the whole game in one file, photos embedded as data URLs ----- */
   function blobToDataUrl(blob) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = rej; r.readAsDataURL(blob); }); }
   function inBatches(items, size, fn) {
@@ -418,18 +436,44 @@
   }
 
   /* Boot. handlers = { onSignedOut, onNotMember, onReady, onRecovery, onError } */
+  /* ----- offline copy: the last data loaded, kept on this device to open the app without a connection ----- */
+  var CACHE_KEY = 'killer.cache.v1', cacheTimer = null;
+  function saveCache() {
+    clearTimeout(cacheTimer);
+    cacheTimer = setTimeout(function () {
+      if (store.mode !== 'supabase' || store.offline || !store.user || !store.role) return;
+      var copy = { at: Date.now(), email: String(store.user.email || '').toLowerCase(), role: store.role, state: {} };
+      TABLES.concat(['members', 'settings']).forEach(function (t) { copy.state[t] = store.state[t]; });
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(copy)); } catch (e) { /* quota: no offline copy */ }
+    }, 2000);
+  }
+  function dropCache() { try { localStorage.removeItem(CACHE_KEY); Object.keys(localStorage).filter(function (k) { return k.indexOf('killer.cal.') === 0; }).forEach(function (k) { localStorage.removeItem(k); }); } catch (e) { /* ignore */ } }
+  /* Opens the offline copy (read-only) when it belongs to that account (any account when email is null). */
+  function offlineStart(email, handlers) {
+    var c = null;
+    try { c = JSON.parse(localStorage.getItem(CACHE_KEY)); } catch (e) { /* none */ }
+    if (!c || !c.state || (email && c.email !== String(email).toLowerCase())) return false;
+    TABLES.concat(['members']).forEach(function (t) { store.state[t] = c.state[t] || []; });
+    store.state.settings = withDefaults(c.state.settings);
+    store.user = store.user || { email: c.email }; store.role = c.role; store.offline = { at: c.at };
+    handlers.onReady();
+    return true;
+  }
   store.boot = function (handlers) {
     var cfg = window.KILLER_CONFIG || {};
     if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) { store.mode = 'local'; return local.init().then(handlers.onReady); }
     store.mode = 'supabase';
     var ready = window.supabase ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
-    return ready.then(function () {
+    ready = ready.catch(function (err) { if (offlineStart(null, handlers)) return 'offline'; throw err; });   // no network, no library
+    return ready.then(function (state) {
+      if (state === 'offline') return;
       sb = store.client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
       var started = false;
       function enter(session) {
         store.user = session ? session.user : null;
         if (!session) {
-          started = false; signed.clear(); store.role = null;
+          if (!navigator.onLine && offlineStart(null, handlers)) return;   // the session could not be refreshed without a connection
+          started = false; signed.clear(); store.role = null; dropCache();
           TABLES.concat(['members']).forEach(function (t) { store.state[t] = []; });
           return handlers.onSignedOut();
         }
@@ -437,8 +481,12 @@
         return sb.rpc('my_role').then(check).then(function (role) {
           store.role = ROLES.indexOf(role) >= 0 ? role : null;
           if (!store.role) return handlers.onNotMember();
-          return supa.loadAll().then(function () { supa.subscribe(); handlers.onReady(); });
-        }).catch(function (err) { started = false; console.error(err); handlers.onError(err); });
+          return supa.loadAll().then(function () { supa.subscribe(); store.on(saveCache); saveCache(); handlers.onReady(); });
+        }).catch(function (err) {
+          started = false; console.error(err);
+          if (offlineStart(session.user.email, handlers)) return;   // no connection: last copy, read-only
+          handlers.onError(err);
+        });
       }
       sb.auth.onAuthStateChange(function (event, session) {
         if (event === 'PASSWORD_RECOVERY') return handlers.onRecovery();

@@ -262,6 +262,35 @@
         return Promise.all(jobs).then(function () { store.log(t('Kill undone: {name} is alive again', { name: name(playerId) })); });
       });
   };
+  /* --------------------------------------------------- when to catch a target */
+  /* The coming week's moments when the target comes out of a class or goes into one, while I am not in the middle
+     of one (my timetable counts when my account is linked to my sheet). Same building as my class first. */
+  act.catchDialog = function (targetId) {
+    var target = store.player(targetId); if (!target) return;
+    var me = store.myPlayer();
+    ui.dialog({ title: t('When to catch {name}', { name: target.name }), render: function (body) {
+      body.appendChild(h('p', { class: 'muted small' }, me && me.id !== target.id ? t('Moments when {name} comes out of a class or goes into one while you are not in the middle of one, over the next 7 days (Paris time).', { name: target.name })
+        : t('Moments when {name} comes out of a class or goes into one, over the next 7 days (Paris time). Link your account to your sheet to take your own timetable into account.', { name: target.name })));
+      var box = body.appendChild(h('div', { class: 'stack-tight' }, h('p', { class: 'muted small' }, t('Loading the timetable…'))));
+      var mine = me && me.id !== target.id && store.calendarsFor(me).length ? store.playerEvents(me).then(function (r) { return r.events; }, function () { return []; }) : Promise.resolve([]);
+      Promise.all([store.playerEvents(target), mine]).then(function (res) {
+        var list = L.killWindows(res[0].events, res[1], new Date(), 7);
+        ui.clear(box);
+        if (!list.length) return box.appendChild(h('p', { class: 'empty' }, t('No moment found in the coming week.')));
+        var day = '';
+        list.forEach(function (w) {
+          var key = L.parisDay(w.at);
+          if (key !== day) { day = key; box.appendChild(h('h3', { class: 'week-day' }, ui.dayLabel(w.at))); }
+          box.appendChild(h('div', { class: 'catch-row' + (w.near ? ' is-near' : '') },
+            h('span', { class: 'week-time' }, ui.hm(w.at)),
+            h('span', {}, h('strong', {}, w.kind === 'leaves' ? t('comes out of class') : t('goes to class')), w.where ? ' · ' + w.where : '',
+              h('span', { class: 'muted small week-desc' }, w.event.subject || w.event.summary || '')),
+            w.near ? h('span', { class: 'tag tag-near' }, t('near you')) : null));
+        });
+      }, function (err) { ui.clear(box).appendChild(h('p', { class: 'muted small' }, t('Timetable unavailable: {err}', { err: err.message || err }))); });
+    } });
+  };
+
   /* ------------------------------------------------------------ shop bonuses */
   /* Record that a player bought a shop item: when it takes effect and until when (from the item's timing,
      adjustable), and optionally take the price off their points. */
@@ -776,6 +805,44 @@
         }
       }
     });
+  };
+  /* Nightly copies of the game kept by the database (14 days): download one, restore one, or take one now. */
+  act.nightlyDialog = function () {
+    if (!store.nightly.available()) return;
+    ui.dialog({ title: t('Automatic backups'), render: function (body, api) {
+      var list = h('div', { class: 'stack-tight' });
+      body.appendChild(h('p', { class: 'prose muted small' }, t('The database keeps a copy of the whole game every night, for 14 days (photos stay in storage). Useful after a mistake.')));
+      body.appendChild(list);
+      body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: function (e) {
+        e.target.disabled = true;
+        store.nightly.take().then(function () { ui.toast(t('Backup taken.')); draw(); }, function (err) { ui.toast(err.message || String(err), 'error'); }).then(function () { e.target.disabled = false; });
+      } }, t('Take one now')), h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Close'))));
+      function draw() {
+        ui.clear(list).appendChild(h('p', { class: 'muted small' }, t('Loading…')));
+        store.nightly.list().then(function (rows) {
+          ui.clear(list);
+          if (!rows || !rows.length) return list.appendChild(h('p', { class: 'empty' }, t('No automatic backup yet: the first one is taken tonight (see the README if it never comes).')));
+          rows.forEach(function (r) {
+            list.appendChild(h('div', { class: 'row row-wrap backup-row' }, h('span', { class: 'row-main' }, ui.when(r.taken_at)),
+              h('button', { type: 'button', class: 'btn', onclick: function () {
+                store.nightly.get(r.id).then(function (data) { ui.download('killer-' + String(r.taken_at).slice(0, 10) + '.json', JSON.stringify(data), 'application/json'); });
+              } }, K.icon('download'), t('Download')),
+              h('button', { type: 'button', class: 'btn btn-danger', onclick: function () { store.nightly.get(r.id).then(function (data) { restoreFrom(data, ui.when(r.taken_at)); }); } }, t('Restore this backup'))));
+          });
+        }, function (err) { ui.clear(list).appendChild(h('p', { class: 'muted small' }, t('Unavailable: {err} (run supabase/schema.sql again).', { err: err.message || err }))); });
+      }
+      function restoreFrom(data, label) {
+        var res = L.readBackup(data, { uuid: store.uuid });
+        if (res.error) return ui.toast(t(res.error), 'error');
+        ui.confirm({ title: t('Restore the backup of {when}?', { when: label }), text: [t('The {n} current sheets, their photos, the chains, kills and log will be deleted for the whole team.', { n: store.state.players.length }),
+          t('{p} players, {k} kills, {l} links in this backup.', { p: res.data.players.length, k: res.data.kills.length, l: res.data.links.length })], action: t('Replace the game'), danger: true })
+          .then(function (ok) {
+            if (!ok) return;
+            store.restore(res.data, { catalogue: true }).then(function (done) { if (done) { store.log(t('Automatic backup restored: {when}', { when: label })); api.close(); ui.toast(t('Game imported.')); } });
+          });
+      }
+      draw();
+    } });
   };
   /* Printable report in a new window: the browser's "Save as PDF" does the rest, no library needed. */
   act.exportPdf = function () {

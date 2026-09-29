@@ -219,6 +219,55 @@ drop trigger if exists protect_account on public.accounts;
 create trigger protect_account before update on public.accounts for each row execute function public.protect_account();
 
 -- ---------------------------------------------------------------------------
+-- Nightly backups: a copy of the whole game every night (pg_cron), kept 14 days, in the same format as
+-- "Save the game"; the administrator downloads or restores them from Settings. Photos stay in storage (paths kept).
+-- ---------------------------------------------------------------------------
+create table if not exists public.game_backups (
+  id       bigint generated always as identity primary key,
+  taken_at timestamptz not null default now(),
+  data     jsonb not null
+);
+alter table public.game_backups enable row level security;
+drop policy if exists "admin" on public.game_backups;
+create policy "admin" on public.game_backups for select to authenticated using (public.is_admin());
+
+create or replace function public.take_backup() returns bigint
+language plpgsql security definer set search_path = public as $$
+declare new_id bigint;
+begin
+  if auth.uid() is not null and not public.is_admin() then raise exception 'administrators only'; end if;   -- the nightly job has no user
+  insert into public.game_backups (data) select jsonb_build_object(
+    'format', 'killer-backup', 'version', 1, 'exported_at', now(), 'source', 'nightly',
+    'game_name', coalesce((select value #>> '{}' from public.settings where key = 'game_name'), ''),
+    'players', coalesce((select jsonb_agg(to_jsonb(x)) from public.players x), '[]'::jsonb),
+    'rounds',  coalesce((select jsonb_agg(to_jsonb(x)) from public.rounds x), '[]'::jsonb),
+    'links',   coalesce((select jsonb_agg(to_jsonb(x)) from public.links x), '[]'::jsonb),
+    'kills',   coalesce((select jsonb_agg(to_jsonb(x)) from public.kills x), '[]'::jsonb),
+    'weapons', coalesce((select jsonb_agg(to_jsonb(x)) from public.weapons x), '[]'::jsonb),
+    'events',  coalesce((select jsonb_agg(to_jsonb(x)) from public.events x), '[]'::jsonb),
+    'spots',   coalesce((select jsonb_agg(to_jsonb(x)) from public.spots x), '[]'::jsonb),
+    'bonuses', coalesce((select jsonb_agg(to_jsonb(x)) from public.bonuses x), '[]'::jsonb),
+    'settings', coalesce((select jsonb_object_agg(key, value) from public.settings), '{}'::jsonb))
+  returning id into new_id;
+  delete from public.game_backups where taken_at < now() - interval '14 days';
+  return new_id;
+end $$;
+revoke all on function public.take_backup() from public, anon;
+grant execute on function public.take_backup() to authenticated;
+
+do $$ begin
+  begin
+    create extension if not exists pg_cron;
+  exception when others then
+    raise notice 'pg_cron is not available: enable it under Database > Extensions, then run this script again';
+  end;
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.unschedule(jobid) from cron.job where jobname = 'killer-nightly-backup';
+    perform cron.schedule('killer-nightly-backup', '0 3 * * *', 'select public.take_backup()');   -- 03:00 UTC, 04:00/05:00 in Paris
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Photos: private bucket, served through short-lived signed URLs.
 -- Editors manage player photos; everyone manages their own avatar (avatars/<uid>.jpg or .gif).
 -- ---------------------------------------------------------------------------

@@ -141,6 +141,27 @@
           return;
         }
         var catalog = new Map(st.weapons.map(function (w) { return [L.norm(w.name), w]; }));
+        /* Pre-shot: for each living ally, the weapons of their target and whether we already have them */
+        var round = L.currentRound(st), plan = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Pre-shot')), h('span', { class: 'muted small' }, t('The weapons of our targets, and whether we have them.'))));
+        var toFind = 0, rows = 0;
+        st.players.filter(function (p) { return p.is_ally && !dead.has(p.id); }).sort(byName).forEach(function (ally) {
+          var tg = round && L.resolveTarget(st, round.id, ally.id).id, target = tg && store.player(tg);
+          if (!target) return;
+          rows++;
+          var ws = L.weaponList(target.weapons);
+          plan.appendChild(h('div', { class: 'preshot-row' },
+            h('p', { class: 'preshot-who' }, h('button', { type: 'button', class: 'linkish', onclick: function () { K.actions.openPlayer(ally.id); } }, ally.name), h('span', { class: 'muted' }, ' → '),
+              h('button', { type: 'button', class: 'linkish', onclick: function () { K.actions.openPlayer(target.id); } }, target.name)),
+            ws.length ? h('div', { class: 'preshot-weapons' }, ws.map(function (w) {
+              var c = catalog.get(L.norm(w)); if (!(c && c.owned)) toFind++;
+              return h('div', { class: 'preshot-weapon' }, ui.weaponTag(w, true),
+                c && c.owned ? h('span', { class: 'tag tag-owned tag-sm' }, '✓ ' + t('We have it')) : h('span', { class: 'tag tag-sm tag-tofind' }, t('To find')),
+                c && c.note ? h('span', { class: 'muted small' }, c.note) : null);
+            })) : h('p', { class: 'muted small' }, t('Weapons unknown: note them on the sheet of the target.'))));
+        });
+        if (!rows) plan.appendChild(h('p', { class: 'empty' }, t('No known target for the alliance yet.')));
+        else plan.querySelector('.panel-head').appendChild(h('span', { class: 'tag ' + (toFind ? 'tag-tofind' : 'tag-owned') }, toFind ? K.n(toFind, '{n} weapon to find', '{n} weapons to find') : t('Everything is ready')));
+        body.appendChild(plan);
         var inPlay = [];
         st.players.forEach(function (p) { if (!dead.has(p.id)) L.weaponList(p.weapons).forEach(function (w) { var c = catalog.get(L.norm(w)); inPlay.push({ name: w, holder: p, difficulty: c && c.difficulty, owned: !!(c && c.owned) }); }); });
         inPlay = inPlay.filter(function (w) { return !nq || L.norm(w.name).indexOf(nq) >= 0; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });

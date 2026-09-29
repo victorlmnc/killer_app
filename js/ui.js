@@ -230,6 +230,7 @@
   function hm(d) { return fmt(d, { hour: '2-digit', minute: '2-digit' }); }
   function dayLabel(d) { var s = fmt(d, { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1); }
   function sameDay(a, b) { return K.logic.parisDay(a) === K.logic.parisDay(b); }
+  ui.hm = function (d) { return hm(d); }; ui.dayLabel = function (d) { return dayLabel(d); };
   function dayStart(date, plusDays) { var p = K.logic.parisParts(date); return K.logic.parisDate(p.y, p.m, p.d + (plusDays || 0), 0, 0); }
   // HyperPlanning colours by kind of class: lecture (purple), TD (blue), TP (green), special event (orange)
   var KINDS = ['cm', 'td', 'tp', 'event'];
@@ -253,7 +254,7 @@
         p.year && K.store.isAdmin() ? [' ', h('a', { class: 'linkish', href: '#/settings' }, t('Add the links'))] : null);
     }
     var box = h('div', { class: 'sched' + (compact ? ' sched-compact' : '') }, h('span', { class: 'muted small' }, t('Loading the timetable…')));
-    K.store.playerEvents(p).then(function (res) {
+    function fill() { K.store.playerEvents(p).then(function (res) {
       if (!box.isConnected && box.parentNode) return;
       var events = res.events, now = new Date(), s = K.logic.scheduleAt(events, now);
       ui.clear(box);
@@ -261,11 +262,14 @@
       if (s.next && (!compact || !s.current)) box.appendChild(h('p', { class: 'sched-line' }, h('span', { class: 'sched-label' }, t('Next')), kindTag(s.next), classText(s.next), h('span', { class: 'muted' }, ' · ' + whenNext(s.next, now))));
       if (!s.current && !s.next) box.appendChild(h('p', { class: 'muted small' }, t('No upcoming class in this timetable.')));
       if (res.failed) box.appendChild(h('p', { class: 'muted small' }, K.n(res.failed, '{n} timetable could not be loaded.', '{n} timetables could not be loaded.')));
-      if (!compact) box.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { ui.weekDialog(p, events); } }, t('See the week')));
+      if (!compact) box.appendChild(h('div', { class: 'row row-wrap sched-actions' },
+        h('button', { type: 'button', class: 'linkish small', onclick: function () { ui.weekDialog(p, events); } }, t('See the week')),
+        !p.is_ally ? h('button', { type: 'button', class: 'linkish small', onclick: function () { K.actions.catchDialog(p.id); } }, t('When to catch them')) : null));
     }).catch(function (err) {
       ui.clear(box).appendChild(h('p', { class: 'muted small' }, t('Timetable unavailable: {err}', { err: err.message || err })));
-    });
-    return box;
+    }); }
+    fill();
+    return ui.live(box, fill);   // "now" and "next" follow the clock
   };
   /* A bought bonus: "Immunité · until Tue 00:10" when in effect, "from Tue 00:10" when still to come. */
   ui.whenShort = function (d) { return shortDate(new Date(d)) + ' ' + hm(new Date(d)); };
@@ -281,6 +285,18 @@
     var list = p ? K.logic.currentBonuses(K.store.state, p.id) : [];
     return list.length ? h('span', { class: 'tags bonus-tags' }, list.map(function (b) { return ui.bonusTag(b, small); })) : null;
   };
+  /* Things that change with the clock ("now", "until 12:22", bonuses starting or ending) are redrawn every minute:
+     live elements redraw themselves; when a bonus starts or ends, the whole screen is refreshed once. */
+  var live = [], bonusSignature = '';
+  ui.live = function (el, redraw) { live.push({ el: el, redraw: redraw }); return el; };
+  setInterval(function () {
+    if (document.hidden) return;
+    live = live.filter(function (x) { return x.el.isConnected; });
+    live.forEach(function (x) { try { x.redraw(); } catch (e) { console.error(e); } });
+    var sig = (K.store.state.bonuses || []).map(function (b) { return b.id + K.logic.bonusStatus(b); }).join();
+    if (bonusSignature && sig !== bonusSignature) K.store.emit();
+    bonusSignature = sig;
+  }, 60e3);
   ui.weekDialog = function (p, events) {
     var today = new Date(), monday = dayStart(today, -K.logic.parisParts(today).wd);   // Monday 00:00, Paris time
     ui.dialog({ title: t('Timetable of {name}', { name: p.name }), render: function (body) {

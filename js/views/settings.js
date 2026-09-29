@@ -194,6 +194,7 @@
             h('button', { type: 'button', class: 'btn', onclick: K.actions.exportPdf }, K.icon('print'), t('Report (print / PDF)')),
             h('button', { type: 'button', class: 'btn', onclick: K.actions.exportJson }, K.icon('download'), t('Save the game')),
             h('button', { type: 'button', class: 'btn', onclick: K.actions.restoreDialog }, K.icon('upload'), t('Import a saved game')),
+            store.nightly.available() ? h('button', { type: 'button', class: 'btn', onclick: K.actions.nightlyDialog }, t('Automatic backups')) : null,
             store.mode !== 'supabase' ? h('button', { type: 'button', class: 'btn', onclick: function () { store.resetDemo().then(function () { ui.toast(t('Demo game reloaded.')); }); } }, t('Reload the demo')) : null),
           h('h3', {}, t('Activity log')),
           h('p', { class: 'prose' }, t('Clears the "Latest activity" list on the dashboard ({n} entries). Kills, links and sheets are untouched.', { n: st.events.length })),

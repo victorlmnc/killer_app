@@ -476,3 +476,20 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .bonus-row { border-top: 1px solid var(--line); padding-block: .45rem; } .bonus-row:first-of-type { border-top: 0; }
 .linkish-row { appearance: none; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; padding: 0; }
 .bonus-history summary { cursor: pointer; color: var(--muted); font-size: .88rem; padding-block: .3rem; }
+/* dashboard alerts */
+.alerts { gap: .5rem; } .alert { margin: 0; display: flex; gap: .6rem; align-items: flex-start; padding: .55rem .7rem; border-radius: var(--radius-sm); background: var(--surface-2); line-height: 1.4; }
+.alert-icon { flex: none; width: 1.3rem; height: 1.3rem; border-radius: 50%; display: grid; place-items: center; font: 700 .75rem/1 var(--body); margin-top: .05rem; }
+.alert-high { box-shadow: inset 3px 0 0 var(--thread); } .alert-high .alert-icon { background: var(--thread); color: #fff; }
+.alert-warn { box-shadow: inset 3px 0 0 var(--brass); } .alert-warn .alert-icon { background: var(--brass); color: #000; }
+.alert-info { box-shadow: inset 3px 0 0 var(--muted); } .alert-info .alert-icon { background: var(--line-2); color: var(--ink); }
+/* when to catch a target */
+.catch-row { display: grid; grid-template-columns: 3.6rem 1fr auto; gap: .6rem; align-items: start; padding: .4rem .5rem; border-radius: var(--radius-sm); background: var(--surface-2); font-size: .9rem; }
+.catch-row.is-near { box-shadow: inset 3px 0 0 var(--alive); }
+.tag-near { color: var(--alive); background: color-mix(in srgb, var(--alive) 14%, var(--surface)); }
+.me-sched-head { padding: 0; } .sched-actions { gap: .4rem 1rem; padding: 0; }
+/* pre-shot planner */
+.preshot-row { border-top: 1px solid var(--line); padding-block: .5rem; display: grid; gap: .35rem; } .preshot-row:first-of-type { border-top: 0; }
+.preshot-who { margin: 0; font-weight: 600; } .preshot-weapons { display: grid; gap: .3rem; }
+.preshot-weapon { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.tag-tofind { color: var(--brass); background: color-mix(in srgb, var(--brass) 14%, var(--surface)); }
+.offline-bar { margin: -.4rem 0 1rem; padding: .55rem .8rem; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--brass) 16%, var(--surface)); color: var(--brass); box-shadow: inset 3px 0 0 var(--brass); font-size: .9rem; max-width: 1180px; }

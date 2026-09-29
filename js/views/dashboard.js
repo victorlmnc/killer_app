@@ -91,7 +91,25 @@
           h('button', { type: 'button', class: 'btn', onclick: function () { open(p.id); } }, t('My sheet')),
           !dead && store.canEdit() ? h('button', { type: 'button', class: 'btn btn-danger', onclick: function () { K.actions.killDialog(p.id); } }, t('I am dead')) : null)),
       dead ? null : h('div', { class: 'me-rels' }, who(t('My target'), target), who(t('My hunter'), hunter)),
-      targetPlayer ? h('div', { class: 'me-sched' }, h('span', { class: 'relation-label' }, t('Where is my target')), ui.schedule(targetPlayer, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.'))) : null);
+      targetPlayer ? h('div', { class: 'me-sched' }, h('div', { class: 'row me-sched-head' }, h('span', { class: 'relation-label row-main' }, t('Where is my target')),
+        store.calendarsFor(targetPlayer).length ? h('button', { type: 'button', class: 'linkish small', onclick: function () { K.actions.catchDialog(targetPlayer.id); } }, t('When to catch them')) : null), ui.schedule(targetPlayer, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.'))) : null);
+  }
+
+  /* What threatens the alliance right now (K.logic.dangerAlerts), most serious first; nothing when all is calm. */
+  function alertsPanel(st) {
+    var list = L.dangerAlerts(st);
+    if (!list.length) return null;
+    function who(id) { var p = store.player(id); return h('button', { type: 'button', class: 'linkish', onclick: function () { K.actions.openPlayer(id); } }, p ? p.name : '?'); }
+    function when(b) { return K.logic.bonusStatus(b) === 'active' ? t('until {date}', { date: ui.whenShort(b.ends_at) }) : t('from {date}', { date: ui.whenShort(b.starts_at) }); }
+    var ICON = { high: '!', warn: '!', info: 'i' };
+    return h('section', { class: 'panel alerts', role: 'status' }, h('h2', {}, t('Alerts'), h('small', { class: 'muted' }, ' ' + list.length)),
+      list.map(function (a) {
+        var text = a.kind === 'cutthroat' ? [who(a.otherId), ' ' + t('hunts') + ' ', who(a.allyId), ' ' + t('with a {bonus}', { bonus: a.bonus.name }) + ' ', h('span', { class: 'muted' }, when(a.bonus))]
+          : a.kind === 'dangerous' ? [who(a.allyId), ' ' + t('is hunted by') + ' ', who(a.otherId), ', ' + t('marked dangerous.')]
+          : a.kind === 'rich' ? [who(a.otherId), ' ' + t('({n} pts) hunts', { n: a.points }) + ' ', who(a.allyId), ' ' + t('and can afford a {bonus} ({price} pts).', { bonus: a.item, price: a.price })]
+          : [t('The target of') + ' ', who(a.allyId), ', ', who(a.otherId), ', ' + t('is immune') + ' ', h('span', { class: 'muted' }, when(a.bonus))];
+        return h('p', { class: 'alert alert-' + a.level }, h('span', { class: 'alert-icon', 'aria-hidden': 'true' }, ICON[a.level]), h('span', {}, text));
+      }));
   }
 
   K.views = K.views || {};
@@ -163,6 +181,8 @@
           return;
         }
         var official = Number(set.official_players) || 0, school = Number(set.school_total) || 0;
+        var alerts = alertsPanel(st);
+        if (alerts) root.appendChild(alerts);
         var mine = meBar(st, round);
         if (mine) root.appendChild(mine);
         root.appendChild(h('section', { class: 'panel hero' },

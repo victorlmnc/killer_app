@@ -25,6 +25,14 @@ screen and in the profile dialog.
   is several HyperPlanning layers stacked (whole year, department, TD, TP, language group, options); each layer
   is one iCal link, and each player gets every layer that matches their sheet. The dashboard shows where the
   alliance's targets are.
+- **When to catch them** – from a target's timetable (and yours, once your account is linked to your sheet): the
+  coming week's moments when they come out of a class or go into one while you are not in the middle of one, same
+  building and floor as you first.
+- **Alerts** – on the dashboard: an ally's hunter holding a Coupe-Gorge, marked dangerous or rich enough to buy one;
+  an ally's target that is immune.
+- **Shop bonuses** – record who bought what; the app works out when it takes effect and until when (e.g. immunity
+  from 00:10 the next day for 24 h) and shows it in the shop, on the sheets and on the dashboard.
+- **Pre-shot** – on the Weapons tab: the weapons of our targets, and whether we already have them.
 - **My sheet** – each account can be linked to its own player sheet: the dashboard then shows your target,
   your hunter, where your target is, and an "I am dead" button.
 - **Saved games** – the whole game in one JSON file (sheets, photos, rounds, links, kills, full log, catalogue,
@@ -37,7 +45,9 @@ screen and in the profile dialog.
 - **Roles** – *administrator* (everything, including settings and accounts), *member* (edits the game) and
   *observer* (read-only, on the tabs the administrator picks). Everyone manages their own name, photo and
   password from the profile button.
-- Realtime sync between teammates, phone-first layout, installable on the home screen (PWA).
+- Realtime sync between teammates, phone-first layout, installable on the home screen (PWA). Without a
+  connection the app opens the last copy of the data (and of the timetables) read-only.
+- Nightly backups kept 14 days by the database, downloadable and restorable from *Settings → Data*.
 
 ## Try it
 
@@ -74,6 +84,12 @@ The school's HyperPlanning serves iCal files without CORS headers, so they go th
 
 To accept another host, set the `EDT_HOSTS` secret of the function (comma-separated).
 
+### Nightly backups
+
+`supabase/schema.sql` schedules a copy of the whole game every night with the `pg_cron` extension. If the script
+reports that `pg_cron` is not available, enable it under *Database → Extensions* and run the script again.
+*Settings → Data → Automatic backups* lists the copies (14 days), downloads or restores one, or takes one now.
+
 ### Install on a phone
 
 Open the site, then *Share → Add to Home Screen* (iPhone, Safari) or *⋮ → Install app* (Android, Chrome).
@@ -99,6 +115,7 @@ signed URLs. Addresses are geocoded through a public geocoder that receives the 
 ```
 node tests/logic.test.js          # chain logic, import/export
 python3 tests/e2e/demo_flow.py    # browser flows (see tests/e2e/README.md)
+python3 tests/e2e/features.py     # timetables, bonuses, alerts, pre-shot, offline copy
 ```
 
 ```

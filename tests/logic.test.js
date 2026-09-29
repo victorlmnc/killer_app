@@ -312,6 +312,32 @@ t('shop bonuses: timing, window, status, backup', () => {
   assert.equal(r.data.bonuses.length, 1, 'a bonus of an unknown player is dropped'); assert.equal(r.data.bonuses[0].ends_at, null);
   assert.equal(r.data.bonuses[0].player_id, r.data.players.find(p => p.name === 'A').id, 'follows the player id');
 });
+t('danger alerts for the alliance', () => {
+  const s = base(); s.players[0].is_ally = true;                                   // a is ours
+  s.links = [link('r0', 'f', 'a'), link('r0', 'a', 'b')];                          // f hunts a, a hunts b
+  s.settings = { shop: [{ name: 'Super Coupe-Gorge', price: 8 }, { name: 'Coupe-Gorge', price: 6 }] };
+  const now = new Date('2026-09-29T10:00:00Z');
+  assert.deepEqual(L.dangerAlerts(s, now), []);
+  s.players[5].points = 9; assert.deepEqual(L.dangerAlerts(s, now).map(x => x.kind), ['rich'], 'the hunter can afford the strongest bonus');
+  s.bonuses = [{ player_id: 'f', name: 'Coupe-Gorge', starts_at: '2026-09-28T22:10:00Z', ends_at: '2026-09-29T22:10:00Z' },
+    { player_id: 'b', name: 'Immunité', starts_at: '2026-09-28T22:10:00Z', ends_at: '2026-09-29T22:10:00Z' }];
+  s.players[5].status = 'dangerous';
+  const a = L.dangerAlerts(s, now);
+  assert.deepEqual(a.map(x => x.level + ':' + x.kind), ['high:cutthroat', 'warn:dangerous', 'info:immune'], 'a bought cut-throat replaces the "rich" warning');
+  assert.equal(a[0].otherId, 'f'); assert.equal(a[2].otherId, 'b');
+});
+t('moments to catch a target', () => {
+  const at = (h, m) => new Date(Date.UTC(2026, 9, 5, h - 2, m));   // Monday 5 Oct 2026, Paris time (UTC+2)
+  const cls = (h1, m1, h2, m2, where) => ({ start: at(h1, m1), end: at(h2, m2), location: where });
+  const target = [cls(8, 0, 9, 20, 'SA2.04'), cls(9, 30, 10, 50, 'SA2.04'), cls(14, 0, 15, 20, 'SA1.01'), cls(21, 0, 22, 0, 'SA1.01')];
+  const mine = [cls(8, 0, 12, 0, 'SA2.10'), cls(15, 30, 16, 30, 'SA1.05')];
+  const w = L.killWindows(target, mine, at(7, 0), 1);
+  const show = x => L.parisParts(x.at).hh + ':' + String(L.parisParts(x.at).mi).padStart(2, '0') + ' ' + x.kind + (x.near ? ' near' : '');
+  assert.deepEqual(w.map(show), ['8:00 arrives near', '14:00 arrives near', '15:20 leaves near'],
+    'arriving at 8:00 like me counts (corridors); not while I am in the middle of a class (10:50), not the break between two classes in the same room, not after 20:00');
+  assert.equal(L.killWindows(target, [], at(7, 0), 1).length, 4, 'no timetable of mine: every arrival and exit before 20:00');
+  assert.equal(L.building('SA2.04'), 'SA2', 'building and floor'); assert.equal(L.building('SA1.01'), 'SA1'); assert.equal(L.building('Amphi Imperialis'), 'AMPHI');
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');

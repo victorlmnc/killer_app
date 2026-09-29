@@ -68,10 +68,11 @@
     var whoami = h('button', { type: 'button', class: 'whoami', title: t('My profile'), onclick: K.actions.profileDialog });
     var meTop = h('button', { type: 'button', class: 'me-top', 'aria-label': t('My profile'), onclick: K.actions.profileDialog });   // phone: the tab bar has no room left
     var main = h('main', { class: 'view', id: 'view', tabindex: '-1' });
+    var offlineBar = h('p', { class: 'offline-bar', role: 'status', hidden: true });   // no connection: the last copy, read-only
     app.appendChild(h('div', { class: 'shell' },
       h('aside', { class: 'side' }, brand('a', { href: '#/dashboard' }), game, nav, whoami, store.mode !== 'supabase' ? h('p', { class: 'demo-flag' }, t('Demo data, stored in this browser.')) : null),
-      h('div', { class: 'content' }, h('header', { class: 'topbar' }, h('div', { class: 'topbar-title' }, title, meTop), status), main)));
-    shell = { nav: nav, title: title, main: main, game: game, status: status, whoami: whoami, meTop: meTop };
+      h('div', { class: 'content' }, h('header', { class: 'topbar' }, h('div', { class: 'topbar-title' }, title, meTop), status), offlineBar, main)));
+    shell = { nav: nav, title: title, main: main, game: game, status: status, whoami: whoami, meTop: meTop, offlineBar: offlineBar };
   }
   function tabs() { return store.allowedTabs(NAV.map(function (n) { return n[0]; })); }
 
@@ -81,6 +82,9 @@
     var st = store.state, s = K.logic.stats(st), round = K.logic.currentRound(st), allowed = tabs();
     if (allowed.indexOf(current()) < 0 && allowed.length) { location.hash = '#/' + allowed[0]; return; }   // role changed under our feet
     shell.game.textContent = st.settings.game_name || '';
+    shell.offlineBar.hidden = !store.offline;
+    if (store.offline) ui.clear(shell.offlineBar).appendChild(h('span', {}, t('Offline: data from {when}, read-only.', { when: ui.when(new Date(store.offline.at).toISOString()) }), ' ',
+      h('button', { type: 'button', class: 'linkish', onclick: function () { location.reload(); } }, t('Retry'))));
     ui.clear(shell.nav);
     NAV.forEach(function (n) {
       if (allowed.indexOf(n[0]) < 0) return;
