@@ -488,6 +488,7 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .tag-near { color: var(--alive); background: color-mix(in srgb, var(--alive) 14%, var(--surface)); }
 .me-sched-head { padding: 0; } .sched-actions { gap: .4rem 1rem; padding: 0; }
 /* pre-shot planner */
+.preshot-box { margin-bottom: 1rem; } .preshot-box:empty { display: none; }
 .preshot-row { border-top: 1px solid var(--line); padding-block: .5rem; display: grid; gap: .35rem; } .preshot-row:first-of-type { border-top: 0; }
 .preshot-who { margin: 0; font-weight: 600; } .preshot-weapons { display: grid; gap: .3rem; }
 .preshot-weapon { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }

@@ -86,7 +86,8 @@
     render: function (root) {
       var q = '', stock = '';   // stock filter: '' all, 'owned', 'missing'
       var search = h('input', { type: 'search', placeholder: t('Search a weapon'), 'aria-label': t('Search a weapon'), oninput: function (e) { q = e.target.value; paint(); } });
-      var body = h('div', { class: 'stack-lg' });
+      var body = h('div', { class: 'stack-lg' }), preshot = h('div', { class: 'preshot-box' });   // pre-shot first, the search under it
+      root.appendChild(preshot);
       root.appendChild(h('div', { class: 'toolbar' }, search, store.canEdit() ? h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { edit(null); } }, K.icon('plus'), t('Add a weapon')) : null));
       root.appendChild(body);
       function edit(w, preset) {   // preset: name of a weapon seen in play but missing from the catalogue
@@ -134,7 +135,7 @@
       }
       function paint() {
         var st = store.state, dead = L.deadSet(st), nq = L.norm(q);
-        ui.clear(body);
+        ui.clear(body); ui.clear(preshot);
         if (!st.weapons.length) {
           body.appendChild(h('section', { class: 'panel panel-empty' }, h('h2', {}, t('Empty catalogue')), h('p', { class: 'prose' }, t('Load the {n} weapons seen in previous games, sorted easy or hard, or add your own.', { n: K.seed.weapons.length })),
             store.canEdit() ? h('div', { class: 'actions actions-start' }, h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { store.insertMany('weapons', K.seed.weapons.map(function (w) { return { name: w[0], difficulty: w[1] }; })); } }, t('Load the list'))) : null));
@@ -147,8 +148,13 @@
         st.players.filter(function (p) { return p.is_ally && !dead.has(p.id); }).sort(byName).forEach(function (ally) {
           var tg = round && L.resolveTarget(st, round.id, ally.id).id, target = tg && store.player(tg);
           if (!target || target.is_ally) return;   // no point gathering weapons against one of us
-          rows++;
           var ws = L.weaponList(target.weapons);
+          if (nq) {   // the search also filters the pre-shot: the weapon, or the names on the row
+            var byWho = L.norm(ally.name + ' ' + target.name).indexOf(nq) >= 0;
+            if (!byWho) ws = ws.filter(function (w) { return L.norm(w).indexOf(nq) >= 0; });
+            if (!byWho && !ws.length) return;
+          }
+          rows++;
           plan.appendChild(h('div', { class: 'preshot-row' },
             h('p', { class: 'preshot-who' }, h('button', { type: 'button', class: 'linkish', onclick: function () { K.actions.openPlayer(ally.id); } }, ally.name), h('span', { class: 'muted' }, ' → '),
               h('button', { type: 'button', class: 'linkish', onclick: function () { K.actions.openPlayer(target.id); } }, target.name)),
@@ -159,9 +165,9 @@
                 c && c.note ? h('span', { class: 'muted small' }, c.note) : null);
             })) : h('p', { class: 'muted small' }, t('Weapons unknown: note them on the sheet of the target.'))));
         });
-        if (!rows) plan.appendChild(h('p', { class: 'empty' }, t('No known target outside the alliance yet.')));
+        if (!rows) plan.appendChild(h('p', { class: 'empty' }, nq ? t('No weapon of our targets matches this search.') : t('No known target outside the alliance yet.')));
         else plan.querySelector('.panel-head').appendChild(h('span', { class: 'tag ' + (toFind ? 'tag-tofind' : 'tag-owned') }, toFind ? K.n(toFind, '{n} weapon to find', '{n} weapons to find') : t('Everything is ready')));
-        body.appendChild(plan);
+        preshot.appendChild(plan);
         var inPlay = [];
         st.players.forEach(function (p) { if (!dead.has(p.id)) L.weaponList(p.weapons).forEach(function (w) { var c = catalog.get(L.norm(w)); inPlay.push({ name: w, holder: p, difficulty: c && c.difficulty, owned: !!(c && c.owned) }); }); });
         inPlay = inPlay.filter(function (w) { return !nq || L.norm(w.name).indexOf(nq) >= 0; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });

@@ -338,6 +338,7 @@
   "No player outside the alliance.": "Aucun joueur hors alliance.",
   "No timetable applies to this player yet.": "Aucun emploi du temps ne s'applique encore à ce joueur.",
   "No upcoming class in this timetable.": "Aucun cours à venir dans cet emploi du temps.",
+  "No weapon of our targets matches this search.": "Aucune arme de nos cibles ne correspond à cette recherche.",
   "No year": "Sans année",
   "None (unlink)": "Aucune (délier)",
   "Now": "En cours",
