@@ -298,7 +298,14 @@ select:disabled { opacity: .6; }
 .week-nav { justify-content: space-between; } .week-nav .row-main { text-align: center; }
 .week-day { margin: .8rem 0 .3rem; font-family: var(--body); font-size: .9rem; font-weight: 600; color: var(--muted); } .week-day.is-today { color: var(--ink); }
 .week-class { display: grid; grid-template-columns: 6.5rem 1fr; gap: .6rem; padding: .35rem .5rem; border-radius: var(--radius-sm); background: var(--surface-2); font-size: .88rem; }
-.week-class.is-now { box-shadow: inset 3px 0 0 var(--alive); } .week-time { color: var(--muted); font-variant-numeric: tabular-nums; } .week-desc { display: block; white-space: pre-line; }
+/* kinds of class, HyperPlanning colours (background / stripe) */
+.kind-cm { --kind-bg: #bf94a9; --kind-edge: #a02e65; } .kind-td { --kind-bg: #84bed1; --kind-edge: #2f85d1; }
+.kind-tp { --kind-bg: #94bfb2; --kind-edge: #195a46; } .kind-event { --kind-bg: #e4c4c4; --kind-edge: #ed6566; }
+.week-class[class*="kind-"] { background: var(--kind-bg); color: #111; box-shadow: inset 5px 0 0 var(--kind-edge); padding-left: .8rem; }
+.week-class[class*="kind-"] .muted, .week-class[class*="kind-"] .week-time { color: rgba(0, 0, 0, .66); }
+.week-class.is-now { outline: 2px solid var(--alive); outline-offset: 2px; }
+.kind-tag { display: inline-block; padding: 0 .4rem; margin-right: .35rem; border-radius: 4px; font-size: .68rem; font-weight: 600; line-height: 1.35rem; vertical-align: .08em; color: #111; background: var(--kind-bg); box-shadow: inset 3px 0 0 var(--kind-edge); padding-left: .55rem; }
+.kind-legend { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .2rem; } .week-time { color: var(--muted); font-variant-numeric: tabular-nums; } .week-desc { display: block; white-space: pre-line; }
 .bubble.is-match { background: rgba(224, 180, 90, .2); } .bubble.is-dim { opacity: .3; } .bubble.is-moving { opacity: .3; }
 body.is-dragging, body.is-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 200; pointer-events: none; display: inline-flex; align-items: center; gap: .4rem; padding: .25rem .8rem .25rem .3rem; border-radius: 99px; background: var(--ink); color: var(--bg); font-weight: 600; font-size: .88rem; white-space: nowrap; }

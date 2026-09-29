@@ -228,6 +228,10 @@
   function dayLabel(d) { var s = fmt(d, { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1); }
   function sameDay(a, b) { return K.logic.parisDay(a) === K.logic.parisDay(b); }
   function dayStart(date, plusDays) { var p = K.logic.parisParts(date); return K.logic.parisDate(p.y, p.m, p.d + (plusDays || 0), 0, 0); }
+  // HyperPlanning colours by kind of class: lecture (purple), TD (blue), TP (green), special event (orange)
+  var KINDS = ['cm', 'td', 'tp', 'event'];
+  function kindLabel(k) { return { cm: t('Lecture'), td: 'TD', tp: 'TP', event: t('Event') }[k]; }
+  function kindTag(e) { var k = K.logic.classKind(e); return h('span', { class: 'kind-tag kind-' + k }, kindLabel(k)); }
   function classText(e) { return [e.subject || e.summary, e.location].filter(Boolean).join(' · '); }
   function shortDate(d) { return fmt(d, { weekday: 'short', day: 'numeric', month: 'short' }); }
   function whenNext(e, now) {
@@ -250,8 +254,8 @@
       if (!box.isConnected && box.parentNode) return;
       var events = res.events, now = new Date(), s = K.logic.scheduleAt(events, now);
       ui.clear(box);
-      if (s.current) box.appendChild(h('p', { class: 'sched-line sched-now' }, h('span', { class: 'sched-label' }, t('Now')), classText(s.current), h('span', { class: 'muted' }, ' · ' + (s.current.allDay ? t('until {date}', { date: shortDate(new Date(s.current.end - 1)) }) : t('until {time}', { time: hm(s.current.end) })))));
-      if (s.next && (!compact || !s.current)) box.appendChild(h('p', { class: 'sched-line' }, h('span', { class: 'sched-label' }, t('Next')), classText(s.next), h('span', { class: 'muted' }, ' · ' + whenNext(s.next, now))));
+      if (s.current) box.appendChild(h('p', { class: 'sched-line sched-now' }, h('span', { class: 'sched-label' }, t('Now')), kindTag(s.current), classText(s.current), h('span', { class: 'muted' }, ' · ' + (s.current.allDay ? t('until {date}', { date: shortDate(new Date(s.current.end - 1)) }) : t('until {time}', { time: hm(s.current.end) })))));
+      if (s.next && (!compact || !s.current)) box.appendChild(h('p', { class: 'sched-line' }, h('span', { class: 'sched-label' }, t('Next')), kindTag(s.next), classText(s.next), h('span', { class: 'muted' }, ' · ' + whenNext(s.next, now))));
       if (!s.current && !s.next) box.appendChild(h('p', { class: 'muted small' }, t('No upcoming class in this timetable.')));
       if (res.failed) box.appendChild(h('p', { class: 'muted small' }, K.n(res.failed, '{n} timetable could not be loaded.', '{n} timetables could not be loaded.')));
       if (!compact) box.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { ui.weekDialog(p, events); } }, t('See the week')));
@@ -271,6 +275,7 @@
           h('strong', { class: 'row-main' }, t('Week of {date}', { date: fmt(monday, { day: 'numeric', month: 'long' }) })),
           h('button', { type: 'button', class: 'btn', 'aria-label': t('Next week'), onclick: function () { monday = dayStart(monday, 7); draw(); } }, K.icon('chevron', 'ic-right')));
         body.appendChild(head);
+        body.appendChild(h('div', { class: 'kind-legend' }, KINDS.map(function (k) { return h('span', { class: 'kind-tag kind-' + k }, kindLabel(k)); })));
         var week = events.filter(function (e) { return e.end > monday && e.start < end; }), now = new Date();
         if (!week.length) body.appendChild(h('p', { class: 'empty' }, t('No class this week.')));
         for (var d = 0; d < 7; d++) {
@@ -280,7 +285,7 @@
           body.appendChild(h('h3', { class: 'week-day' + (sameDay(day, now) ? ' is-today' : '') }, dayLabel(day)));
           body.appendChild(h('div', { class: 'stack-tight' }, list.map(function (e) {
             var live = e.start <= now && now < e.end;
-            return h('div', { class: 'week-class' + (live ? ' is-now' : '') }, h('span', { class: 'week-time' }, e.allDay ? t('All day') : hm(e.start) + '–' + hm(e.end)),
+            return h('div', { class: 'week-class kind-' + K.logic.classKind(e) + (live ? ' is-now' : ''), title: kindLabel(K.logic.classKind(e)) }, h('span', { class: 'week-time' }, e.allDay ? t('All day') : hm(e.start) + '–' + hm(e.end)),
               h('span', {}, h('strong', {}, e.subject || e.summary || '—'), e.location ? h('span', { class: 'muted small' }, ' · ' + e.location) : null,
                 e.teacher ? h('span', { class: 'muted small week-desc' }, e.teacher) : e.subject ? null : e.description ? h('span', { class: 'muted small week-desc' }, e.description) : null));
           })));

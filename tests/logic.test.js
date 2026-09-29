@@ -285,6 +285,11 @@ t('timetable: a whole-promotion export keeps the groups of each player', () => {
   assert.equal(keep({ td: 'TD1', tp: 'TP1', lang_group: 'G1' }), 'abdegh', 'own TD, TP and language group, common classes; not the cancelled one');
   assert.equal(keep({ td: 'TD 2', tp: 'TP2', lang_group: 'G5' }), 'acdfh');
   assert.equal(L.isPromotionView(list), true, 'TD 1, TD 2, G1, G5, TP 1: the whole promotion');
+  const kind = uid => L.classKind(list.find(e => e.uid === uid));
+  assert.deepEqual(['b', 'e', 'g', 'h'].map(kind), ['td', 'td', 'tp', 'event'], 'TD, language group, TP, whole promotion');
+  assert.equal(L.classKind({ groups: [], teacher: 'M. X' }), 'cm', 'no group but a teacher: a lecture');
+  assert.equal(L.classKind({ groups: [], teacher: '' }), 'event'); assert.equal(L.classKind({ allDay: true }), 'event');
+  assert.equal(L.parseIcs('BEGIN:VEVENT\nDTSTART:20260929T060000Z\nDESCRIPTION:Matière : X\\nEnseignants : M. A, M. B\nEND:VEVENT')[0].teacher, 'M. A, M. B');
   assert.equal(L.isPromotionView(list.filter(e => e.uid === 'b')), false);
 });
 t('Paris time whatever the time zone of the phone', () => {

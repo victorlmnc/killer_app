@@ -589,6 +589,16 @@
     CAL_FIELDS.forEach(function (f) { mine = mine.concat(splitValues(p && p[f])); });
     return keys.some(function (k) { return mine.indexOf(k) >= 0; });
   }
+  /* Kind of class, for the HyperPlanning colours. The export carries no type, so it is read from the audience:
+     a TP group -> 'tp'; another group (TD, language group, project) -> 'td'; no group but a teacher -> 'cm'
+     (lecture); no teacher, the whole promotion ("COURS...") or a whole day -> 'event'. */
+  function classKind(e) {
+    if (!e || e.allDay) return 'event';
+    var keys = (e.groups || []).map(groupKey);
+    if (keys.some(function (k) { return /(^| )cours( |$)/.test(k); })) return 'event';
+    if (keys.length) return keys.some(function (k) { return k.split(' ').indexOf('tp') >= 0; }) ? 'tp' : 'td';
+    return e.teacher ? 'cm' : 'event';
+  }
   /* An export that names many different groups is the whole promotion seen from one of them: it should apply to
      the whole promotion (each player then keeps their own groups' classes). */
   function isPromotionView(events) {
@@ -633,7 +643,7 @@
       if (line === 'BEGIN:VEVENT') { cur = {}; return; }
       if (line === 'END:VEVENT') {
         if (cur && cur.start) events.push({ uid: cur.uid || '', start: cur.start, end: cur.end || cur.start, allDay: !!cur.allDay, summary: cur.summary || '', location: cur.location || '', description: cur.description || '',
-          subject: descField(cur.description, 'Matière'), teacher: descField(cur.description, 'Enseignant'),
+          subject: descField(cur.description, 'Matière'), teacher: descField(cur.description, 'Enseignants?'),
           groups: descField(cur.description, 'TD').split(',').map(function (g) { return g.trim(); }).filter(Boolean),   // who the class is for ("TD : TD 1, TD 2", "TD : G1")
           cancelled: /^COURSANNULE/i.test(cur.uid || '') || /^Annulation\b/i.test(cur.summary || '') });
         cur = null; return;
@@ -701,7 +711,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });
