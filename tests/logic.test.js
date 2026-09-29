@@ -325,6 +325,8 @@ t('danger alerts for the alliance', () => {
   const a = L.dangerAlerts(s, now);
   assert.deepEqual(a.map(x => x.level + ':' + x.kind), ['high:cutthroat', 'warn:dangerous', 'info:immune'], 'a bought cut-throat replaces the "rich" warning');
   assert.equal(a[0].otherId, 'f'); assert.equal(a[2].otherId, 'b');
+  s.players[1].is_ally = true;
+  assert.ok(!L.dangerAlerts(s, now).some(x => x.kind === 'immune'), 'hunting an ally (tanking): their immunity does not matter');
 });
 t('moments to catch a target', () => {
   const at = (h, m) => new Date(Date.UTC(2026, 9, 5, h - 2, m));   // Monday 5 Oct 2026, Paris time (UTC+2)

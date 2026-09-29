@@ -727,7 +727,8 @@
         if (richest && (h.points || 0) >= richest && !bonusesOf(h.id, /coupe/i).length) out.push({ level: 'warn', kind: 'rich', allyId: ally.id, otherId: h.id, points: h.points, price: richest, item: richestItem.name });
       }
       var target = resolveTarget(state, round.id, ally.id, maps, dead).id;
-      if (target) bonusesOf(target, /immun/i).forEach(function (b) { out.push({ level: 'info', kind: 'immune', allyId: ally.id, otherId: target, bonus: b }); });
+      var tp = target && state.players.find(function (p) { return p.id === target; });
+      if (tp && !tp.is_ally) bonusesOf(target, /immun/i).forEach(function (b) { out.push({ level: 'info', kind: 'immune', allyId: ally.id, otherId: target, bonus: b }); });
     });
     var rank = { high: 0, warn: 1, info: 2 };
     return out.sort(function (a, b) { return rank[a.level] - rank[b.level]; });

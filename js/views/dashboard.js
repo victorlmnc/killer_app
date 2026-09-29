@@ -91,7 +91,8 @@
           h('button', { type: 'button', class: 'btn', onclick: function () { open(p.id); } }, t('My sheet')),
           !dead && store.canEdit() ? h('button', { type: 'button', class: 'btn btn-danger', onclick: function () { K.actions.killDialog(p.id); } }, t('I am dead')) : null)),
       dead ? null : h('div', { class: 'me-rels' }, who(t('My target'), target), who(t('My hunter'), hunter)),
-      targetPlayer ? h('div', { class: 'me-sched' }, h('div', { class: 'row me-sched-head' }, h('span', { class: 'relation-label row-main' }, t('Where is my target')),
+      targetPlayer && !targetPlayer.is_ally ? h('div', { class: 'me-sched' },   // tanking an ally: no need to know where they are
+ h('div', { class: 'row me-sched-head' }, h('span', { class: 'relation-label row-main' }, t('Where is my target')),
         store.calendarsFor(targetPlayer).length ? h('button', { type: 'button', class: 'linkish small', onclick: function () { K.actions.catchDialog(targetPlayer.id); } }, t('When to catch them')) : null), ui.schedule(targetPlayer, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.'))) : null);
   }
 
