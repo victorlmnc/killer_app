@@ -514,10 +514,16 @@
       .map(function (w) { return /^\d+$/.test(w) ? String(+w) : w; }).sort().join(' ');
   }
   function splitValues(v) { return String(v || '').split(/[,;/]+/).map(groupKey).filter(Boolean); }
+  // field 'any': a sub-group written in any group field ("MRI 4A - GP": "GP", "TD GP" or an option "GP")
+  function looseKey(k) { return k.split(' ').filter(function (w) { return ['td', 'tp', 'groupe', 'group', 'gr', 'option'].indexOf(w) < 0; }).join(' '); }
   function calendarMatches(c, p) {
     if (!c || !c.url || !p || !norm(c.year) || norm(c.year) !== norm(p.year)) return false;
     if (norm(c.dept) && norm(c.dept) !== norm(p.dept)) return false;
     if (!c.field) return true;
+    if (c.field === 'any') {
+      var want = looseKey(groupKey(c.value));
+      return !!want && CAL_FIELDS.some(function (f) { return splitValues(p[f]).map(looseKey).indexOf(want) >= 0; });
+    }
     return splitValues(p[c.field]).indexOf(groupKey(c.value)) >= 0;
   }
   function calendarsFor(p, calendars) { return (calendars || []).filter(function (c) { return calendarMatches(c, p); }); }
@@ -529,7 +535,12 @@
   function calendarScope(name, knownDepts) {
     var parts = [], re = /<([^>]*)>([^<]*)/g, m;
     while ((m = re.exec(String(name || '')))) parts.push({ tag: m[1].trim(), text: m[2].trim() });
-    if (!parts.length && /\b\d+\s*A\b/i.test(String(name || ''))) parts.push({ tag: String(name).trim(), text: '' });   // "STI 3A": a whole promotion
+    var sub = null;
+    if (!parts.length && /\b\d+\s*A\b/i.test(String(name || ''))) {   // "STI 3A": a whole promotion; "MRI 4A - GP": a sub-group of it
+      var bits = String(name).split(/\s+-\s+/);
+      parts.push({ tag: bits[0].trim(), text: '' });
+      if (bits.length > 1) sub = bits.slice(1).join(' - ').trim();
+    }
     if (!parts.length) return null;
     var known = (knownDepts || []).filter(function (d) { return norm(d); });
     function deptOf(word) {   // the department a word names, written as in the game; null if it is not one
@@ -543,6 +554,7 @@
       if (/^\d+\s*A$/i.test(w) || /^\d$/.test(w)) out.year = w.toUpperCase();
       else if (!out.dept && deptOf(w)) out.dept = deptOf(w);
     });
+    if (sub) { out.field = 'any'; out.value = sub; return out; }
     var group = parts[1];
     if (!group) return out;
     var type = norm(group.tag.replace(/^.*\s-\s*/, '')), value = group.text || group.tag, words = value.split(/\s+/);   // "BOURGES - P.O TD": drop the campus
@@ -564,6 +576,26 @@
     return m ? m[1].replace(/\n[ \t]/g, '').replace(/^HYP\s*-\s*/, '').replace(/\s+-\s+du\s.*$/, '').trim() : '';
   }
   /* Several layers merged: a class present in two of them (same start and title) is kept once. */
+  /* Some exports hold the whole promotion seen from one group: every class names the groups it is for
+     ("TD : TD 2", "TD : G1", "TD : TP 1"). A player keeps the classes with no group (lectures, sport, meetings),
+     those for the whole promotion ("COURS..."), and those of a group written on their sheet (TD, TP, language
+     group or option, in any of these fields). Cancelled classes are dropped. */
+  function eventForPlayer(e, p) {
+    if (e.cancelled) return false;
+    if (!e.groups || !e.groups.length) return true;
+    var keys = e.groups.map(groupKey);
+    if (keys.some(function (k) { return /(^| )cours( |$)/.test(k); })) return true;
+    var mine = [];
+    CAL_FIELDS.forEach(function (f) { mine = mine.concat(splitValues(p && p[f])); });
+    return keys.some(function (k) { return mine.indexOf(k) >= 0; });
+  }
+  /* An export that names many different groups is the whole promotion seen from one of them: it should apply to
+     the whole promotion (each player then keeps their own groups' classes). */
+  function isPromotionView(events) {
+    var seen = new Set();
+    (events || []).forEach(function (e) { (e.groups || []).forEach(function (g) { var k = groupKey(g); if (!/(^| )cours( |$)/.test(k)) seen.add(k); }); });
+    return seen.size >= 5;
+  }
   function mergeEvents(lists) {
     var seen = new Set(), out = [];
     lists.forEach(function (list) { (list || []).forEach(function (e) { var k = +e.start + '|' + norm(e.summary); if (!seen.has(k)) { seen.add(k); out.push(e); } }); });
@@ -601,7 +633,9 @@
       if (line === 'BEGIN:VEVENT') { cur = {}; return; }
       if (line === 'END:VEVENT') {
         if (cur && cur.start) events.push({ uid: cur.uid || '', start: cur.start, end: cur.end || cur.start, allDay: !!cur.allDay, summary: cur.summary || '', location: cur.location || '', description: cur.description || '',
-          subject: descField(cur.description, 'Matière'), teacher: descField(cur.description, 'Enseignant') });
+          subject: descField(cur.description, 'Matière'), teacher: descField(cur.description, 'Enseignant'),
+          groups: descField(cur.description, 'TD').split(',').map(function (g) { return g.trim(); }).filter(Boolean),   // who the class is for ("TD : TD 1, TD 2", "TD : G1")
+          cancelled: /^COURSANNULE/i.test(cur.uid || '') || /^Annulation\b/i.test(cur.summary || '') });
         cur = null; return;
       }
       if (!cur) return;
@@ -667,7 +701,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

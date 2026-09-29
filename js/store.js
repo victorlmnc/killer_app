@@ -198,7 +198,8 @@
       .then(function (lists) {
         var ok = lists.filter(Boolean);
         if (!ok.length && errors.length) throw errors[0];
-        return { events: K.logic.mergeEvents(ok), layers: layers.length, failed: errors.length };
+        var events = K.logic.mergeEvents(ok).filter(function (e) { return K.logic.eventForPlayer(e, p); });   // only their groups' classes
+        return { events: events, layers: layers.length, failed: errors.length };
       });
   };
 

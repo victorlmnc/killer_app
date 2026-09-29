@@ -234,6 +234,12 @@ t('timetable layers: HyperPlanning names, who each layer applies to, merge', () 
   assert.equal(L.calendarScope('<2A><Groupe>G1').field, 'lang_group');
   assert.equal(L.calendarScope('plain name'), null);
   assert.deepEqual(L.calendarScope('STI 3A', ['MRI', 'STI']), { year: '3A', dept: 'STI', field: '', value: '' }, 'a promotion export has no brackets');
+  // 4th year: MRI is split into GP / SA / ME ("MRI 4A - GP"), ERE into options
+  assert.deepEqual(L.calendarScope('MRI 4A - GP', ['MRI', 'STI']), { year: '4A', dept: 'MRI', field: 'any', value: 'GP' });
+  assert.deepEqual(L.calendarScope('<ERE 4A><OPTIONS>IGR'), { year: '4A', dept: 'ERE', field: 'option', value: 'IGR' });
+  const gp = { url: 'x', year: '4A', dept: 'MRI', field: 'any', value: 'GP' };
+  assert.ok(L.calendarMatches(gp, { year: '4A', dept: 'MRI', td: 'TD GP' }) && L.calendarMatches(gp, { year: '4A', dept: 'MRI', option: 'GP' }), 'GP written as a TD or an option');
+  assert.ok(!L.calendarMatches(gp, { year: '4A', dept: 'MRI', td: 'TD SA' }) && !L.calendarMatches(gp, { year: '4A', dept: 'STI', td: 'GP' }));
   const hol = L.parseIcs('BEGIN:VEVENT\nDTSTART;VALUE=DATE:20261024\nDTEND;VALUE=DATE:20261102\nSUMMARY:Vacances\nEND:VEVENT\nBEGIN:VEVENT\nDTSTART:20261026T080000Z\nDTEND:20261026T100000Z\nSUMMARY:Rattrapage\nEND:VEVENT');
   assert.equal(hol[0].allDay, true); assert.equal(hol[1].allDay, false);
   assert.equal(L.scheduleAt(hol, new Date('2026-10-26T09:00:00Z')).current.summary, 'Rattrapage', 'a class beats a holiday');
@@ -267,6 +273,19 @@ t('timetable layers: HyperPlanning names, who each layer applies to, merge', () 
   assert.deepEqual(L.mergeEvents([[e(10, 'Maths'), e(8, 'CM')], [e(8, 'CM'), e(9, 'TP')]]).map(x => x.summary), ['CM', 'TP', 'Maths'], 'sorted, a class in two layers kept once');
   const hp = L.parseIcs('BEGIN:VEVENT\nDTSTART:20260929T060000Z\nDTEND:20260929T070000Z\nSUMMARY:TD1 - EPS - M. X\nDESCRIPTION:TD : TD1\\nMatière : EPS\\nEnseignant : M. X\\n\nEND:VEVENT');
   assert.deepEqual([hp[0].subject, hp[0].teacher], ['EPS', 'M. X']);
+});
+t('timetable: a whole-promotion export keeps the groups of each player', () => {
+  const ev = (uid, summary, desc) => 'BEGIN:VEVENT\nUID:' + uid + '\nDTSTART:20260929T060000Z\nDTEND:20260929T070000Z\nSUMMARY:' + summary + '\nDESCRIPTION:' + desc + '\nEND:VEVENT';
+  const list = L.parseIcs([ev('a', 'Amphi', 'Matière : Réseaux'), ev('b', 'TD 1 - Java', 'TD : TD 1\\nMatière : Java'), ev('c', 'TD 2 - Java', 'TD : TD 2\\nMatière : Java'),
+    ev('d', 'TD 1, TD 2 - Projet', 'TD : TD 1, TD 2\\nMatière : Projet'), ev('e', 'G 1, G1 - Anglais', 'TD : G 1, G1\\nMatière : Anglais'), ev('f', 'G5 - Anglais', 'TD : G5\\nMatière : Anglais'),
+    ev('g', 'TP 1 - Réseau', 'TD : TP 1\\nMatière : Réseau'), ev('h', 'COURS - Rentrée', 'TD : COURS, COURS\\nMatière : Rentrée'),
+    ev('COURSANNULE-1', 'Annulation : TD 1 - Java', 'Annulation : \\nTD : TD 1\\nMatière : Java')].join('\n'));
+  assert.deepEqual(list.find(e => e.uid === 'e').groups, ['G 1', 'G1']);
+  const keep = p => list.filter(e => L.eventForPlayer(e, p)).map(e => e.uid).sort().join('');
+  assert.equal(keep({ td: 'TD1', tp: 'TP1', lang_group: 'G1' }), 'abdegh', 'own TD, TP and language group, common classes; not the cancelled one');
+  assert.equal(keep({ td: 'TD 2', tp: 'TP2', lang_group: 'G5' }), 'acdfh');
+  assert.equal(L.isPromotionView(list), true, 'TD 1, TD 2, G1, G5, TP 1: the whole promotion');
+  assert.equal(L.isPromotionView(list.filter(e => e.uid === 'b')), false);
 });
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));

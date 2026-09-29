@@ -82,7 +82,7 @@
 
         /* Timetables: HyperPlanning iCal links, one per layer (whole year, department, TD, TP, language group, option) */
         var cal = (s.calendars || []).filter(function (c) { return c && c.url; });
-        var FIELD_LABEL = { '': t('Whole year'), td: 'TD', tp: 'TP', lang_group: t('Language group'), option: t('Option') };
+        var FIELD_LABEL = { '': t('Whole year'), td: 'TD', tp: 'TP', lang_group: t('Language group'), option: t('Option'), any: t('Any group (TD, TP, option…)') };
         function saveCal(list) { store.setSetting('calendars', list); }
         function patchCal(c, patch) { saveCal(cal.map(function (x) { return x === c ? Object.assign({}, x, patch) : x; })); }
         function audience(c) { return st.players.filter(function (p) { return L.calendarMatches(c, p); }).length; }
@@ -92,8 +92,11 @@
           store.calendar(url).then(function (res) {
             var depts = (s.depts || []).concat(st.players.map(function (p) { return p.dept; })).filter(function (d, i, all) { return d && all.indexOf(d) === i; });
             var c = Object.assign({ url: url, name: res.name, year: '', dept: '', field: '', value: '' }, L.calendarScope(res.name, depts) || {});
+            var wide = c.field && L.isPromotionView(res.events);
+            if (wide) { c.field = ''; c.value = ''; }   // the whole promotion seen from one group: for everyone, filtered per player
             saveCal(cal.concat([c]));
-            ui.toast(t('{n} classes; applies to {m} players.', { n: res.events.length, m: audience(c) }));
+            ui.toast(wide ? t('{n} classes of the whole promotion: each player sees those of their own groups; applies to {m} players.', { n: res.events.length, m: audience(c) })
+              : t('{n} classes; applies to {m} players.', { n: res.events.length, m: audience(c) }));
           }, function (err) {
             saveCal(cal.concat([{ url: url, name: '', year: '', dept: '', field: '', value: '' }]));
             ui.toast(t('Link added but not readable yet ({err}): fill in who it applies to.', { err: err.message || err }), 'error');
@@ -105,7 +108,7 @@
           h('p', { class: 'prose muted small' }, t('A timetable is several layers: the whole year, the department, the TD, the TP, the language group, options. On HyperPlanning, open Promotions, choose the promotion (e.g. STI 3A) and a group (or none for the whole promotion), click the iCal icon and copy the address under "Synchronise". Paste it here: who it applies to is read from the timetable name, and every player of that layer gets it. The links go through the "edt" function of the database (see the README).')));
         var addInput = h('input', { type: 'url', placeholder: 'https://edt.insa-cvl.fr/Telechargements/ical/…', 'aria-label': t('iCal link to add'), onkeydown: function (e) { if (e.key === 'Enter') { e.preventDefault(); addCal(addInput.value); } } });
         tt.appendChild(h('div', { class: 'row row-wrap' }, addInput, h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { addCal(addInput.value); } }, K.icon('plus'), t('Add this timetable'))));
-        var order = ['', 'td', 'tp', 'lang_group', 'option'];
+        var order = ['', 'any', 'td', 'tp', 'lang_group', 'option'];
         cal.slice().sort(function (a, b) {
           return String(a.year).localeCompare(String(b.year), 'fr', { numeric: true }) || String(a.dept || '').localeCompare(String(b.dept || '')) ||
             order.indexOf(a.field || '') - order.indexOf(b.field || '') || String(a.value || '').localeCompare(String(b.value || ''), 'fr', { numeric: true });
