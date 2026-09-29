@@ -123,7 +123,10 @@
     var el = h('span', { class: 'avatar' + (size ? ' avatar-' + size : ''), style: { '--year': ui.yearColor(p && p.year) } });
     if (url) el.appendChild(h('img', { src: url, alt: '', loading: 'lazy' }));
     else el.appendChild(h('span', { 'aria-hidden': 'true' }, ui.initials(p && p.name)));
-    return el;
+    // members of the alliance: a white star badge on the photo (the avatar clips its content, so it sits on a wrapper)
+    if (!p || !p.is_ally) return el;
+    return h('span', { class: 'avatar-wrap' + (size ? ' avatar-wrap-' + size : '') }, el,
+      h('span', { class: 'ally-badge', title: t('Alliance member') }, h('span', { 'aria-hidden': 'true' }, '★'), h('span', { class: 'sr-only' }, t('Alliance member'))));
   };
   ui.yearTag = function (p) {
     var text = [p.year, p.dept, p.td].filter(Boolean).join(' ');

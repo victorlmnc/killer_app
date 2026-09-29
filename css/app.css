@@ -272,6 +272,12 @@ select:disabled { opacity: .6; }
 .bubble-name { font-size: .72rem; line-height: 1.2; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .bubble.is-dead .bubble-name { text-decoration: line-through; color: var(--muted); }
 .bubble.is-ally .avatar { box-shadow: 0 0 0 2px var(--year), 0 0 0 4px #fff; }
+/* alliance badge: a white star on the photo, bottom right */
+.avatar-wrap { position: relative; display: inline-grid; flex: none; line-height: 0; }
+.ally-badge { position: absolute; right: -3px; bottom: -3px; width: max(16px, 38%); aspect-ratio: 1; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; font-size: clamp(9px, 1.1em, 18px); line-height: 1; box-shadow: 0 0 0 2px var(--bg); pointer-events: none; }
+.avatar-wrap-sm .ally-badge { width: 15px; font-size: 9px; right: -4px; bottom: -4px; }
+.avatar-wrap-lg .ally-badge { width: 22px; font-size: 13px; } .avatar-wrap-xl .ally-badge { width: 34px; font-size: 20px; right: 2px; bottom: 2px; }
+.ally-badge > span[aria-hidden] { transform: translateY(-.04em); }
 /* special statuses: dangerous (red), priority target (brass); the name is repeated in the tag, colour is never alone */
 .bubble.is-dangerous, .bubble.is-priority { position: relative; }   /* a badge on the photo: the ring colour stays the year's */
 .bubble.is-dangerous::after, .bubble.is-priority::after { position: absolute; top: .1rem; left: calc(50% + 14px); width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 700 .75rem/1 var(--body); box-shadow: 0 0 0 2px var(--bg); }
