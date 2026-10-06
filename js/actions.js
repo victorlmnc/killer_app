@@ -262,21 +262,36 @@
         return Promise.all(jobs).then(function () { store.log(t('Kill undone: {name} is alive again', { name: name(playerId) })); });
       });
   };
-  /* --------------------------------------------------------- shared flats */
-  /* The sheets of a flat's members follow it: address, position, housing type "shared flat". */
-  function homePatch(home) { return { home_id: home.id, address: home.address || '', lat: home.lat == null ? null : home.lat, lng: home.lng == null ? null : home.lng, address_type: 'coloc' }; }
+  /* ------------------------------------------- shared flats and student residences */
+  /* The sheets of a flat's (or residence's) members follow it: address, position, housing type. */
+  function homePatch(home) { return { home_id: home.id, address: home.address || '', lat: home.lat == null ? null : home.lat, lng: home.lng == null ? null : home.lng, address_type: L.homeKind(home) }; }
+  /* Words that change between a shared flat and a residence */
+  function homeWords(kind) {
+    return kind === 'residence' ? {
+      create: t('New student residence'), title: t('Residence: {name}'), placeholder: t('e.g. Tanneurs residence'), add: t('Add a resident'),
+      del: t('Delete this residence?'), deleted: t('Residence deleted: {name}'), noName: t('Give the residence a name.'), notFound: t('Address not found: place the residence by hand from the Map tab.'),
+      created: 'Residence created: {name}', updated: 'Residence updated: {name}', one: '{n} resident', many: '{n} residents', saved: t('Residence saved: the sheets of its residents are updated.')
+    } : {
+      create: t('New shared flat'), title: t('Shared flat: {name}'), placeholder: t('e.g. The Port flat'), add: t('Add a flatmate'),
+      del: t('Delete this shared flat?'), deleted: t('Shared flat deleted: {name}'), noName: t('Give the flat a name.'), notFound: t('Address not found: place the flat by hand from the Map tab.'),
+      created: 'Shared flat created: {name}', updated: 'Shared flat updated: {name}', one: '{n} flatmate', many: '{n} flatmates', saved: t('Shared flat saved: the sheets of its members are updated.')
+    };
+  }
   act.syncHome = function (homeId) {
     var home = store.state.homes.find(function (x) { return x.id === homeId; }); if (!home) return Promise.resolve();
     return Promise.all(store.state.players.filter(function (p) { return p.home_id === homeId; }).map(function (p) { return store.update('players', p.id, homePatch(home)); }));
   };
-  /* Create or edit a flat. preset (detected flat): { address, lat, lng, players } */
+  /* Create or edit a flat or a residence. preset (detected one): { kind, address, lat, lng, players } */
   act.editHome = function (home, preset) {
     if (!store.canEdit()) return;
     var isNew = !home; preset = preset || {};
-    home = home || { name: '', address: preset.address || '', building: '', note: '', lat: preset.lat == null ? null : preset.lat, lng: preset.lng == null ? null : preset.lng };
+    home = home || { kind: preset.kind || 'coloc', name: '', address: preset.address || '', building: '', note: '', lat: preset.lat == null ? null : preset.lat, lng: preset.lng == null ? null : preset.lng };
+    var kind = L.homeKind(home), isRes = kind === 'residence', w = homeWords(kind);
     var members = isNew ? (preset.players || []).map(function (p) { return p.id; }) : store.state.players.filter(function (p) { return p.home_id === home.id; }).map(function (p) { return p.id; });
-    ui.dialog({ title: isNew ? t('New shared flat') : t('Shared flat: {name}', { name: home.name }), render: function (body, api) {
-      var name = h('input', { type: 'text', value: home.name, placeholder: t('e.g. The Port flat') });
+    var apts = {};   // residence: apartment number of each member
+    members.forEach(function (id) { var p = store.player(id); apts[id] = (p && p.apartment) || ''; });
+    ui.dialog({ title: isNew ? w.create : w.title.replace('{name}', home.name), render: function (body, api) {
+      var name = h('input', { type: 'text', value: home.name, placeholder: w.placeholder });
       var address = h('input', { type: 'text', value: home.address || '', placeholder: t('e.g. 12 High Street, Town') });
       var building = h('input', { type: 'text', value: home.building || '', placeholder: t('Optional: the apartment building it is in') });
       var note = h('textarea', { rows: '2', value: home.note || '', placeholder: t('Floor, door code, who is often there…') });
@@ -287,43 +302,46 @@
         members.forEach(function (id) {
           var p = store.player(id); if (!p) return;
           list.appendChild(h('div', { class: 'row home-member' + (dead.has(id) ? ' is-dead' : '') }, ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name),
-            p.home_id && p.home_id !== home.id ? h('span', { class: 'row-sub' }, t('moves out of another flat')) : null),
+            p.home_id && p.home_id !== home.id ? h('span', { class: 'row-sub' }, t('leaves another flat or residence')) : null),
             dead.has(id) ? h('span', { class: 'tag tag-dead' }, t('Dead')) : null,
+            isRes ? h('input', { type: 'text', class: 'apt-input', value: apts[id] || '', placeholder: t('Apt.'), 'aria-label': t('Apartment of {w}', { w: p.name }), oninput: function (e) { apts[id] = e.target.value; } }) : null,
             h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('Remove {w}', { w: p.name }), onclick: function () { members = members.filter(function (x) { return x !== id; }); drawMembers(); } }, K.icon('close'))));
         });
       }
       drawMembers();
       body.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Address'), address, t('Include the town: every member gets this address and its marker.')),
-        ui.field(t('Apartment building'), building), ui.field(t('Note'), note),
+        isRes ? null : ui.field(t('Apartment building'), building), ui.field(t('Note'), note),
         h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Who lives there')), list,
+          isRes ? h('p', { class: 'muted small' }, t('The apartment number is optional.')) : null,
           h('button', { type: 'button', class: 'btn', onclick: function () {
-            ui.pickPlayer({ title: t('Add a flatmate'), filter: function (p) { return members.indexOf(p.id) < 0; } }).then(function (id) { if (id) { members.push(id); drawMembers(); } });
-          } }, K.icon('plus'), t('Add a flatmate')))));
+            ui.pickPlayer({ title: w.add, filter: function (p) { return members.indexOf(p.id) < 0; } }).then(function (id) { if (id) { members.push(id); var p = store.player(id); apts[id] = (p && p.apartment) || ''; drawMembers(); } });
+          } }, K.icon('plus'), w.add))));
       body.appendChild(h('div', { class: 'actions' },
         isNew ? null : h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
-          ui.confirm({ title: t('Delete this shared flat?'), text: t('Its members keep their address; they are just no longer grouped.'), action: t('Delete'), danger: true }).then(function (ok) {
+          ui.confirm({ title: w.del, text: t('Its members keep their address; they are just no longer grouped.'), action: t('Delete'), danger: true }).then(function (ok) {
             if (!ok) return;
             store.state.players.filter(function (p) { return p.home_id === home.id; }).forEach(function (p) { store.update('players', p.id, { home_id: null }); });
-            store.remove('homes', home.id); store.log(t('Shared flat deleted: {name}', { name: home.name })); api.close();
+            store.remove('homes', home.id); store.log(w.deleted.replace('{name}', home.name)); api.close();
           });
         } }, t('Delete')),
         h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
         h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
-          var row = { name: name.value.trim(), address: address.value.trim(), building: building.value.trim(), note: note.value.trim() };
-          if (!row.name) { name.focus(); return ui.toast(t('Give the flat a name.'), 'error'); }
+          var row = { name: name.value.trim(), address: address.value.trim(), building: isRes ? '' : building.value.trim(), note: note.value.trim() };
+          if (isNew) row.kind = kind;
+          if (!row.name) { name.focus(); return ui.toast(w.noName, 'error'); }
           var moved = row.address !== (home.address || '') || home.lat == null;
           var where = moved && row.address ? K.geo.geocode(row.address).catch(function () { return null; }) : Promise.resolve(null);
           api.close();
           where.then(function (hit) {
             if (hit) { row.lat = hit.lat; row.lng = hit.lng; } else if (moved && row.address !== (home.address || '')) { row.lat = null; row.lng = null; }
-            if (moved && row.address && !hit) ui.toast(t('Address not found: place the flat by hand from the Map tab.'), 'error');
+            if (moved && row.address && !hit) ui.toast(w.notFound, 'error');
             var saved = isNew ? store.insert('homes', Object.assign({ lat: home.lat, lng: home.lng }, row)) : store.update('homes', home.id, row).then(function () { return store.state.homes.find(function (x) { return x.id === home.id; }); });
             return saved.then(function (h2) {
               if (!h2) return;
-              store.state.players.filter(function (p) { return p.home_id === h2.id && members.indexOf(p.id) < 0; }).forEach(function (p) { store.update('players', p.id, { home_id: null }); });   // moved out
-              members.forEach(function (id) { store.update('players', id, homePatch(h2)); });
-              store.log(t(isNew ? 'Shared flat created: {name}' : 'Shared flat updated: {name}', { name: h2.name }) + ' (' + K.n(members.length, '{n} flatmate', '{n} flatmates') + ')');
-              ui.toast(t('Shared flat saved: the sheets of its members are updated.'));
+              store.state.players.filter(function (p) { return p.home_id === h2.id && members.indexOf(p.id) < 0; }).forEach(function (p) { store.update('players', p.id, isRes ? { home_id: null, apartment: '' } : { home_id: null }); });   // moved out
+              members.forEach(function (id) { store.update('players', id, Object.assign(homePatch(h2), isRes ? { apartment: (apts[id] || '').trim() } : {})); });
+              store.log(t(isNew ? w.created : w.updated, { name: h2.name }) + ' (' + K.n(members.length, w.one, w.many) + ')');
+              ui.toast(w.saved);
             });
           });
         } }, t('Save'))));
@@ -608,9 +626,10 @@
         L.hasCoords(p) ? [' ', h('a', { class: 'linkish', href: '#/map?player=' + p.id, onclick: function () { api.close(); } }, t('Show on map'))] : null));
       var home = p.home_id && (st.homes || []).find(function (x) { return x.id === p.home_id; });
       if (home) {
-        var hm = L.homeMembers(st, home.id);
-        body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, t('Shared flat:') + ' '),
+        var hm = L.homeMembers(st, home.id), isRes = L.homeKind(home) === 'residence';
+        body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, (isRes ? t('Residence:') : t('Shared flat:')) + ' '),
           h('button', { type: 'button', class: 'linkish', onclick: function () { act.editHome(home); } }, home.name), home.building ? ' (' + home.building + ')' : '',
+          isRes && p.apartment ? ' · ' + t('apt. {n}', { n: p.apartment }) : '',
           h('span', { class: 'muted' }, ' · ' + t('{a}/{b} alive', { a: hm.alive.length, b: hm.members.length }))));
       }
       if (p.notes) body.appendChild(h('p', { class: 'prose notes' }, p.notes));
@@ -683,6 +702,17 @@
             else if (!cat && lv.value) store.insert('weapons', { name: w, difficulty: lv.value });
           });
         }
+        /* a shared flat or a residence to pick, following the housing type */
+        function homeSelect(kind) {
+          var list = (store.state.homes || []).filter(function (x) { return L.homeKind(x) === kind; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });
+          var mine = list.some(function (x) { return x.id === p.home_id; }) ? p.home_id : '';
+          return ui.select([{ value: '', label: t('None') }].concat(list.map(function (x) { return { value: x.id, label: x.name + (x.address ? ' · ' + x.address : '') }; })), mine);
+        }
+        var homeSel = { coloc: homeSelect('coloc'), residence: homeSelect('residence') }, homeBox = {};
+        function showHome() {
+          var type = f.address_type.value;
+          homeBox.coloc.hidden = type !== 'coloc'; homeBox.residence.hidden = type !== 'residence';
+        }
         var f = {
           name: h('input', { type: 'text', value: p.name || '', placeholder: t('LASTNAME Firstname'), required: true }),
           year: ui.select([{ value: '', label: '—' }].concat((s.years || []).map(function (y) { return y.name; })), p.year || ''),
@@ -693,11 +723,19 @@
           points: h('input', { type: 'number', min: '0', inputmode: 'numeric', value: String(p.points || 0) }),
           is_ally: h('input', { type: 'checkbox', checked: !!p.is_ally }),
           status: ui.select([{ value: '', label: t('None') }].concat(ui.STATUSES.map(function (x) { return { value: x.id, label: t(x.label) }; })), p.status || ''),
-          address: h('input', { type: 'text', value: p.address || '', placeholder: t('e.g. 12 High Street, Town'), autocomplete: 'off', oninput: function () { if (!typeTouched && !p.address) f.address_type.value = L.guessAddressType(f.address.value); } }),
-          address_type: ui.select(L.ADDRESS_TYPES.slice().reverse().map(function (x) { return { value: x.id, label: t(x.label) }; }), L.addressType(p.address_type), { onchange: function () { typeTouched = true; } }),
-          home_id: ui.select([{ value: '', label: t('None') }].concat((store.state.homes || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); }).map(function (x) { return { value: x.id, label: x.name + (x.address ? ' · ' + x.address : '') }; })), p.home_id || ''),
+          address: h('input', { type: 'text', value: p.address || '', placeholder: t('e.g. 12 High Street, Town'), autocomplete: 'off', oninput: function () { if (!typeTouched && !p.address) { f.address_type.value = L.guessAddressType(f.address.value); showHome(); } } }),
+          address_type: ui.select(L.ADDRESS_TYPES.slice().reverse().map(function (x) { return { value: x.id, label: t(x.label) }; }), L.addressType(p.address_type), { onchange: function () { typeTouched = true; showHome(); } }),
+          apartment: h('input', { type: 'text', value: p.apartment || '', placeholder: t('e.g. 214'), autocomplete: 'off' }),
           notes: h('textarea', { rows: '3', value: p.notes || '', placeholder: t('Habits on campus, clubs, who could save them…') })
         };
+        homeBox.coloc = h('div', { class: 'stack-tight' }, (store.state.homes || []).some(function (x) { return L.homeKind(x) === 'coloc'; })
+          ? ui.field(t('Shared flat'), homeSel.coloc, t('The address of the flat replaces the one above.'))
+          : h('p', { class: 'field-hint' }, t('Shared flats are created from the Map tab.')));
+        homeBox.residence = h('div', { class: 'grid-2 grid-align-start' },
+          (store.state.homes || []).some(function (x) { return L.homeKind(x) === 'residence'; })
+            ? ui.field(t('Residence'), homeSel.residence, t('Its address replaces the one above.'))
+            : h('p', { class: 'field-hint' }, t('Residences are created from the Map tab.')),
+          ui.field(t('Apartment'), f.apartment, t('Optional')));
         body.appendChild(h('div', { class: 'stack' },
           ui.field(t('Name'), f.name),
           h('div', { class: 'grid-2' }, ui.field(t('Year'), f.year), ui.field(t('Department'), f.dept)),
@@ -711,7 +749,8 @@
           h('div', { class: 'grid-2 grid-align-start' }, h('label', { class: 'check' }, f.is_ally, t('Alliance member')), ui.field(t('Special status'), f.status)),
           ui.field(t('Address'), f.address, t('Include the town so the marker lands in the right place.')),
           ui.field(t('Housing type'), f.address_type, t('Sets the icon and the layer on the map.')),
-          (store.state.homes || []).length ? ui.field(t('Shared flat'), f.home_id, t('The address of the flat replaces the one above.')) : null, ui.field(t('Notes'), f.notes)));
+          homeBox.coloc, homeBox.residence, ui.field(t('Notes'), f.notes)));
+        showHome();
         drawLevels();
         var actions = h('div', { class: 'actions' });
         if (playerId) actions.appendChild(h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
@@ -724,9 +763,11 @@
           if (!row.name) { f.name.focus(); return ui.toast(t('A name is required.'), 'error'); }
           row.points = Math.max(0, parseInt(row.points, 10) || 0);
           row.is_ally = f.is_ally.checked;
-          row.home_id = row.home_id || null;
+          var pick = homeSel[row.address_type];   // only a flat when "shared flat", only a residence when "residence"
+          row.home_id = (pick && pick.value) || null;
+          if (row.address_type !== 'residence') row.apartment = '';
           var flat = row.home_id && store.state.homes.find(function (x) { return x.id === row.home_id; });
-          if (flat) Object.assign(row, homePatch(flat));   // the flat's address, position and type
+          if (flat) Object.assign(row, homePatch(flat));   // the flat's (or residence's) address, position and type
           var weaponError = levelsError(L.weaponList(row.weapons));
           if (weaponError) return ui.toast(weaponError, 'error');
           saveLevels(L.weaponList(row.weapons));

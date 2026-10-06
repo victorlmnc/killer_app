@@ -134,6 +134,9 @@ create table if not exists public.homes (
   created_at timestamptz not null default now()
 );
 alter table public.players add column if not exists home_id uuid references public.homes(id) on delete set null;
+-- the same for student residences (kind 'residence'); a player may note their apartment number
+alter table public.homes add column if not exists kind text not null default 'coloc' check (kind in ('coloc', 'residence'));
+alter table public.players add column if not exists apartment text default '';
 
 -- Each account can be linked to its own player sheet (quick actions: my target, my hunter, I am dead).
 alter table public.accounts add column if not exists player_id uuid references public.players(id) on delete set null;

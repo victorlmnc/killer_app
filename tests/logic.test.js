@@ -361,6 +361,24 @@ t('shared flats: members, living flatmates, detected flats, backup', () => {
   assert.equal(r.data.homes.length, 1);
   assert.equal(r.data.players.find(p => p.name === 'B').home_id, r.data.homes[0].id, 'the flat link follows the new ids');
   assert.equal(r.data.players.find(p => p.name === 'C').home_id, null);
+  assert.equal(r.data.homes[0].kind, 'coloc', 'an old flat without kind is a shared flat');
+});
+t('student residences: kind, apartments, detected residences, backup', () => {
+  const s = base();
+  Object.assign(s.players[0], { home_id: 'r1', apartment: '214', address: 'Résidence X', address_type: 'residence', lat: 47.1, lng: 2.4 });
+  Object.assign(s.players[1], { home_id: 'r1', address: 'Résidence X', address_type: 'residence', lat: 47.1, lng: 2.4 });
+  Object.assign(s.players[2], { address: 'Résidence Y', address_type: 'residence', lat: 47.2, lng: 2.5 });
+  Object.assign(s.players[3], { address: 'Résidence Y', address_type: 'residence', lat: 47.2, lng: 2.5 });
+  s.homes = [{ id: 'r1', kind: 'residence', name: 'Résidence X', address: 'Résidence X', lat: 47.1, lng: 2.4 }];
+  assert.equal(L.homeKind(s.homes[0]), 'residence'); assert.equal(L.homeKind({}), 'coloc');
+  assert.equal(L.suggestedHomes(s).length, 0, 'residence players are not detected as shared flats');
+  const d = L.suggestedHomes(s, 'residence');
+  assert.deepEqual(d.map(x => x.players.map(p => p.id)), [['c', 'd']], 'c and d at one residence, not named yet');
+  const r = L.readBackup(JSON.stringify(L.makeBackup(s)), { uuid: () => '00000000-0000-4000-8000-' + String(Math.random()).slice(2, 14).padEnd(12, '0') });
+  assert.equal(r.data.homes[0].kind, 'residence');
+  assert.equal(r.data.players.find(p => p.name === 'A').apartment, '214', 'the apartment number is kept');
+  const odd = L.makeBackup(s); odd.homes[0].kind = 'castle';
+  assert.equal(L.readBackup(JSON.stringify(odd)).data.homes[0].kind, 'coloc', 'an unknown kind falls back to a shared flat');
 });
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));

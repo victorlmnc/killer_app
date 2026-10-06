@@ -51,8 +51,8 @@ with sync_playwright() as p:
     assert s['tile']['url'].startswith('https://tile.openstreetmap.org') and 'OpenStreetMap' in s['tile']['o']['attribution'] and s['fits'] == 1
     expect(pg.locator('.view-map > section.panel').first).to_contain_text(f'Joueurs localisés {len(located)}')
     print('· list row centres the map and opens the popup: name, address, sheet')
-    assert pg.locator('.panel.is-folded').count() == 3                                 # on a phone the lists under the map start folded
-    pg.locator('.fold-toggle', has_text='Joueurs localisés').click(); assert pg.locator('.panel.is-folded').count() == 2
+    assert pg.locator('.panel.is-folded').count() == 4                                 # on a phone the lists under the map start folded
+    pg.locator('.fold-toggle', has_text='Joueurs localisés').click(); assert pg.locator('.panel.is-folded').count() == 3
     row = pg.locator('.map-row .row-btn').first; who = row.locator('.row-title').inner_text(); row.click()
     pop = pg.locator('#fake-pop'); expect(pop).to_contain_text(who); expect(pop).to_contain_text('rue')
     pop.get_by_role('button', name='Voir la fiche').first.dispatch_event('click')  # le faux popup tombe sous la barre de navigation
@@ -74,13 +74,13 @@ with sync_playwright() as p:
     expect(pg.locator('.toast')).to_contain_text(f'{len(todo)} adresse'); pg.wait_for_timeout(200)
     assert len(geocoded) == len(todo) and all(g['limit'] == ['1'] and 'lat' in g for g in geocoded)
     assert not any(x['name'].split()[0].lower() in g['q'][0].lower() for g in geocoded for x in players)
-    assert pg.locator('.view-map > section.panel').nth(3).is_hidden()
+    assert pg.locator('.view-map > section.panel').nth(4).is_hidden()
     print('· new address on a sheet is geocoded; unknown address can be placed by hand')
     pid = [x for x in players if not x['address']][0]['id']
     pg.evaluate("id => K.actions.editPlayer(id)", pid)
     pg.get_by_placeholder('ex. 12 rue Moyenne').fill('Bâtiment introuvable'); pg.get_by_role('button', name='Enregistrer').click()
     expect(pg.locator('.toast-error')).to_contain_text('Adresse introuvable')
-    expect(pg.locator('.view-map > section.panel').nth(3)).to_contain_text('Bâtiment introuvable')
+    expect(pg.locator('.view-map > section.panel').nth(4)).to_contain_text('Bâtiment introuvable')
     pg.get_by_role('button', name='Placer sur la carte').click()
     expect(pg.locator('.map-hint')).to_contain_text('Touche la carte')
     pg.evaluate("__L.map.fire('click', { latlng: { lat: 47.09, lng: 2.41 } })"); pg.wait_for_timeout(150)
@@ -132,6 +132,25 @@ with sync_playwright() as p:
     assert 'pin-coloc' in pin() and 'pin-dead' not in pin(), 'one flatmate alive: still lit'
     pg.evaluate("id => { K.store.state.kills.push({ id: 'k-flat-2', victim_id: id }); K.store.emit(); }", mates[1])
     assert 'pin-dead' in pin(), 'every flatmate dead: greyed'
+    pg.evaluate("__L.markers.find(m => m.ll[0] === 47.09).openPopup()")
+    assert pg.locator('#fake-pop').inner_text().count('8 rue des Lilas') == 1, 'the address of the flat once, not under each flatmate'
+    assert pg.locator('#fake-pop .map-pop-item').count() == 2
+    print('· student residence: every resident with their apartment, greyed once they are all dead')
+    res = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), three = st.players.filter(p => !dead.has(p.id) && !p.home_id).slice(0, 3);
+      st.homes = st.homes.concat([{ id: 'res-test', kind: 'residence', name: 'Résidence Test', address: 'Résidence Test', lat: 47.095, lng: 2.42 }]);
+      three.forEach((p, i) => Object.assign(p, { home_id: 'res-test', address: 'Résidence Test', lat: 47.095, lng: 2.42, address_type: 'residence', apartment: i < 2 ? String(12 + i) : '' }));
+      K.store.emit(); return three.map(p => p.id); }""")
+    rpin = lambda: pg.evaluate("__L.markers.find(m => m.ll[0] === 47.095).o.icon.html")
+    assert 'pin-residence' in rpin() and 'pin-dead' not in rpin(), rpin()
+    pg.evaluate("id => { K.store.state.kills.push({ id: 'k-res-1', victim_id: id }); K.store.emit(); }", res[0])
+    pg.evaluate("__L.markers.find(m => m.ll[0] === 47.095).openPopup()")
+    pop = pg.locator('#fake-pop')
+    expect(pop).to_contain_text('Résidence · Résidence Test'); expect(pop).to_contain_text('Appt 12'); expect(pop).to_contain_text('Appt 13'); expect(pop).to_contain_text('2/3 vivants')
+    assert pop.locator('.map-pop-item').count() == 3, 'the dead resident is listed too'
+    assert pop.inner_text().count('Résidence Test') == 2, 'the name in the tag and the address once'
+    for i, pid in enumerate(res[1:]): pg.evaluate("id => { K.store.state.kills.push({ id: 'k-res-' + id, victim_id: id }); K.store.emit(); }", pid)
+    assert 'pin-dead' in rpin() and 'pin-residence' in rpin(), 'every resident dead: greyed'
+    expect(pg.locator('section.panel', has_text='Résidences étudiantes')).to_contain_text('Résidence Test')
     print('· search: only the markers of the players found, the map zooms on them')
     name = pg.evaluate("K.store.state.players.find(p => K.logic.hasCoords(p)).name")
     pg.get_by_label('Chercher un joueur').fill(name.split()[0].lower()); pg.wait_for_timeout(400)

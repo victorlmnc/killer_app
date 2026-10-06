@@ -435,18 +435,18 @@
      Defaults give the type; null = required reference; NOW = the import time when the backup has no date. */
   var BACKUP_FORMAT = 'killer-backup', NOW = {};
   var BACKUP_TABLES = {
-    players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, status: '', home_id: '', photo_path: '', created_at: NOW },
+    players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, status: '', home_id: '', apartment: '', photo_path: '', created_at: NOW },
     rounds: { name: '', position: 0, created_at: NOW },
     links: { round_id: null, hunter_id: null, target_id: null, confidence: 'sur', source: '', created_at: NOW },
     kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', points: 0, admin_reason: '', note: '', killer_weapons: null, happened_at: NOW },
     weapons: { name: '', difficulty: 'facile', owned: false, note: '' },
     events: { text: '', actor: '', details: {}, created_at: NOW },
     spots: { name: '', note: '', address: '', lat: 0, lng: 0, created_at: NOW },
-    homes: { name: '', address: '', lat: 0, lng: 0, building: '', note: '', created_at: NOW },
+    homes: { kind: 'coloc', name: '', address: '', lat: 0, lng: 0, building: '', note: '', created_at: NOW },
     bonuses: { player_id: null, name: '', price: 0, bought_at: NOW, starts_at: NOW, ends_at: NOW, note: '', created_at: NOW }
   };
   var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1, ends_at: 1, home_id: 1 };   // empty -> null rather than the default
-  var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile'], admin_reason: ['cheating', 'other'], status: ['', 'dangerous', 'priority'] };
+  var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile'], admin_reason: ['cheating', 'other'], status: ['', 'dangerous', 'priority'], kind: ['coloc', 'residence'] };
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   function cleanValue(key, v, def, now) {
@@ -809,11 +809,13 @@
     var dead = deadSet(state), members = state.players.filter(function (p) { return p.home_id === homeId; });
     return { members: members, alive: members.filter(function (p) { return !dead.has(p.id); }) };
   }
-  /* Players marked "shared flat" at the same place and not in a named flat yet: flats to name (2 or more). */
-  function suggestedHomes(state) {
-    var byKey = new Map();
+  /* A home is a shared flat ('coloc') or a student residence ('residence'). */
+  function homeKind(home) { return home && home.kind === 'residence' ? 'residence' : 'coloc'; }
+  /* Players marked "shared flat" (or "student residence") at the same place and not in a named one yet: to name (2 or more). */
+  function suggestedHomes(state, kind) {
+    var byKey = new Map(); kind = kind || 'coloc';
     state.players.forEach(function (p) {
-      if (p.home_id || addressType(p.address_type) !== 'coloc' || !hasCoords(p)) return;
+      if (p.home_id || addressType(p.address_type) !== kind || !hasCoords(p)) return;
       var key = p.lat.toFixed(5) + ',' + p.lng.toFixed(5);
       if (!byKey.has(key)) byKey.set(key, { address: p.address, lat: p.lat, lng: p.lng, players: [] });
       byKey.get(key).players.push(p);
@@ -823,7 +825,7 @@
   }
 
   return {
-    hasCoords: hasCoords, hasAddress: hasAddress, places: places, homeMembers: homeMembers, suggestedHomes: suggestedHomes, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
+    hasCoords: hasCoords, hasAddress: hasAddress, places: places, homeMembers: homeMembers, suggestedHomes: suggestedHomes, homeKind: homeKind, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
     planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,

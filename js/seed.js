@@ -252,10 +252,13 @@
     // the flatmates of 14 rue du Port, as a named shared flat
     var port = { id: uid(), name: 'Coloc du Port', address: '14 rue du Port', lat: 47.07410, lng: 2.39520, building: '', note: 'Second floor, on the left.' };
     players.forEach(function (p) { if (p.address === port.address) p.home_id = port.id; });
+    // the Tanneurs residence is named, with a few apartment numbers; the Lac residence is left to be detected
+    var tanneurs = { id: uid(), kind: 'residence', name: 'Résidence des Tanneurs', address: 'Résidence des Tanneurs', lat: 47.08712, lng: 2.39105, building: '', note: 'Badge needed at the gate after 22:00.' };
+    players.filter(function (p) { return p.address === tanneurs.address; }).forEach(function (p, i) { p.home_id = tanneurs.id; if (i % 2 === 0) p.apartment = String(101 + i * 37); });
     var settings = JSON.parse(JSON.stringify(K.seed.settings));
     settings.game_name = 'Killer (demo)'; settings.official_players = 48; settings.school_total = 440; settings.depts = ['A', 'B'];
     settings.map_center = { lat: 47.0833, lng: 2.4 };
-    return { players: players, rounds: [r0, r1], links: links, kills: kills, events: events, settings: settings, homes: [port],
+    return { players: players, rounds: [r0, r1], links: links, kills: kills, events: events, settings: settings, homes: [port, tanneurs],
       spots: [{ id: uid(), name: 'Campus gate', note: 'Everybody walks through it between classes.', address: '', lat: 47.0822, lng: 2.4163 },
         { id: uid(), name: 'Canteen', note: 'Busy between 12:00 and 13:00.', address: '', lat: 47.0809, lng: 2.4149 }],
       weapons: WEAPONS.map(function (w) { return { id: uid(), name: w[0], difficulty: w[1] }; }),

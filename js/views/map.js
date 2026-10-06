@@ -37,13 +37,13 @@
       var box = h('div', { class: 'map', role: 'application', 'aria-label': t('Map of players and places') }, h('p', { class: 'map-wait' }, t('Loading the map…')));
       var layersBody = h('div', { class: 'layers-body' });
       var layers = h('details', { class: 'panel layers', open: window.innerWidth > 820 }, h('summary', {}, h('h2', {}, t('Layers'))), layersBody);
-      var located = h('section', { class: 'panel' }), flatsList = h('section', { class: 'panel' }), spotsList = h('section', { class: 'panel' }), missing = h('section', { class: 'panel' });
+      var located = h('section', { class: 'panel' }), flatsList = h('section', { class: 'panel' }), resList = h('section', { class: 'panel' }), spotsList = h('section', { class: 'panel' }), missing = h('section', { class: 'panel' });
       var search = h('input', { type: 'search', placeholder: t('Search a player or an address'), 'aria-label': t('Search a player'), oninput: function (e) {
         view.q = e.target.value; clearTimeout(searchTimer); searchTimer = setTimeout(function () { view.fit = true; refresh(); }, 200);   // zoom on what matches
       } });
       root.appendChild(h('div', { class: 'filterbar' }, search, h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Show')), chips))); root.appendChild(hint);
       root.appendChild(h('div', { class: 'map-layout' }, box, layers));
-      [located, flatsList, spotsList, missing].forEach(function (el) { root.appendChild(el); });
+      [located, flatsList, resList, spotsList, missing].forEach(function (el) { root.appendChild(el); });
 
       /* The lists under the map fold to save scrolling: folded by default on a phone, the choice is remembered. */
       function foldHead(section, key, title, count, action) {
@@ -76,28 +76,36 @@
 
       function homeOf(id) { return (store.state.homes || []).find(function (x) { return x.id === id; }); }
       /* Kind of marker: a shared flat with at least one living flatmate shows (lit) as a shared flat, even when the
-         address is an apartment building; otherwise the most collective housing type at that address. */
+         address is an apartment building; then a residence with someone alive; otherwise the most collective housing
+         type at that address. */
       function placeKind(place) {
-        var liveFlat = (place.homeIds || []).some(function (id) { return L.homeMembers(store.state, id).alive.length; });
-        return liveFlat ? 'coloc' : place.type;
+        function live(kind) { return (place.homeIds || []).some(function (id) { var hm = homeOf(id); return L.homeKind(hm) === kind && L.homeMembers(store.state, id).alive.length; }); }
+        return live('coloc') ? 'coloc' : live('residence') ? 'residence' : place.type;
       }
       function popupPlace(place) {
         var dead = L.deadSet(store.state), type = L.ADDRESS_TYPES.find(function (t) { return t.id === place.type; });
-        function item(p) {
-          return h('div', { class: 'map-pop-item' }, h('strong', { class: dead.has(p.id) ? 'is-dead' : '' }, p.name), h('span', {}, p.address),
+        function item(p, withAddress, apt) {
+          return h('div', { class: 'map-pop-item' }, h('strong', { class: dead.has(p.id) ? 'is-dead' : '' }, p.name), withAddress ? h('span', {}, p.address) : null,
+            apt && p.apartment ? h('span', { class: 'muted' }, t('Apt. {n}', { n: p.apartment })) : null,
             h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Open sheet')));
         }
         var flats = (place.homeIds || []).map(homeOf).filter(Boolean), others = place.players.filter(function (p) { return !p.home_id || !homeOf(p.home_id); });
         return h('div', { class: 'map-pop' },
           flats.map(function (home) {
-            var hm = L.homeMembers(store.state, home.id);
-            return h('div', { class: 'map-pop-flat' }, h('span', { class: 'tag tag-flat' }, t('Shared flat') + ' · ' + home.name),
+            var hm = L.homeMembers(store.state, home.id), isRes = L.homeKind(home) === 'residence';
+            var members = hm.members.slice().sort(function (a, b) { return (dead.has(a.id) - dead.has(b.id)) || (a.apartment || '').localeCompare(b.apartment || '', 'fr', { numeric: true }) || a.name.localeCompare(b.name, 'fr'); });
+            return h('div', { class: 'map-pop-flat' }, h('span', { class: 'tag ' + (isRes ? 'tag-res' : 'tag-flat') }, (isRes ? t('Residence') : t('Shared flat')) + ' · ' + home.name),
+              home.address ? h('span', { class: 'map-pop-address' }, home.address) : null,   // once for the flat, not under every flatmate
               home.building ? h('span', { class: 'muted small' }, t('In: {building}', { building: home.building })) : null,
               h('span', { class: 'muted small' }, t('{a}/{b} alive', { a: hm.alive.length, b: hm.members.length })),
-              place.players.filter(function (p) { return p.home_id === home.id; }).map(item),
-              edit ? h('button', { type: 'button', class: 'linkish small', onclick: function () { K.actions.editHome(home); } }, t('Edit the flat')) : null);
+              members.map(function (p) { return item(p, false, isRes); }),   // everyone who lives there, the dead struck through
+              edit ? h('button', { type: 'button', class: 'linkish small', onclick: function () { K.actions.editHome(home); } }, isRes ? t('Edit the residence') : t('Edit the flat')) : null);
           }),
-          others.length ? [place.type !== 'normale' ? h('span', { class: 'tag' }, t(type.label)) : null, others.map(item)] : null);
+          others.length ? (function () {
+            var same = others.every(function (p) { return L.norm(p.address) === L.norm(others[0].address); });   // one address for all: shown once
+            return [place.type !== 'normale' ? h('span', { class: 'tag' }, t(type.label)) : null, same && others[0].address ? h('span', { class: 'map-pop-address' }, others[0].address) : null,
+              others.map(function (p) { return item(p, !same); })];
+          })() : null);
       }
       function popupSpot(id) {
         var s = store.state.spots.find(function (x) { return x.id === id; }); if (!s) return h('div', {});
@@ -109,7 +117,7 @@
 
       function goTo(key, lat, lng) {
         if (!map) return;
-        map.setView([lat, lng], Math.max(map.getZoom(), 16));
+        map.setView([lat, lng], Math.max(map.getZoom(), 16), { animate: false });   // no animation: the popup can then pan the map to fit
         if (pins.get(key)) pins.get(key).openPopup();
         if (box.scrollIntoView) box.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
@@ -247,32 +255,41 @@
             h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Sheet'))));
         });
 
-        /* Shared flats: named, with their flatmates; flats detected from sheets marked "shared flat" at one address */
-        ui.clear(flatsList);
-        var homes = (store.state.homes || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); }), detected = L.suggestedHomes(store.state);
-        flatsList.hidden = !homes.length && !detected.length && !edit;
-        foldHead(flatsList, 'flats', t('Shared flats'), homes.length, edit ? h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(null); } }, K.icon('plus'), t('New shared flat')) : null);
-        if (!homes.length && !detected.length) flatsList.appendChild(h('p', { class: 'empty' }, t('No shared flat yet: create one and choose who lives there; their sheets follow its address.')));
-        homes.forEach(function (home) {
-          var hm = L.homeMembers(store.state, home.id), placed = L.hasCoords(home);
-          flatsList.appendChild(h('div', { class: 'row map-row flat-row' + (hm.alive.length ? '' : ' is-dead') },
-            h('button', { type: 'button', class: 'row row-btn', disabled: !placed, onclick: function () { if (hm.members[0]) goTo(hm.members[0].id, home.lat, home.lng); else if (map) map.setView([home.lat, home.lng], 17); } },
-              h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, home.name),
-                h('span', { class: 'row-sub' }, [home.address || t('No address'), home.building].filter(Boolean).join(' · ')),
-                h('span', { class: 'row-sub' }, t('{a}/{b} alive', { a: hm.alive.length, b: hm.members.length }) + (hm.members.length ? ' · ' + hm.members.map(function (p) { return p.name; }).join(', ') : ''))),
-              h('span', { class: 'row-tags' }, h('span', { class: 'tag tag-flat' }, t('Shared flat')))),
-            !placed && edit ? h('button', { type: 'button', class: 'btn', disabled: !map, onclick: function () { view.placing = { kind: 'homes', id: home.id, name: home.name }; refresh(); if (box.scrollIntoView) box.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }, t('Place')) : null,
-            edit ? h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(home); } }, t('Edit')) : null));
-        });
-        if (detected.length && edit) {
-          flatsList.appendChild(h('h3', {}, t('Detected shared flats')));
-          flatsList.appendChild(h('p', { class: 'muted small' }, t('Players marked "shared flat" at the same address: name the flat to group them.')));
-          detected.forEach(function (d) {
-            flatsList.appendChild(h('div', { class: 'row map-row' }, h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, d.address || '-'),
-              h('span', { class: 'row-sub' }, d.players.map(function (p) { return p.name; }).join(', '))),
-              h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(null, d); } }, t('Name this flat'))));
+        /* Shared flats and student residences: named, with who lives there; the ones detected from sheets marked
+           "shared flat" (or "student residence") at one address */
+        [{ panel: flatsList, kind: 'coloc', fold: 'flats', title: t('Shared flats'), create: t('New shared flat'), tag: 'tag-flat', label: t('Shared flat'),
+           empty: t('No shared flat yet: create one and choose who lives there; their sheets follow its address.'),
+           detectedTitle: t('Detected shared flats'), detectedHint: t('Players marked "shared flat" at the same address: name the flat to group them.'), name: t('Name this flat') },
+         { panel: resList, kind: 'residence', fold: 'residences', title: t('Student residences'), create: t('New residence'), tag: 'tag-res', label: t('Residence'),
+           empty: t('No residence yet: create one and choose who lives there; their sheets follow its address.'),
+           detectedTitle: t('Detected residences'), detectedHint: t('Players marked "student residence" at the same address: name the residence to group them.'), name: t('Name this residence') }
+        ].forEach(function (k) {
+          var panel = k.panel; ui.clear(panel);
+          var homes = (store.state.homes || []).filter(function (x) { return L.homeKind(x) === k.kind; }).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); }), detected = L.suggestedHomes(store.state, k.kind);
+          panel.hidden = !homes.length && !detected.length && !edit;
+          foldHead(panel, k.fold, k.title, homes.length, edit ? h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(null, { kind: k.kind }); } }, K.icon('plus'), k.create) : null);
+          if (!homes.length && !detected.length) panel.appendChild(h('p', { class: 'empty' }, k.empty));
+          homes.forEach(function (home) {
+            var hm = L.homeMembers(store.state, home.id), placed = L.hasCoords(home);
+            panel.appendChild(h('div', { class: 'row map-row flat-row' + (hm.alive.length ? '' : ' is-dead') },
+              h('button', { type: 'button', class: 'row row-btn', disabled: !placed, onclick: function () { if (hm.members[0]) goTo(hm.members[0].id, home.lat, home.lng); else if (map) map.setView([home.lat, home.lng], 17); } },
+                h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, home.name),
+                  h('span', { class: 'row-sub' }, [home.address || t('No address'), home.building].filter(Boolean).join(' · ')),
+                  h('span', { class: 'row-sub' }, t('{a}/{b} alive', { a: hm.alive.length, b: hm.members.length }) + (hm.members.length ? ' · ' + hm.members.map(function (p) { return p.name + (k.kind === 'residence' && p.apartment ? ' (' + p.apartment + ')' : ''); }).join(', ') : ''))),
+                h('span', { class: 'row-tags' }, h('span', { class: 'tag ' + k.tag }, k.label))),
+              !placed && edit ? h('button', { type: 'button', class: 'btn', disabled: !map, onclick: function () { view.placing = { kind: 'homes', id: home.id, name: home.name }; refresh(); if (box.scrollIntoView) box.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }, t('Place')) : null,
+              edit ? h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(home); } }, t('Edit')) : null));
           });
-        }
+          if (detected.length && edit) {
+            panel.appendChild(h('h3', {}, k.detectedTitle));
+            panel.appendChild(h('p', { class: 'muted small' }, k.detectedHint));
+            detected.forEach(function (d) {
+              panel.appendChild(h('div', { class: 'row map-row' }, h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, d.address || '-'),
+                h('span', { class: 'row-sub' }, d.players.map(function (p) { return p.name; }).join(', '))),
+                h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(null, Object.assign({ kind: k.kind }, d)); } }, k.name)));
+            });
+          }
+        });
 
         ui.clear(spotsList);
         spotsList.hidden = !allSpots.length && !lostSpots.length;
