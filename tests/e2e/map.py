@@ -132,6 +132,13 @@ with sync_playwright() as p:
     assert 'pin-coloc' in pin() and 'pin-dead' not in pin(), 'one flatmate alive: still lit'
     pg.evaluate("id => { K.store.state.kills.push({ id: 'k-flat-2', victim_id: id }); K.store.emit(); }", mates[1])
     assert 'pin-dead' in pin(), 'every flatmate dead: greyed'
+    print('· search: only the markers of the players found, the map zooms on them')
+    name = pg.evaluate("K.store.state.players.find(p => K.logic.hasCoords(p)).name")
+    pg.get_by_label('Chercher un joueur').fill(name.split()[0].lower()); pg.wait_for_timeout(400)
+    titles = pg.evaluate("__L.markers.filter(m => !m.o.icon.html.includes('pin-spot')).map(m => m.o.title)")
+    assert titles and all(name.split()[0] in t for t in titles), titles
+    pg.get_by_label('Chercher un joueur').fill(''); pg.wait_for_timeout(400)
+    assert len(pg.evaluate("__L.markers")) > len(titles)
     b.close()
 assert not errs, errs
 print('OK')

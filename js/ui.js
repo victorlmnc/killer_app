@@ -99,6 +99,18 @@
     });
   };
 
+  ui.scrollHint = function (row) {
+    var box = h('div', { class: 'scroll-hint' }, row);
+    function update() {
+      var more = row.scrollWidth - row.clientWidth > 2;
+      box.classList.toggle('more-right', more && row.scrollLeft < row.scrollWidth - row.clientWidth - 2);
+      box.classList.toggle('more-left', more && row.scrollLeft > 2);
+    }
+    row.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    requestAnimationFrame(function () { requestAnimationFrame(update); });   // after layout (and after the chosen option is scrolled into view)
+    return box;
+  };
   ui.field = function (label, control, hint) {
     return h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), control, hint ? h('span', { class: 'field-hint' }, hint) : null);
   };

@@ -545,6 +545,7 @@
   "Search a name": "Chercher un nom",
   "Search a name, a note, an address": "Chercher un nom, une note, une adresse",
   "Search a player": "Chercher un joueur",
+  "Search a player or an address": "Chercher un joueur ou une adresse",
   "Search a weapon": "Chercher une arme",
   "Searching…": "Recherche en cours…",
   "Sections": "Sections",

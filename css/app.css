@@ -104,6 +104,17 @@ button, input, select, textarea { font: inherit; color: var(--ink); }
 .filter-label { flex: 0 0 5.5rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .filter-row > .chips, .filter-row > .segmented { flex: 1 1 0; min-width: 0; }
 .filter-row > .segmented:not(.segmented-wrap) { flex: 0 1 auto; }
+.filter-row > .scroll-hint { flex: 0 1 auto; min-width: 0; max-width: 100%; }   /* the options keep their own width */
+.filterbar > input[type="search"] { width: 100%; }
+/* sideways rows: a fade and a chevron where more options are hidden */
+.scroll-hint { position: relative; display: flex; min-width: 0; }
+.scroll-hint > .segmented-wrap { max-width: 100%; }
+.scroll-hint::before, .scroll-hint::after { content: ""; position: absolute; top: 1px; bottom: 1px; width: 2.6rem; pointer-events: none; opacity: 0; transition: opacity .15s; border-radius: 99px; }
+.scroll-hint::after { right: 1px; background: linear-gradient(to right, transparent, var(--surface) 70%); }
+.scroll-hint::before { left: 1px; background: linear-gradient(to left, transparent, var(--surface) 70%); }
+.scroll-hint.more-right::after, .scroll-hint.more-left::before { opacity: 1; }
+.scroll-hint.more-right .segmented-wrap { padding-right: 1.6rem; }
+.scroll-hint.more-right::after { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6 3l5 5-5 5' fill='none' stroke='%238f8f96' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right .6rem center / .75rem, linear-gradient(to right, transparent, var(--surface) 55%); }   /* the chevron above the fade */
 .chips-wrap { flex-wrap: wrap; overflow: visible; } .chips-wrap .chip { min-height: 32px; padding: .3rem .75rem; font-size: .84rem; }
 .chip-toggle { border-style: dashed; } .chip-toggle.is-on { border-style: solid; }
 .filter-selects { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .5rem; } .filter-selects select { width: 100%; }

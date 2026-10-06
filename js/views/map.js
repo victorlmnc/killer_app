@@ -28,7 +28,7 @@
       var LISTS = [['tous', t('All')], ['vivants', t('Alive')], ['cibles', t('Alliance targets')], ['killers', t('Alliance killers')]];
       var focus = (location.hash.match(/[?&]player=([^&]+)/) || [])[1] || null;
       var edit = store.canEdit();
-      var view = { list: 'tous', placing: null, fit: true, busy: false };
+      var view = { list: 'tous', placing: null, fit: true, busy: false, q: '' }, searchTimer = null;
       var prefs = loadPrefs(), bus = null, busReady = false;
       var map = null, layer = null, busLayer = null, pins = new Map(), gone = false;
 
@@ -38,7 +38,10 @@
       var layersBody = h('div', { class: 'layers-body' });
       var layers = h('details', { class: 'panel layers', open: window.innerWidth > 820 }, h('summary', {}, h('h2', {}, t('Layers'))), layersBody);
       var located = h('section', { class: 'panel' }), flatsList = h('section', { class: 'panel' }), spotsList = h('section', { class: 'panel' }), missing = h('section', { class: 'panel' });
-      root.appendChild(h('div', { class: 'filterbar' }, h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Show')), chips))); root.appendChild(hint);
+      var search = h('input', { type: 'search', placeholder: t('Search a player or an address'), 'aria-label': t('Search a player'), oninput: function (e) {
+        view.q = e.target.value; clearTimeout(searchTimer); searchTimer = setTimeout(function () { view.fit = true; refresh(); }, 200);   // zoom on what matches
+      } });
+      root.appendChild(h('div', { class: 'filterbar' }, search, h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Show')), chips))); root.appendChild(hint);
       root.appendChild(h('div', { class: 'map-layout' }, box, layers));
       [located, flatsList, spotsList, missing].forEach(function (el) { root.appendChild(el); });
 
@@ -64,7 +67,11 @@
             if (r.id) wanted.add(r.id);
           });
         }
-        return { dead: dead, players: st.players.filter(function (p) { return wanted ? wanted.has(p.id) : (view.list !== 'vivants' || !dead.has(p.id)); }) };
+        var q = L.norm(view.q);
+        return { dead: dead, players: st.players.filter(function (p) {
+          if (q && L.norm(p.name + ' ' + (p.address || '')).indexOf(q) < 0) return false;
+          return wanted ? wanted.has(p.id) : (view.list !== 'vivants' || !dead.has(p.id));
+        }) };
       }
 
       function homeOf(id) { return (store.state.homes || []).find(function (x) { return x.id === id; }); }

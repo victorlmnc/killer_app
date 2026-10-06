@@ -306,7 +306,7 @@
         var seg = h('div', { class: 'segmented segmented-wrap', role: 'group', 'aria-label': t('Group by') }, GROUPS.map(function (x) {
           return h('button', { type: 'button', class: view.group === x.id ? 'is-on' : '', 'aria-pressed': String(view.group === x.id), onclick: function () { view.group = x.id; refresh(); } }, x.label);
         }));
-        bar.appendChild(h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Group by')), seg));
+        bar.appendChild(h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Group')), ui.scrollHint(seg)));
         requestAnimationFrame(function () {   // on a phone the options scroll sideways: keep the chosen one in view
           var on = seg.querySelector('.is-on'); if (!on || seg.scrollWidth <= seg.clientWidth) return;
           seg.scrollLeft += on.getBoundingClientRect().left - seg.getBoundingClientRect().left - (seg.clientWidth - on.offsetWidth) / 2;
