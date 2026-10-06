@@ -132,7 +132,7 @@
           var allDead = place.players.every(function (p) { return s.dead.has(p.id); }), ally = place.players.some(function (p) { return p.is_ally; });
           var first = place.players.find(function (p) { return !s.dead.has(p.id); }) || place.players[0], kind = placeKind(place);
           var icon = Lf.divIcon({ className: 'pin-wrap', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -13],
-            html: pinHtml(kind, { dead: allDead && kind !== 'coloc', ally: ally, count: place.players.length, year: hexYear(first.year) }) });
+            html: pinHtml(kind, { dead: allDead, ally: ally, count: place.players.length, year: hexYear(first.year) }) });
           var title = place.players.map(function (p) { return p.name; }).join(', ');
           var m = Lf.marker([place.lat, place.lng], { icon: icon, title: title, alt: title, keyboard: true }).bindPopup(function () { return popupPlace(place); }, { maxWidth: 270, minWidth: 190 });
           layer.addLayer(m); bounds.push([place.lat, place.lng]);

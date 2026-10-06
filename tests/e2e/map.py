@@ -119,6 +119,17 @@ with sync_playwright() as p:
     pg.locator('.layer-row', has_text='Ligne 2').click()
     assert 'javascript' not in json.dumps(pg.evaluate("__L.bus.map(x => x.o.color)"))
     pg.get_by_role('button', name='Tout masquer').click(); assert pg.evaluate('__L.bus.length') == 0
+    print('· shared flat: its marker stays lit while a flatmate is alive, greyed once they are all dead')
+    mates = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), two = st.players.filter(p => !dead.has(p.id)).slice(0, 2);
+      st.homes = (st.homes || []).concat([{ id: 'flat-test', name: 'Les Lilas', address: '8 rue des Lilas', lat: 47.09, lng: 2.41 }]);
+      two.forEach(p => Object.assign(p, { home_id: 'flat-test', address: '8 rue des Lilas', lat: 47.09, lng: 2.41, address_type: 'coloc' }));
+      K.store.emit(); return two.map(p => p.id); }""")
+    pin = lambda: pg.evaluate("__L.markers.find(m => m.ll[0] === 47.09).o.icon.html")
+    assert 'pin-coloc' in pin() and 'pin-dead' not in pin(), pin()
+    pg.evaluate("id => { K.store.state.kills.push({ id: 'k-flat-1', victim_id: id }); K.store.emit(); }", mates[0])
+    assert 'pin-coloc' in pin() and 'pin-dead' not in pin(), 'one flatmate alive: still lit'
+    pg.evaluate("id => { K.store.state.kills.push({ id: 'k-flat-2', victim_id: id }); K.store.emit(); }", mates[1])
+    assert 'pin-dead' in pin(), 'every flatmate dead: greyed'
     b.close()
 assert not errs, errs
 print('OK')
