@@ -470,10 +470,10 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 }
 /* phone: names in full everywhere (classes, weapons in play, map layers) */
 @media (max-width: 640px) {
-  /* map lists: the tags go under the name and address, so the name keeps the whole width */
-  .map-row .row-btn { flex-wrap: wrap; row-gap: .3rem; }
-  .map-row .row-btn > .row-main { flex: 1 1 calc(100% - 28px - .7rem); }
-  .map-row .row-tags { justify-content: flex-start; margin-left: calc(28px + .7rem); }
+  /* map list of players: photo on the left, then name, address and tags in one column (the tags under the name) */
+  .map-row .map-player { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: .7rem; row-gap: .3rem; align-items: center; }
+  .map-player > .row-main { grid-column: 2; } .map-player > .row-tags { grid-column: 2; justify-content: flex-start; }
+  .map-player > .avatar, .map-player > .avatar-wrap { grid-row: 1 / span 2; align-self: start; margin-top: .1rem; }
   /* other rows with a side column (players list): the name keeps at least ~half the width, the side tags wrap */
   .row > .row-main { flex: 1 1 0; min-width: 0; }   /* the side column is capped, so the name keeps the rest */ .row-main .tag { max-width: 100%; }
   .row-side { flex: 0 0 auto; min-width: 0; max-width: 40%; } .row-side .tags { justify-content: flex-end; } .row-side .tag { white-space: normal; text-align: right; } .row-side > .small { text-align: right; }

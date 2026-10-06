@@ -226,7 +226,7 @@
         here.forEach(function (p) {
           var ty = L.addressType(p.address_type);
           located.appendChild(h('div', { class: 'row map-row' + (s.dead.has(p.id) ? ' is-dead' : '') },
-            h('button', { type: 'button', class: 'row row-btn', 'aria-label': t('Show {name} on the map', { name: p.name }), onclick: function () { goTo(p.id, p.lat, p.lng); } },
+            h('button', { type: 'button', class: 'row row-btn map-player', 'aria-label': t('Show {name} on the map', { name: p.name }), onclick: function () { goTo(p.id, p.lat, p.lng); } },
               ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name), h('span', { class: 'row-sub' }, p.address)),
               h('span', { class: 'row-tags' }, ui.statusTag(p, true), ty !== 'normale' ? h('span', { class: 'tag' }, t(L.ADDRESS_TYPES.find(function (x) { return x.id === ty; }).label)) : null, ui.yearTag(p))),
             h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Sheet'))));
