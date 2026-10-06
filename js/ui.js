@@ -292,6 +292,18 @@
   };
   /* Special status of a sheet: dangerous (red) or priority target (brass). */
   ui.STATUSES = [{ id: 'dangerous', label: 'Dangerous' }, { id: 'priority', label: 'Priority target' }];
+  /* Small marks after a name, the same as on the chain bubbles: white star = alliance, red ! = dangerous,
+     brass ◎ = priority target. The words are there for screen readers. */
+  ui.nameMarks = function (p) {
+    if (!p) return null;
+    var marks = [];
+    if (p.is_ally) marks.push(['ally', '★', t('Alliance member')]);
+    if (p.status === 'dangerous') marks.push(['dangerous', '!', t('Dangerous')]);
+    if (p.status === 'priority') marks.push(['priority', '◎', t('Priority target')]);
+    return marks.length ? h('span', { class: 'name-marks' }, marks.map(function (m) {
+      return h('span', { class: 'name-mark name-mark-' + m[0], title: m[2] }, h('span', { 'aria-hidden': 'true' }, m[1]), h('span', { class: 'sr-only' }, ' (' + m[2] + ')'));
+    })) : null;
+  };
   ui.statusTag = function (p, small) {
     var s = p && ui.STATUSES.find(function (x) { return x.id === p.status; });
     return s ? h('span', { class: 'tag tag-status tag-' + s.id + (small ? ' tag-sm' : '') }, t(s.label)) : null;

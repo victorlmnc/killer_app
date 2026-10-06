@@ -353,7 +353,7 @@
                 ps.map(function (p) {
                   var match = q && L.norm(p.name).indexOf(q) >= 0, extra = g.others.map(function (f) { return p[f]; }).filter(Boolean).join(' ');
                   return h('button', { type: 'button', class: 'class-name' + (dead.has(p.id) ? ' is-dead' : '') + (p.is_ally ? ' is-ally' : '') + (match ? ' is-match' : '') + (q && !match ? ' is-dim' : ''),
-                    onclick: function () { K.actions.openPlayer(p.id); } }, h('span', { class: 'class-who' }, p.name), extra ? h('span', { class: 'class-extra' }, extra) : null);
+                    onclick: function () { K.actions.openPlayer(p.id); } }, h('span', { class: 'class-who' }, p.name, ui.nameMarks(p)), extra ? h('span', { class: 'class-extra' }, extra) : null);
                 })));
             });
             body.appendChild(sec);
@@ -372,7 +372,7 @@
                 ps.map(function (p) {
                   var match = q && L.norm(p.name).indexOf(q) >= 0, extra = [p.year, p.td, p.tp].filter(Boolean).join(' ');
                   return h('button', { type: 'button', class: 'class-name' + (dead.has(p.id) ? ' is-dead' : '') + (p.is_ally ? ' is-ally' : '') + (match ? ' is-match' : '') + (q && !match ? ' is-dim' : ''),
-                    onclick: function () { K.actions.openPlayer(p.id); } }, h('span', { class: 'class-who' }, p.name), extra ? h('span', { class: 'class-extra' }, extra) : null);
+                    onclick: function () { K.actions.openPlayer(p.id); } }, h('span', { class: 'class-who' }, p.name, ui.nameMarks(p)), extra ? h('span', { class: 'class-extra' }, extra) : null);
                 })));
             });
             body.appendChild(otherSection);
