@@ -563,5 +563,6 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .map-pop-address { font-size: .84rem; color: var(--muted); }   /* the address, once per group */
 .map-pop-person { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: .6rem; }
 .map-pop-person > strong { overflow-wrap: anywhere; }
+.map-pop-actions { display: flex; gap: .5rem; } .map-pop-actions > .btn { flex: 1 1 0; justify-content: center; margin-top: .25rem; min-height: 32px; padding: .3rem .75rem; font-size: .85rem; }   /* side by side */
 .map-pop-person > .btn { margin-top: 0; grid-column: 2; grid-row: 1; min-height: 32px; padding: .3rem .75rem; font-size: .85rem; }
 .map-pop-person > .map-pop-address { grid-column: 1 / -1; margin-top: -.15rem; }

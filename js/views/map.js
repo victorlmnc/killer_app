@@ -113,7 +113,7 @@
         var s = store.state.spots.find(function (x) { return x.id === id; }); if (!s) return h('div', {});
         return h('div', { class: 'map-pop' }, h('div', { class: 'map-pop-item' }, h('span', { class: 'tag tag-spot' }, t('Strategic spot')), h('strong', {}, s.name),
           s.note ? h('span', {}, s.note) : null, s.address ? h('span', { class: 'muted' }, s.address) : null,
-          edit ? h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'btn', onclick: function () { editSpot(s); } }, t('Edit')),
+          edit ? h('div', { class: 'map-pop-actions' }, h('button', { type: 'button', class: 'btn', onclick: function () { editSpot(s); } }, t('Edit')),
             h('button', { type: 'button', class: 'btn', onclick: function () { if (map) map.closePopup(); view.placing = { kind: 'spots', id: s.id, name: s.name }; refresh(); } }, t('Move'))) : null));
       }
 
@@ -165,7 +165,7 @@
         });
         spots.forEach(function (sp) {
           var icon = Lf.divIcon({ className: 'pin-wrap', iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -15], html: pinHtml('spot') });
-          var m = Lf.marker([sp.lat, sp.lng], { icon: icon, title: sp.name, alt: sp.name, keyboard: true, zIndexOffset: 500 }).bindPopup(function () { return popupSpot(sp.id); }, { maxWidth: 270, minWidth: 190 });
+          var m = Lf.marker([sp.lat, sp.lng], { icon: icon, title: sp.name, alt: sp.name, keyboard: true, zIndexOffset: 500 }).bindPopup(function () { return popupSpot(sp.id); }, { maxWidth: 300, minWidth: Math.min(220, window.innerWidth - 90) });
           layer.addLayer(m); pins.set('spot:' + sp.id, m); bounds.push([sp.lat, sp.lng]);
         });
         if (view.fit && bounds.length) {
