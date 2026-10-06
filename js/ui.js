@@ -111,6 +111,68 @@
     requestAnimationFrame(function () { requestAnimationFrame(update); });   // after layout (and after the chosen option is scrolled into view)
     return box;
   };
+  /* Crop a photo to a square: drag to move, slider / wheel / pinch to zoom. source: a File or an image URL.
+     Resolves to a square JPEG File, or null when cancelled. Animated GIFs are not cropped (they would stop moving). */
+  ui.cropImage = function (source) {
+    return new Promise(function (resolve) {
+      var url = typeof source === 'string' ? source : URL.createObjectURL(source), img = new Image(), done = false;
+      if (typeof source === 'string' && source.indexOf('data:') !== 0) img.crossOrigin = 'anonymous';   // signed storage URLs: the canvas must stay readable
+      function finish(v) { if (done) return; done = true; if (typeof source !== 'string') URL.revokeObjectURL(url); resolve(v); }
+      img.onerror = function () { ui.toast(t('Unreadable image'), 'error'); finish(null); };
+      img.onload = function () {
+        ui.dialog({ title: t('Crop the photo'), onClose: function () { finish(null); }, render: function (body, api) {
+          var frame = h('div', { class: 'crop-frame' }), view = h('img', { class: 'crop-img', src: url, alt: '', draggable: 'false' });
+          var zoom = h('input', { type: 'range', min: '1', max: '4', step: '0.01', value: '1', 'aria-label': t('Zoom') });
+          frame.appendChild(view);
+          body.appendChild(h('p', { class: 'muted small' }, t('Move the photo with your finger or the mouse; zoom with the slider (or pinch, or the wheel).')));
+          body.appendChild(frame);
+          body.appendChild(h('div', { class: 'crop-zoom' }, h('span', { 'aria-hidden': 'true' }, '−'), zoom, h('span', { 'aria-hidden': 'true' }, '+')));
+          var W = img.naturalWidth, H = img.naturalHeight, size = 0, base = 1, k = 1, x = 0, y = 0;
+          function clamp() { var s = base * k; x = Math.min(0, Math.max(size - W * s, x)); y = Math.min(0, Math.max(size - H * s, y)); }
+          function draw() { clamp(); view.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + base * k + ')'; zoom.value = String(k); }
+          function setZoom(nk, cx, cy) {   // keep the point under (cx, cy) in place
+            nk = Math.max(1, Math.min(4, nk)); var s0 = base * k, s1 = base * nk;
+            cx = cx == null ? size / 2 : cx; cy = cy == null ? size / 2 : cy;
+            x = cx - (cx - x) * s1 / s0; y = cy - (cy - y) * s1 / s0; k = nk; draw();
+          }
+          requestAnimationFrame(function () {
+            size = frame.clientWidth; base = Math.max(size / W, size / H);
+            x = (size - W * base) / 2; y = (size - H * base) / 2; draw();
+          });
+          zoom.addEventListener('input', function () { setZoom(parseFloat(zoom.value)); });
+          frame.addEventListener('wheel', function (e) { e.preventDefault(); var r = frame.getBoundingClientRect(); setZoom(k * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+          var pts = new Map(), pinch = null;
+          frame.addEventListener('pointerdown', function (e) { frame.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); pinch = null; });
+          frame.addEventListener('pointermove', function (e) {
+            var prev = pts.get(e.pointerId); if (!prev) return;
+            var cur = { x: e.clientX, y: e.clientY };
+            if (pts.size === 1) { x += cur.x - prev.x; y += cur.y - prev.y; draw(); }
+            else {
+              pts.set(e.pointerId, cur);
+              var p = Array.from(pts.values()), d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), r = frame.getBoundingClientRect();
+              if (pinch) setZoom(k * d / pinch, (p[0].x + p[1].x) / 2 - r.left, (p[0].y + p[1].y) / 2 - r.top);
+              pinch = d;
+            }
+            pts.set(e.pointerId, cur);
+          });
+          function up(e) { pts.delete(e.pointerId); pinch = null; }
+          frame.addEventListener('pointerup', up); frame.addEventListener('pointercancel', up);
+          body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
+            h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+              var s = base * k, side = size / s, out = document.createElement('canvas');
+              out.width = out.height = Math.round(Math.min(800, side));
+              try {
+                out.getContext('2d').drawImage(img, -x / s, -y / s, side, side, 0, 0, out.width, out.height);
+                out.toBlob(function (blob) { finish(blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : null); api.close(); }, 'image/jpeg', 0.92);
+              } catch (err) { ui.toast(t('Unreadable image'), 'error'); finish(null); api.close(); }
+            } }, t('Use this photo'))));
+        } });
+      };
+      img.src = url;
+    });
+  };
+  /* A chosen photo goes through the cropper first, except animated GIFs. */
+  ui.pickPhoto = function (file) { return file && file.type === 'image/gif' ? Promise.resolve(file) : ui.cropImage(file); };
   ui.field = function (label, control, hint) {
     return h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), control, hint ? h('span', { class: 'field-hint' }, hint) : null);
   };

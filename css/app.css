@@ -543,3 +543,9 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .map-pop-flat { display: grid; gap: .3rem; padding-bottom: .4rem; margin-bottom: .4rem; border-bottom: 1px solid rgba(0, 0, 0, .12); }
 .flat-row.is-dead .row-title, .home-member.is-dead .row-title { color: var(--muted); text-decoration: line-through; }
 .list > .empty { padding: .9rem 1rem; margin: 0; }
+/* photo cropper: a square frame, the round avatar outline as a guide */
+.crop-frame { position: relative; width: min(100%, 340px); aspect-ratio: 1; margin: 0 auto; overflow: hidden; border-radius: var(--radius-sm); background: #000; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.crop-frame:active { cursor: grabbing; }
+.crop-frame::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px rgba(0, 0, 0, .45); outline: 2px solid rgba(255, 255, 255, .7); outline-offset: -2px; pointer-events: none; }
+.crop-img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; pointer-events: none; }
+.crop-zoom { display: flex; align-items: center; gap: .6rem; width: min(100%, 340px); margin: 0 auto; color: var(--muted); } .crop-zoom input { flex: 1; accent-color: #fff; }

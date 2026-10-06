@@ -559,7 +559,7 @@
             : res && res.via.length ? h('p', { class: 'muted small' }, t('Trail lost after {name} (dead).', { name: name(res.via[res.via.length - 1]) })) : null);
       }
 
-      var file = h('input', { type: 'file', accept: 'image/*,.gif', hidden: true, onchange: function () { if (file.files[0]) store.setPhoto(p.id, file.files[0]); } });
+      var file = h('input', { type: 'file', accept: 'image/*,.gif', hidden: true, onchange: function () { var f = file.files[0]; file.value = ''; if (f) ui.pickPhoto(f).then(function (c) { if (c) store.setPhoto(p.id, c); }); } });
       function showPhoto() {
         var offPhoto = null;
         ui.dialog({ title: p.name, onClose: function () { if (offPhoto) offPhoto(); }, render: function (photoBody) {
@@ -570,10 +570,12 @@
             var url = store.photoUrl(current.photo_path);
             photoBody.appendChild(url ? h('img', { class: 'photo-viewer-image', src: url, alt: current.name }) : ui.avatar(current, 'xl'));
             if (!edit) return;
-            var picker = h('input', { type: 'file', accept: 'image/*,.gif', hidden: true, onchange: function () { if (picker.files[0]) store.setPhoto(current.id, picker.files[0]); } });
+            var picker = h('input', { type: 'file', accept: 'image/*,.gif', hidden: true, onchange: function () { var f = picker.files[0]; picker.value = ''; if (f) ui.pickPhoto(f).then(function (c) { if (c) store.setPhoto(current.id, c); }); } });
             photoBody.appendChild(picker);
             var actions = h('div', { class: 'photo-viewer-actions' },
               h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { picker.click(); } }, t('Change photo')));
+            var gif = /\.gif$|^data:image\/gif/i.test(current.photo_path || '');   // an animated GIF would stop moving
+            if (url && !gif) actions.appendChild(h('button', { type: 'button', class: 'btn', onclick: function () { ui.cropImage(url).then(function (c) { if (c) store.setPhoto(current.id, c); }); } }, t('Crop')));
             if (current.photo_path) actions.appendChild(h('button', { type: 'button', class: 'btn btn-danger', onclick: function () { store.removePhoto(current.id); } }, t('Remove photo')));
             photoBody.appendChild(actions);
           }
@@ -979,7 +981,7 @@
       render: function (body, api) {
         var email = store.user ? store.user.email : '';
         var nameIn = h('input', { type: 'text', value: (me && me.name) || '', maxlength: '40', placeholder: email.split('@')[0] });
-        var file = h('input', { type: 'file', accept: 'image/*,.gif', hidden: true, onchange: function () { if (file.files[0]) store.setAvatar(file.files[0]).then(function () { ui.toast(t('Photo saved.')); }); } });
+        var file = h('input', { type: 'file', accept: 'image/*,.gif', hidden: true, onchange: function () { var f = file.files[0]; file.value = ''; if (f) ui.pickPhoto(f).then(function (c) { if (c) store.setAvatar(c).then(function () { ui.toast(t('Photo saved.')); }); }); } });
         var pass = h('input', { type: 'password', autocomplete: 'new-password', minlength: '8', placeholder: t('8 characters minimum') });
         var lang = ui.select([{ value: 'fr', label: 'Français' }, { value: 'en', label: 'English' }], K.i18n.lang);
         var roleLabel = { admin: t('Administrator'), member: t('Alliance member'), observer: t('Observer') }[store.role] || '';

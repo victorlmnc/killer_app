@@ -82,6 +82,36 @@ with sync_playwright() as p:
     plan = pg.locator('section.panel', has=pg.locator('h2', has_text='Préshot'))
     expect(plan).to_contain_text(ids['targetName']); expect(plan).to_contain_text('dans le frigo'); expect(plan).to_contain_text('À trouver')
 
+    step('photo: cropped before saving (drag, zoom), square; "Crop" again from the photo viewer; GIFs untouched')
+    import struct, zlib
+    def png(w, hgt):   # left half red, right half blue
+        raw = b''.join(b'\x00' + b''.join(b'\xff\x00\x00' if x < w // 2 else b'\x00\x00\xff' for x in range(w)) for _ in range(hgt))
+        chunk = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+        return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, hgt, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+    pid = pg.evaluate("K.store.state.players.find(p => !p.photo_path).id")
+    pg.evaluate("id => K.actions.openPlayer(id)", pid)
+    pg.locator('dialog[open] input[type=file]').first.set_input_files({ 'name': 'wide.png', 'mimeType': 'image/png', 'buffer': png(400, 200) })
+    crop = pg.locator('dialog[open]').last; expect(crop).to_contain_text('Recadrer la photo')
+    box = crop.locator('.crop-frame').bounding_box()
+    pg.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2); pg.mouse.down()
+    pg.mouse.move(box['x'] - box['width'], box['y'] + box['height'] / 2, steps=8); pg.mouse.up()   # all the way to the right half
+    crop.get_by_role('button', name='Utiliser cette photo').click()
+    pg.wait_for_function("id => (K.store.player(id).photo_path || '').startsWith('data:image/jpeg')", arg=pid)
+    info = pg.evaluate("""id => new Promise(res => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = i.width; c.height = i.height;
+      const g = c.getContext('2d'); g.drawImage(i, 0, 0); const d = g.getImageData(i.width / 2, i.height / 2, 1, 1).data; res([i.width, i.height, d[0], d[2]]); }; i.src = K.store.player(id).photo_path; })""", pid)
+    assert info[0] == info[1] and info[3] > 200 and info[2] < 60, info                # square, and the blue half is now in the middle
+    pg.locator('dialog[open] .profile-photo').click()                                  # the photo viewer
+    pg.locator('dialog[open]').last.get_by_role('button', name='Recadrer').click()
+    expect(pg.locator('dialog[open]').last).to_contain_text('Recadrer la photo')
+    pg.locator('dialog[open]').last.get_by_role('button', name='Utiliser cette photo').click()
+    pg.keyboard.press('Escape'); pg.keyboard.press('Escape')
+    gif = b'GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;'
+    pid2 = pg.evaluate("K.store.state.players.find(p => !p.photo_path).id")
+    pg.evaluate("id => K.actions.openPlayer(id)", pid2)
+    pg.locator('dialog[open] input[type=file]').first.set_input_files({ 'name': 'a.gif', 'mimeType': 'image/gif', 'buffer': gif })
+    pg.wait_for_function("id => (K.store.player(id).photo_path || '').startsWith('data:image/gif')", arg=pid2)   # no cropper, still a GIF
+    pg.keyboard.press('Escape')
+
     step('shared flat: created from the map, its flatmates follow its address; it stays alive while one of them is')
     ctx.route('**/leaflet.min.*', lambda r: r.abort())                                # no map tiles needed: the lists work without
     ctx.route('**/data.geopf.fr/**', lambda r: r.fulfill(json={ 'features': [{ 'geometry': { 'coordinates': [2.401, 47.081] }, 'properties': { 'score': 0.9, 'label': '8 rue des Lilas' } }] }))

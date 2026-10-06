@@ -162,6 +162,8 @@
   "Could not start: {err}": "Démarrage impossible : {err}",
   "Create my account": "Créer mon compte",
   "Create the reroll": "Créer le reroll",
+  "Crop": "Recadrer",
+  "Crop the photo": "Recadrer la photo",
   "Current": "Actuelle",
   "Current loop: {a} players alive, {b} known fragments": "Boucle actuelle : {a} joueurs vivants, {b} fragments connus",
   "Currently in play": "En jeu en ce moment",
@@ -342,6 +344,7 @@
   "Merged: {n} sheets updated.": "Fusionnée : {n} fiches mises à jour.",
   "Moments when {name} comes out of a class or goes into one while you are not in the middle of one, over the next 7 days (Paris time).": "Moments où {name} sort de cours ou y entre alors que tu n'es pas en plein cours, sur les 7 prochains jours (heure de Paris).",
   "Moments when {name} comes out of a class or goes into one, over the next 7 days (Paris time). Link your account to your sheet to take your own timetable into account.": "Moments où {name} sort de cours ou y entre, sur les 7 prochains jours (heure de Paris). Relie ton compte à ta fiche pour tenir compte de ton propre emploi du temps.",
+  "Move the photo with your finger or the mouse; zoom with the slider (or pinch, or the wheel).": "Déplace la photo au doigt ou à la souris ; zoome avec le curseur (ou en pinçant, ou à la molette).",
   "moves out of another flat": "quitte une autre coloc",
   "My hunter": "Mon chasseur",
   "My sheet": "Ma fiche",
@@ -605,6 +608,7 @@
   "Unnamed timetable": "Emploi du temps sans nom",
   "until {date}": "jusqu’au {date}",
   "until {time}": "jusqu'à {time}",
+  "Use this photo": "Utiliser cette photo",
   "used": "utilisé",
   "View photo": "Voir la photo",
   "Show {name} on the map": "Montrer {name} sur la carte",
@@ -790,6 +794,7 @@
   "{name} is alive again and {killer} loses the {n} points of this kill.": "{name} redevient vivant et {killer} perd les {n} points de ce kill.",
   "{name} is alive again.": "{name} redevient vivant.",
   "{n} players dropped in the tray": "{n} joueurs déposés dans le bac",
-  "Your own player sheet: the dashboard then shows your target, your hunter and your quick actions.": "Ta propre fiche joueur : le tableau de bord affiche alors ta cible, ton chasseur et tes actions rapides."
+  "Your own player sheet: the dashboard then shows your target, your hunter and your quick actions.": "Ta propre fiche joueur : le tableau de bord affiche alors ta cible, ton chasseur et tes actions rapides.",
+  "Zoom": "Zoom"
 });
 })();
