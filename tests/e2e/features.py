@@ -73,6 +73,8 @@ with sync_playwright() as p:
     pg.goto(URL + '#/dashboard')
     expect(pg.locator('.alerts')).to_contain_text('est immunisée')
     expect(pg.locator('.me')).to_contain_text('Immunité')                           # on "my target"
+    pg.locator('.me-sched').get_by_role('button', name='Voir la semaine').click()    # "where is my target": the week too
+    expect(pg.locator('dialog[open]').last).to_contain_text('Mathématiques'); pg.keyboard.press('Escape')
 
     step('pre-shot: the weapons of our targets, with what we already have')
     pg.evaluate("() => { const w = K.store.state.weapons.find(x => K.logic.norm(x.name) === 'banane'); if (w) K.store.update('weapons', w.id, { owned: true, note: 'dans le frigo' }); }")

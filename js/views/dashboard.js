@@ -93,7 +93,9 @@
       dead ? null : h('div', { class: 'me-rels' }, who(t('My target'), target), who(t('My hunter'), hunter)),
       targetPlayer && !targetPlayer.is_ally ? h('div', { class: 'me-sched' },   // tanking an ally: no need to know where they are
  h('div', { class: 'row me-sched-head' }, h('span', { class: 'relation-label row-main' }, t('Where is my target')),
-        store.calendarsFor(targetPlayer).length ? h('button', { type: 'button', class: 'linkish small', onclick: function () { K.actions.catchDialog(targetPlayer.id); } }, t('When to catch them')) : null), ui.schedule(targetPlayer, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.'))) : null);
+        store.calendarsFor(targetPlayer).length ? h('span', { class: 'me-sched-links' },
+          h('button', { type: 'button', class: 'linkish small', onclick: function () { ui.openWeek(targetPlayer); } }, t('See the week')),
+          h('button', { type: 'button', class: 'linkish small', onclick: function () { K.actions.catchDialog(targetPlayer.id); } }, t('When to catch them'))) : null), ui.schedule(targetPlayer, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.'))) : null);
   }
 
   /* What threatens the alliance right now (K.logic.dangerAlerts), most serious first; nothing when all is calm. */
@@ -127,7 +129,7 @@
   K.views.dashboard = {
     title: t('Dashboard'),
     render: function (root) {
-      var showAll = false, showAllIncomplete = false, showAllGeneral = false, leaderboardMode = 'kills', slide = 0;
+      var showAll = false, showAllIncomplete = false, showAllBoard = false, leaderboardMode = 'kills', slide = 0;
       /* Blocks below the hero live in a swipeable carousel; the active slide survives re-renders. */
       function carousel(slides) {
         var track = h('div', { class: 'carousel-track', tabindex: '0', 'aria-label': t('Dashboard blocks') }), dots = h('div', { class: 'carousel-dots', role: 'tablist' });
@@ -239,13 +241,19 @@
         });
         grid.appendChild(where);
 
-        var board = L.leaderboard(st), visibleBoard = board.slice(0, 12), adminRow = board.find(function (r) { return r.admin; });
+        var board = L.leaderboard(st), visibleBoard = board.slice(0, showAllBoard ? board.length : 10), adminRow = board.find(function (r) { return r.admin; });
         if (adminRow && visibleBoard.indexOf(adminRow) < 0) visibleBoard.push(adminRow);
         var boardTitle = h('h2', {}, t('Ranking'));
-        var boardMode = ui.select([{ value: 'kills', label: t('Kills') }, { value: 'general', label: t('General') }], leaderboardMode, {
-          'aria-label': t('Choose ranking'), onchange: function (e) { leaderboardMode = e.target.value; showAllGeneral = false; refresh(); }
-        });
-        var lb = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, boardTitle, boardMode));
+        var boardMode = h('div', { class: 'segmented', role: 'group', 'aria-label': t('Choose ranking') }, [['kills', t('Kills')], ['general', t('General')]].map(function (m) {
+          return h('button', { type: 'button', class: leaderboardMode === m[0] ? 'is-on' : '', 'aria-pressed': String(leaderboardMode === m[0]), onclick: function () { leaderboardMode = m[0]; showAllBoard = false; refresh(); } }, m[1]);
+        }));
+        var lb = h('section', { class: 'panel board' }, h('div', { class: 'panel-head' }, boardTitle, boardMode));
+        /* One line of the ranking: rank (podium in gold, silver, bronze), photo, name and points, score on the right */
+        function boardRow(rank, who, sub, score, onclick) {
+          return h('button', { type: 'button', class: 'row row-btn board-row' + (rank && rank <= 3 ? ' is-podium rank-' + rank : ''), onclick: onclick },
+            h('span', { class: 'board-rank' }, rank ? String(rank) : '–'), who, h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, sub[0]), sub[1] ? h('span', { class: 'row-sub' }, sub[1]) : null), score);
+        }
+        function scoreOf(n) { return h('span', { class: 'board-score' }, h('strong', {}, String(n)), h('small', {}, n === 1 ? t('kill') : t('kills'))); }
         function showAdminEliminations() {
           var adminKills = st.kills.filter(function (kill) { return !!kill.admin_reason; }).sort(function (a, b) { return b.happened_at.localeCompare(a.happened_at); });
           ui.dialog({ title: t('Admin eliminations'), render: function (body) {
@@ -263,21 +271,23 @@
         if (leaderboardMode === 'kills') {
           if (!board.length) lb.appendChild(h('p', { class: 'empty' }, t('No kill attributed yet.')));
           visibleBoard.forEach(function (r) {
-            var rank = [h('span', { class: 'rank' }, '#' + r.rank), h('strong', { class: 'count' }, r.kills)];
-            if (r.admin) lb.appendChild(h('button', { type: 'button', class: 'row row-btn leaderboard-admin', 'aria-label': t('Admin eliminations'), onclick: showAdminEliminations }, h('span', { class: 'leader-admin-mark', 'aria-hidden': 'true' }, K.icon('settings')), h('span', { class: 'row-main' }, t('Admin')), rank));
-            else { var p = store.player(r.id); if (p) lb.appendChild(personRow(p, rank)); }
+            if (r.admin) { var adminLine = boardRow(null, h('span', { class: 'leader-admin-mark', 'aria-hidden': 'true' }, K.icon('settings')), [t('Admin'), t('Administrative eliminations')], scoreOf(r.kills), showAdminEliminations); adminLine.classList.add('leaderboard-admin'); return lb.appendChild(adminLine); }
+            var p = store.player(r.id); if (!p) return;
+            lb.appendChild(boardRow(r.rank, ui.avatar(p, 'sm'), [p.name, K.n(p.points || 0, '{n} pt', '{n} pts') + (dead.has(p.id) ? ' · ' + t('dead') : '')], scoreOf(r.kills), function () { K.actions.openPlayer(p.id); }));
           });
+          var killers = board.filter(function (r) { return !r.admin; }).length;
+          if (killers > 10) lb.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAllBoard = !showAllBoard; refresh(); } }, showAllBoard ? t('Show less') : t('Show all ({n})', { n: killers })));
           lb.appendChild(h('p', { class: 'muted small' }, stats.unattributed ? t('{n} deaths without an identified killer: open their sheet to set one.', { n: stats.unattributed }) : t('Every death has an identified killer.')));
         } else {
           var general = L.generalRanking(st);
-          general.slice(0, showAllGeneral ? general.length : 12).forEach(function (r) {
+          general.slice(0, showAllBoard ? general.length : 10).forEach(function (r) {
             var p = store.player(r.id);
             if (!p) return;
-            var place = r.alive ? h('span', { class: 'tag tag-alive' }, t('Still in the game')) : h('span', { class: 'rank' }, '#' + r.rank);
-            lb.appendChild(personRow(p, place));
+            lb.appendChild(boardRow(r.alive ? null : r.rank, ui.avatar(p, 'sm'), [p.name, K.n(p.points || 0, '{n} pt', '{n} pts')],
+              r.alive ? h('span', { class: 'tag tag-alive' }, t('Still in the game')) : null, function () { K.actions.openPlayer(p.id); }));
           });
           if (!general.length) lb.appendChild(h('p', { class: 'empty' }, t('No players yet')));
-          if (general.length > 12) lb.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAllGeneral = !showAllGeneral; refresh(); } }, showAllGeneral ? t('Show less') : t('Show all')));
+          if (general.length > 10) lb.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAllBoard = !showAllBoard; refresh(); } }, showAllBoard ? t('Show less') : t('Show all ({n})', { n: general.length })));
         }
         grid.appendChild(lb);
 

@@ -297,6 +297,10 @@
     if (bonusSignature && sig !== bonusSignature) K.store.emit();
     bonusSignature = sig;
   }, 60e3);
+  /* The week of a player, loading their timetable first (from a place that only shows "now" and "next"). */
+  ui.openWeek = function (p) {
+    K.store.playerEvents(p).then(function (res) { ui.weekDialog(p, res.events); }, function (err) { ui.toast(t('Timetable unavailable: {err}', { err: err.message || err }), 'error'); });
+  };
   ui.weekDialog = function (p, events) {
     var today = new Date(), monday = dayStart(today, -K.logic.parisParts(today).wd);   // Monday 00:00, Paris time
     ui.dialog({ title: t('Timetable of {name}', { name: p.name }), render: function (body) {
