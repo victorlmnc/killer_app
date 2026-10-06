@@ -8,15 +8,18 @@
   K.views.players = {
     title: t('Players'),
     render: function (root) {
-      var view = { q: '', list: 'alive', year: '', dept: '', sort: 'name' };
-      var LISTS = [['all', t('All')], ['alive', t('Alive')], ['dead', t('Dead')], ['allies', t('Alliance')], ['notarget', t('Unknown target')], ['weapons', t('Known weapons')], ['noaddress', t('Unknown address')], ['flagged', t('Special status')], ['timetable', t('With a timetable')]];
+      /* Filters: who (all / alive / dead), one extra filter that combines with it, year, department, sort */
+      var DEFAULT = { q: '', state: 'alive', extra: '', year: '', dept: '', sort: 'name' }, view = Object.assign({}, DEFAULT);
+      var STATES = [['all', t('All')], ['alive', t('Alive')], ['dead', t('Dead')]];
+      var EXTRAS = [['allies', t('Alliance')], ['notarget', t('Unknown target')], ['weapons', t('Known weapons')], ['noaddress', t('Unknown address')], ['flagged', t('Special status')], ['timetable', t('With a timetable')]];
       var search = h('input', { type: 'search', placeholder: t('Search a name, a note, an address'), 'aria-label': t('Search a player'), oninput: function (e) { view.q = e.target.value; paint(); } });
-      var chips = h('div', { class: 'chips', role: 'group', 'aria-label': t('List') }), filters = h('div', { class: 'toolbar' }), count = h('p', { class: 'muted small' }), list = h('div', { class: 'list' });
-      root.appendChild(h('div', { class: 'toolbar' }, search,
-        store.canEdit() ? h('button', { type: 'button', class: 'btn', onclick: K.actions.importDialog }, K.icon('upload'), t('Import')) : null,
-        h('button', { type: 'button', class: 'btn', onclick: exportMenu }, K.icon('download'), t('Export')),
-        store.canEdit() ? h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { K.actions.editPlayer(null); } }, K.icon('plus'), t('Add a player')) : null));
-      root.appendChild(chips); root.appendChild(filters); root.appendChild(count); root.appendChild(list);
+      var filters = h('div', { class: 'filterbar' }), count = h('span', { class: 'muted small' }), list = h('div', { class: 'list' });
+      root.appendChild(h('div', { class: 'toolbar toolbar-search' }, search,
+        h('div', { class: 'toolbar-actions' },
+          store.canEdit() ? h('button', { type: 'button', class: 'btn', onclick: K.actions.importDialog }, K.icon('upload'), t('Import')) : null,
+          h('button', { type: 'button', class: 'btn', onclick: exportMenu }, K.icon('download'), t('Export')),
+          store.canEdit() ? h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { K.actions.editPlayer(null); } }, K.icon('plus'), t('Add a player')) : null)));
+      root.appendChild(filters); root.appendChild(list);
 
       function exportMenu() {
         ui.dialog({ title: t('Export'), render: function (b, api) {
@@ -29,12 +32,22 @@
       }
       function refresh() {
         var s = store.state.settings;
-        ui.clear(chips);
-        LISTS.forEach(function (l) { chips.appendChild(h('button', { type: 'button', class: 'chip' + (view.list === l[0] ? ' is-on' : ''), 'aria-pressed': String(view.list === l[0]), onclick: function () { view.list = l[0]; refresh(); } }, l[1])); });
         ui.clear(filters);
-        filters.appendChild(ui.select([{ value: '', label: t('All years') }].concat((s.years || []).map(function (y) { return y.name; })), view.year, { 'aria-label': t('Year'), onchange: function (e) { view.year = e.target.value; paint(); } }));
-        if ((s.depts || []).length) filters.appendChild(ui.select([{ value: '', label: t('All departments') }].concat(s.depts), view.dept, { 'aria-label': t('Department'), onchange: function (e) { view.dept = e.target.value; paint(); } }));
-        filters.appendChild(ui.select([{ value: 'name', label: t('Sort: name') }, { value: 'points', label: t('Sort: points') }, { value: 'kills', label: t('Sort: kills') }, { value: 'class', label: t('Sort: class') }], view.sort, { 'aria-label': t('Sort'), onchange: function (e) { view.sort = e.target.value; paint(); } }));
+        filters.appendChild(h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Show')),
+          h('div', { class: 'segmented', role: 'group', 'aria-label': t('List') }, STATES.map(function (x) {
+            return h('button', { type: 'button', class: view.state === x[0] ? 'is-on' : '', 'aria-pressed': String(view.state === x[0]), onclick: function () { view.state = x[0]; refresh(); } }, x[1]);
+          }))));
+        filters.appendChild(h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Filter')),
+          h('div', { class: 'chips chips-wrap', role: 'group', 'aria-label': t('Filter') }, EXTRAS.map(function (x) {   // tap again to remove it
+            return h('button', { type: 'button', class: 'chip' + (view.extra === x[0] ? ' is-on' : ''), 'aria-pressed': String(view.extra === x[0]), onclick: function () { view.extra = view.extra === x[0] ? '' : x[0]; refresh(); } }, x[1]);
+          }))));
+        filters.appendChild(h('div', { class: 'filter-selects' },
+          ui.select([{ value: '', label: t('All years') }].concat((s.years || []).map(function (y) { return y.name; })), view.year, { 'aria-label': t('Year'), onchange: function (e) { view.year = e.target.value; refresh(); } }),
+          (s.depts || []).length ? ui.select([{ value: '', label: t('All departments') }].concat(s.depts), view.dept, { 'aria-label': t('Department'), onchange: function (e) { view.dept = e.target.value; refresh(); } }) : null,
+          ui.select([{ value: 'name', label: t('Sort: name') }, { value: 'points', label: t('Sort: points') }, { value: 'kills', label: t('Sort: kills') }, { value: 'class', label: t('Sort: class') }], view.sort, { 'aria-label': t('Sort'), onchange: function (e) { view.sort = e.target.value; paint(); } })));
+        var changed = ['state', 'extra', 'year', 'dept'].some(function (k) { return view[k] !== DEFAULT[k]; });
+        filters.appendChild(h('div', { class: 'filter-foot' }, count,
+          changed ? h('button', { type: 'button', class: 'linkish small', onclick: function () { Object.assign(view, DEFAULT, { q: view.q, sort: view.sort }); refresh(); } }, t('Reset filters')) : null));
         paint();
       }
       function paint() {
@@ -45,14 +58,14 @@
         var q = L.norm(view.q);
         var rows = st.players.filter(function (p) {
           var d = dead.has(p.id);
-          if (view.list === 'alive' && d) return false;
-          if (view.list === 'dead' && !d) return false;
-          if (view.list === 'allies' && !p.is_ally) return false;
-          if (view.list === 'notarget' && (d || targets.get(p.id))) return false;
-          if (view.list === 'weapons' && (d || !p.weapons)) return false;
-          if (view.list === 'flagged' && !p.status) return false;
-          if (view.list === 'timetable' && !store.calendarsFor(p).length) return false;
-          if (view.list === 'noaddress' && (p.is_ally || L.hasAddress(p))) return false;   // same scope as the dashboard statistics
+          if (view.state === 'alive' && d) return false;
+          if (view.state === 'dead' && !d) return false;
+          if (view.extra === 'allies' && !p.is_ally) return false;
+          if (view.extra === 'notarget' && (d || targets.get(p.id))) return false;
+          if (view.extra === 'weapons' && (d || !p.weapons)) return false;
+          if (view.extra === 'flagged' && !p.status) return false;
+          if (view.extra === 'timetable' && !store.calendarsFor(p).length) return false;
+          if (view.extra === 'noaddress' && (p.is_ally || L.hasAddress(p))) return false;   // same scope as the dashboard statistics
           if (view.year && p.year !== view.year) return false;
           if (view.dept && p.dept !== view.dept) return false;
           return !q || L.norm([p.name, p.notes, p.address, p.weapons, p.option].join(' ')).indexOf(q) >= 0;
@@ -284,24 +297,26 @@
         { id: 'dept', label: t('Department'), key: function (p) { return p.dept || ''; }, others: ['td', 'tp'] }
       ];
       var view = { group: 'td', year: '', alive: false, q: '' };
-      var bar = h('div', { class: 'toolbar' }), chips = h('div', { class: 'chips', role: 'group', 'aria-label': t('Year') }), body = h('div', { class: 'classes' });
-      root.appendChild(bar); root.appendChild(chips); root.appendChild(body);
+      var bar = h('div', { class: 'filterbar' }), body = h('div', { class: 'classes' });
+      var search = h('input', { type: 'search', placeholder: t('Find someone'), 'aria-label': t('Find a player'), oninput: function (e) { view.q = e.target.value; refresh(); } });   // built once: typing keeps the focus
+      root.appendChild(search); root.appendChild(bar); root.appendChild(body);
       function refresh() {
         var st = store.state, dead = L.deadSet(st), g = GROUPS.find(function (x) { return x.id === view.group; });
         ui.clear(bar);
-        var seg = bar.appendChild(h('div', { class: 'segmented segmented-wrap', role: 'group', 'aria-label': t('Group by') }, GROUPS.map(function (x) {
+        var seg = h('div', { class: 'segmented segmented-wrap', role: 'group', 'aria-label': t('Group by') }, GROUPS.map(function (x) {
           return h('button', { type: 'button', class: view.group === x.id ? 'is-on' : '', 'aria-pressed': String(view.group === x.id), onclick: function () { view.group = x.id; refresh(); } }, x.label);
-        })));
+        }));
+        bar.appendChild(h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Group by')), seg));
         requestAnimationFrame(function () {   // on a phone the options scroll sideways: keep the chosen one in view
           var on = seg.querySelector('.is-on'); if (!on || seg.scrollWidth <= seg.clientWidth) return;
           seg.scrollLeft += on.getBoundingClientRect().left - seg.getBoundingClientRect().left - (seg.clientWidth - on.offsetWidth) / 2;
         });
-        bar.appendChild(h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: view.alive, onchange: function (e) { view.alive = e.target.checked; refresh(); } }), t('Alive only')));
-        bar.appendChild(h('input', { type: 'search', placeholder: t('Find someone'), value: view.q, 'aria-label': t('Find a player'), oninput: function (e) { view.q = e.target.value; paint(); } }));
-        ui.clear(chips);
+        var years = h('div', { class: 'chips chips-wrap', role: 'group', 'aria-label': t('Year') });
         [''].concat((st.settings.years || []).map(function (y) { return y.name; })).forEach(function (y) {
-          chips.appendChild(h('button', { type: 'button', class: 'chip' + (view.year === y ? ' is-on' : ''), 'aria-pressed': String(view.year === y), onclick: function () { view.year = y; refresh(); } }, y || t('All years')));
+          years.appendChild(h('button', { type: 'button', class: 'chip' + (view.year === y ? ' is-on' : ''), 'aria-pressed': String(view.year === y), onclick: function () { view.year = y; refresh(); } }, y || t('All years')));
         });
+        years.appendChild(h('button', { type: 'button', class: 'chip chip-toggle' + (view.alive ? ' is-on' : ''), 'aria-pressed': String(view.alive), onclick: function () { view.alive = !view.alive; refresh(); } }, t('Alive only')));
+        bar.appendChild(h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Year')), years));
         paint();
         function paint() {
           ui.clear(body);

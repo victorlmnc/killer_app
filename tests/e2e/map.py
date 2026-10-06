@@ -51,6 +51,8 @@ with sync_playwright() as p:
     assert s['tile']['url'].startswith('https://tile.openstreetmap.org') and 'OpenStreetMap' in s['tile']['o']['attribution'] and s['fits'] == 1
     expect(pg.locator('.view-map > section.panel').first).to_contain_text(f'Joueurs localisés {len(located)}')
     print('· list row centres the map and opens the popup: name, address, sheet')
+    assert pg.locator('.panel.is-folded').count() == 3                                 # on a phone the lists under the map start folded
+    pg.locator('.fold-toggle', has_text='Joueurs localisés').click(); assert pg.locator('.panel.is-folded').count() == 2
     row = pg.locator('.map-row .row-btn').first; who = row.locator('.row-title').inner_text(); row.click()
     pop = pg.locator('#fake-pop'); expect(pop).to_contain_text(who); expect(pop).to_contain_text('rue')
     pop.get_by_role('button', name='Voir la fiche').first.dispatch_event('click')  # le faux popup tombe sous la barre de navigation

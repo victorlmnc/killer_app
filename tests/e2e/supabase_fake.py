@@ -82,7 +82,7 @@ with sync_playwright() as p:
     assert ['upsert', 'settings', {'key': 'official_players', 'value': 120}, []] in pg.evaluate('window.__calls')
     print('· realtime: a teammate change arrives without reload')
     pg.evaluate("window.__db.players.push({id:'p3', name:'COSETTE Euphrasie', year:'2A', td:'TD1', points:0}); window.__rt({table:'players'})")
-    pg.locator('.chip', has_text='Tous').click()
+    pg.locator('.filterbar').get_by_role('button', name='Tous', exact=True).click()
     expect(pg.locator('.list')).to_contain_text('COSETTE Euphrasie')
     print('· server error: clear message then resync')
     pg.evaluate("window.__fail='players'; K.store.update('players','p1',{points:99})")

@@ -32,16 +32,24 @@
       var prefs = loadPrefs(), bus = null, busReady = false;
       var map = null, layer = null, busLayer = null, pins = new Map(), gone = false;
 
-      var chips = h('div', { class: 'chips', role: 'group', 'aria-label': t('Players shown') });
+      var chips = h('div', { class: 'chips chips-wrap', role: 'group', 'aria-label': t('Players shown') });
       var hint = h('div', { class: 'link-hint map-hint', hidden: true });
       var box = h('div', { class: 'map', role: 'application', 'aria-label': t('Map of players and places') }, h('p', { class: 'map-wait' }, t('Loading the map…')));
       var layersBody = h('div', { class: 'layers-body' });
       var layers = h('details', { class: 'panel layers', open: window.innerWidth > 820 }, h('summary', {}, h('h2', {}, t('Layers'))), layersBody);
       var located = h('section', { class: 'panel' }), flatsList = h('section', { class: 'panel' }), spotsList = h('section', { class: 'panel' }), missing = h('section', { class: 'panel' });
-      root.appendChild(chips); root.appendChild(hint);
+      root.appendChild(h('div', { class: 'filterbar' }, h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Show')), chips))); root.appendChild(hint);
       root.appendChild(h('div', { class: 'map-layout' }, box, layers));
       [located, flatsList, spotsList, missing].forEach(function (el) { root.appendChild(el); });
 
+      /* The lists under the map fold to save scrolling: folded by default on a phone, the choice is remembered. */
+      function foldHead(section, key, title, count, action) {
+        var folded = prefs.folded && key in prefs.folded ? prefs.folded[key] : window.innerWidth <= 820;
+        section.classList.toggle('is-folded', folded);
+        section.appendChild(h('div', { class: 'panel-head fold-head' },
+          h('button', { type: 'button', class: 'fold-toggle', 'aria-expanded': String(!folded), onclick: function () { prefs.folded = prefs.folded || {}; prefs.folded[key] = !folded; savePrefs(); refresh(); } },
+            K.icon('chevron', 'fold-icon'), h('h2', {}, title, h('small', { class: 'muted' }, ' ' + count))), action || null));
+      }
       function savePrefs() { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch (e) { /* rien */ } }
       function isHidden(id) { return prefs.hidden.indexOf(id) >= 0; }
       function toggle(list, id) { var i = list.indexOf(id); if (i >= 0) list.splice(i, 1); else list.push(id); savePrefs(); refresh(); }
@@ -219,7 +227,7 @@
         drawPins(s, places, spots); drawBus(); drawLayers(allPlaces, allSpots);
 
         ui.clear(located);
-        located.appendChild(h('h2', {}, t('Located players'), h('small', { class: 'muted' }, ' ' + here.length)));
+        foldHead(located, 'located', t('Located players'), here.length);
         if (!here.length) located.appendChild(h('p', { class: 'empty' }, allPlaces.length ? t('All player layers are hidden.') : view.list === 'tous' || view.list === 'vivants'
           ? t('Nobody on the map yet. Add an address on a sheet and the marker is placed automatically.')
           : t('None of these players has a located address, or the chain does not point at them yet.')));
@@ -236,8 +244,7 @@
         ui.clear(flatsList);
         var homes = (store.state.homes || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); }), detected = L.suggestedHomes(store.state);
         flatsList.hidden = !homes.length && !detected.length && !edit;
-        flatsList.appendChild(h('div', { class: 'panel-head' }, h('h2', {}, t('Shared flats'), h('small', { class: 'muted' }, ' ' + homes.length)),
-          edit ? h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(null); } }, K.icon('plus'), t('New shared flat')) : null));
+        foldHead(flatsList, 'flats', t('Shared flats'), homes.length, edit ? h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(null); } }, K.icon('plus'), t('New shared flat')) : null);
         if (!homes.length && !detected.length) flatsList.appendChild(h('p', { class: 'empty' }, t('No shared flat yet: create one and choose who lives there; their sheets follow its address.')));
         homes.forEach(function (home) {
           var hm = L.homeMembers(store.state, home.id), placed = L.hasCoords(home);
@@ -262,7 +269,7 @@
 
         ui.clear(spotsList);
         spotsList.hidden = !allSpots.length && !lostSpots.length;
-        spotsList.appendChild(h('h2', {}, t('Strategic spots'), h('small', { class: 'muted' }, ' ' + allSpots.length)));
+        foldHead(spotsList, 'spots', t('Strategic spots'), allSpots.length);
         allSpots.concat(lostSpots).forEach(function (sp) {
           var placed = L.hasCoords(sp);
           spotsList.appendChild(h('div', { class: 'row map-row' },
