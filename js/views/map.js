@@ -84,10 +84,12 @@
       }
       function popupPlace(place) {
         var dead = L.deadSet(store.state), type = L.ADDRESS_TYPES.find(function (t) { return t.id === place.type; });
+        /* a player: the name with the sheet button on its right, then the address (or apartment) under it */
         function item(p, withAddress, apt) {
-          return h('div', { class: 'map-pop-item' }, h('strong', { class: dead.has(p.id) ? 'is-dead' : '' }, p.name), withAddress ? h('span', {}, p.address) : null,
-            apt && p.apartment ? h('span', { class: 'muted' }, t('Apt. {n}', { n: p.apartment })) : null,
-            h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Open sheet')));
+          return h('div', { class: 'map-pop-item map-pop-person' }, h('strong', { class: dead.has(p.id) ? 'is-dead' : '' }, p.name),
+            h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Open sheet')),
+            withAddress && p.address ? h('span', { class: 'map-pop-address' }, p.address) : null,
+            apt && p.apartment ? h('span', { class: 'map-pop-address' }, t('Apt. {n}', { n: p.apartment })) : null);
         }
         var flats = (place.homeIds || []).map(homeOf).filter(Boolean), others = place.players.filter(function (p) { return !p.home_id || !homeOf(p.home_id); });
         return h('div', { class: 'map-pop' },
@@ -102,7 +104,7 @@
               edit ? h('button', { type: 'button', class: 'linkish small', onclick: function () { K.actions.editHome(home); } }, isRes ? t('Edit the residence') : t('Edit the flat')) : null);
           }),
           others.length ? (function () {
-            var same = others.every(function (p) { return L.norm(p.address) === L.norm(others[0].address); });   // one address for all: shown once
+            var same = others.length > 1 && others.every(function (p) { return L.norm(p.address) === L.norm(others[0].address); });   // several at one address: shown once above them
             return [place.type !== 'normale' ? h('span', { class: 'tag' }, t(type.label)) : null, same && others[0].address ? h('span', { class: 'map-pop-address' }, others[0].address) : null,
               others.map(function (p) { return item(p, !same); })];
           })() : null);
@@ -157,7 +159,7 @@
           var icon = Lf.divIcon({ className: 'pin-wrap', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -13],
             html: pinHtml(kind, { dead: allDead, ally: ally, count: place.players.length, year: hexYear(first.year) }) });
           var title = place.players.map(function (p) { return p.name; }).join(', ');
-          var m = Lf.marker([place.lat, place.lng], { icon: icon, title: title, alt: title, keyboard: true }).bindPopup(function () { return popupPlace(place); }, { maxWidth: 270, minWidth: 190 });
+          var m = Lf.marker([place.lat, place.lng], { icon: icon, title: title, alt: title, keyboard: true }).bindPopup(function () { return popupPlace(place); }, { maxWidth: 300, minWidth: Math.min(260, window.innerWidth - 90) });
           layer.addLayer(m); bounds.push([place.lat, place.lng]);
           place.players.forEach(function (p) { pins.set(p.id, m); });
         });
@@ -342,8 +344,9 @@
           var job = view.placing; view.placing = null;
           store.update(job.kind, job.id, { lat: e.latlng.lat, lng: e.latlng.lng }).then(function () { return job.kind === 'homes' ? K.actions.syncHome(job.id) : null; }).then(function () { ui.toast(t('Marker placed.')); });   // a flat moves its flatmates
         });
-        refresh();
         var fp = focus && store.player(focus);
+        if (fp && L.hasCoords(fp)) view.fit = false;   // straight to that player: a fit animation would move the map away from their popup
+        refresh();
         if (fp && L.hasCoords(fp)) setTimeout(function () { goTo(fp.id, fp.lat, fp.lng); }, 60);
       }).catch(function () {
         if (gone) return;

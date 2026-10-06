@@ -561,3 +561,7 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .name-mark { display: inline-grid; place-items: center; width: 1.05rem; height: 1.05rem; border-radius: 50%; font: 700 .62rem/1 var(--body); flex: none; text-decoration: none; }
 .name-mark-ally { background: #fff; color: #000; } .name-mark-dangerous { background: var(--thread); color: #fff; } .name-mark-priority { background: var(--brass); color: #000; }
 .map-pop-address { font-size: .84rem; color: var(--muted); }   /* the address, once per group */
+.map-pop-person { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: .6rem; }
+.map-pop-person > strong { overflow-wrap: anywhere; }
+.map-pop-person > .btn { margin-top: 0; grid-column: 2; grid-row: 1; min-height: 32px; padding: .3rem .75rem; font-size: .85rem; }
+.map-pop-person > .map-pop-address { grid-column: 1 / -1; margin-top: -.15rem; }
