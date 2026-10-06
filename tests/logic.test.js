@@ -319,6 +319,10 @@ t('danger alerts for the alliance', () => {
   const now = new Date('2026-09-29T10:00:00Z');
   assert.deepEqual(L.dangerAlerts(s, now), []);
   s.players[5].points = 9; assert.deepEqual(L.dangerAlerts(s, now).map(x => x.kind), ['rich'], 'the hunter can afford the strongest bonus');
+  assert.deepEqual(L.dangerAlerts(s, now)[0].items.map(i => i.name), ['Super Coupe-Gorge', 'Coupe-Gorge']);
+  s.players[5].points = 6; assert.deepEqual(L.dangerAlerts(s, now)[0].items.map(i => i.name), ['Coupe-Gorge'], '6 pts: only the cheaper one');
+  s.players[5].points = 5; assert.deepEqual(L.dangerAlerts(s, now), [], 'not enough for any');
+  s.players[5].points = 9;
   s.bonuses = [{ player_id: 'f', name: 'Coupe-Gorge', starts_at: '2026-09-28T22:10:00Z', ends_at: '2026-09-29T22:10:00Z' },
     { player_id: 'b', name: 'Immunité', starts_at: '2026-09-28T22:10:00Z', ends_at: '2026-09-29T22:10:00Z' }];
   s.players[5].status = 'dangerous';

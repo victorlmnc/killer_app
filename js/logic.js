@@ -710,7 +710,7 @@
 
   /* ---------- Danger alerts ----------
      What threatens the alliance right now, from what the app already knows: an ally's known hunter holding a
-     Coupe-Gorge, marked dangerous, or rich enough to buy the strongest bonus; an ally's target that is immune.
+     Coupe-Gorge, marked dangerous, or with enough points to buy one; an ally's target that is immune.
      -> [{ level: 'high'|'warn'|'info', kind, allyId, otherId, bonus }] most serious first. */
   function dangerAlerts(state, now) {
     now = now || new Date();
@@ -718,7 +718,7 @@
     if (!round) return out;
     var dead = deadSet(state), maps = linkMaps(state, round.id);
     var shop = (state.settings && state.settings.shop) || [];
-    var richestItem = shop.filter(function (i) { return /coupe/i.test(i.name); }).sort(function (a, b) { return (b.price || 0) - (a.price || 0); })[0], richest = richestItem ? richestItem.price || 0 : 0;
+    var cutthroats = shop.filter(function (i) { return /coupe/i.test(i.name); }).sort(function (a, b) { return (b.price || 0) - (a.price || 0); });   // most expensive first
     function bonusesOf(id, re) { return currentBonuses(state, id, now).filter(function (b) { return re.test(b.name); }); }
     state.players.forEach(function (ally) {
       if (!ally.is_ally || dead.has(ally.id)) return;
@@ -726,7 +726,8 @@
       if (h && !h.is_ally) {
         bonusesOf(h.id, /coupe/i).forEach(function (b) { out.push({ level: bonusStatus(b, now) === 'active' ? 'high' : 'warn', kind: 'cutthroat', allyId: ally.id, otherId: h.id, bonus: b }); });
         if (h.status === 'dangerous') out.push({ level: 'warn', kind: 'dangerous', allyId: ally.id, otherId: h.id });
-        if (richest && (h.points || 0) >= richest && !bonusesOf(h.id, /coupe/i).length) out.push({ level: 'warn', kind: 'rich', allyId: ally.id, otherId: h.id, points: h.points, price: richest, item: richestItem.name });
+        var afford = cutthroats.filter(function (i) { return (h.points || 0) >= (i.price || 0); });   // any Coupe-Gorge they can pay for
+        if (afford.length && !bonusesOf(h.id, /coupe/i).length) out.push({ level: 'warn', kind: 'rich', allyId: ally.id, otherId: h.id, points: h.points || 0, items: afford, item: afford[0].name, price: afford[0].price });
       }
       var target = resolveTarget(state, round.id, ally.id, maps, dead).id;
       var tp = target && state.players.find(function (p) { return p.id === target; });

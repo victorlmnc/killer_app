@@ -105,6 +105,15 @@
     function who(id) { var p = store.player(id); return h('button', { type: 'button', class: 'linkish', onclick: function () { K.actions.openPlayer(id); } }, p ? p.name : '?'); }
     function when(b) { return K.logic.bonusStatus(b) === 'active' ? t('until {date}', { date: ui.whenShort(b.ends_at) }) : t('from {date}', { date: ui.whenShort(b.starts_at) }); }
     var ICON = { high: '!', warn: '!', info: 'i' }, groups = [];
+    var cutthroats = (st.settings.shop || []).filter(function (i) { return /coupe/i.test(i.name); }).sort(function (a, b) { return (b.price || 0) - (a.price || 0); });
+    function pts(id) { var p = store.player(id); return (p && p.points) || 0; }
+    function priced(i) { return t('a {bonus} ({price} pts)', { bonus: i.name, price: i.price || 0 }); }
+    function afford(points) {   // "can afford a Super Coupe-Gorge (8 pts) or a Coupe-Gorge (6 pts)", or what is missing for the cheapest
+      var can = cutthroats.filter(function (i) { return points >= (i.price || 0); });
+      if (can.length) return h('strong', { class: 'alert-afford' }, t('can afford {list}', { list: can.map(priced).join(' ' + t('or') + ' ') }));
+      var cheapest = cutthroats[cutthroats.length - 1];
+      return h('span', { class: 'muted' }, t('{n} pts missing for {bonus}', { n: (cheapest.price || 0) - points, bonus: priced(cheapest) }));
+    }
     // one block per hunter and ally (or per ally and their immune target), every reason listed in it
     list.forEach(function (a) {
       var key = (a.kind === 'immune' ? 'target|' : 'hunter|') + a.allyId + '|' + a.otherId, g = groups.find(function (x) { return x.key === key; });
@@ -114,12 +123,11 @@
     return h('section', { class: 'panel alerts', role: 'status' }, h('h2', {}, t('Alerts'), h('small', { class: 'muted' }, ' ' + groups.length)),
       groups.map(function (g) {
         var head = g.kind === 'immune' ? [t('The target of') + ' ', who(g.allyId), ', ', who(g.otherId), ', ' + t('is immune') + ' ', h('span', { class: 'muted' }, when(g.reasons[0].bonus))]
-          : [who(g.otherId), ' ' + t('hunts') + ' ', who(g.allyId)];
-        var lines = g.kind === 'immune' ? [] : g.reasons.map(function (a) {
-          return h('li', {}, a.kind === 'cutthroat' ? [t('has a {bonus}', { bonus: a.bonus.name }) + ' ', h('span', { class: 'muted' }, when(a.bonus))]
-            : a.kind === 'dangerous' ? t('is marked dangerous')
-            : t('has {n} pts: can afford a {bonus} ({price} pts)', { n: a.points, bonus: a.item, price: a.price }));
+          : [who(g.otherId), ' ', h('span', { class: 'muted' }, '(' + K.n(pts(g.otherId), '{n} pt', '{n} pts') + ')'), ' ' + t('hunts') + ' ', who(g.allyId)];
+        var lines = g.kind === 'immune' ? [] : g.reasons.filter(function (a) { return a.kind !== 'rich'; }).map(function (a) {
+          return h('li', {}, a.kind === 'cutthroat' ? [t('has a {bonus}', { bonus: a.bonus.name }) + ' ', h('span', { class: 'muted' }, when(a.bonus))] : t('is marked dangerous'));
         });
+        if (g.kind === 'hunter' && cutthroats.length) lines.push(h('li', {}, afford(pts(g.otherId))));   // always: what their points can buy
         return h('div', { class: 'alert alert-' + g.level }, h('span', { class: 'alert-icon', 'aria-hidden': 'true' }, ICON[g.level]),
           h('div', { class: 'alert-body' }, h('p', {}, head), lines.length ? h('ul', { class: 'alert-reasons' }, lines) : null));
       }));
