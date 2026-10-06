@@ -79,12 +79,34 @@ with sync_playwright() as p:
     pg.goto(URL + '#/weapons')
     plan = pg.locator('section.panel', has=pg.locator('h2', has_text='Préshot'))
     expect(plan).to_contain_text(ids['targetName']); expect(plan).to_contain_text('dans le frigo'); expect(plan).to_contain_text('À trouver')
+
+    step('shared flat: created from the map, its flatmates follow its address; it stays alive while one of them is')
+    ctx.route('**/leaflet.min.*', lambda r: r.abort())                                # no map tiles needed: the lists work without
+    ctx.route('**/data.geopf.fr/**', lambda r: r.fulfill(json={ 'features': [{ 'geometry': { 'coordinates': [2.401, 47.081] }, 'properties': { 'score': 0.9, 'label': '8 rue des Lilas' } }] }))
+    mates = pg.evaluate("K.store.state.players.filter(p => !p.home_id && !K.logic.deadSet(K.store.state).has(p.id)).slice(0, 2).map(p => p.name)")
+    pg.goto(URL + '#/map')
+    flats = pg.locator('section.panel', has=pg.locator('h2', has_text='Colocs'))
+    expect(flats).to_contain_text('Coloc du Port')                                    # the demo flat
+    flats.get_by_role('button', name='Nouvelle coloc').click()
+    dlg = pg.locator('dialog[open]').last
+    dlg.get_by_placeholder('ex. Coloc du Port').fill('Les Lilas'); dlg.locator('input[type=text]').nth(1).fill('8 rue des Lilas, Bourges')
+    for name in mates:
+        dlg.get_by_role('button', name='Ajouter un colocataire').click()
+        picker = pg.locator('dialog[open]').last; picker.locator('input[type=search]').fill(name); picker.locator('.pick-list .row-btn').first.click()
+    dlg.get_by_role('button', name='Enregistrer').click()
+    pg.wait_for_function("(() => { const h = K.store.state.homes.find(x => x.name === 'Les Lilas'); return h && K.store.state.players.filter(p => p.home_id === h.id).length === 2; })()")
+    synced = pg.evaluate("(() => { const h = K.store.state.homes.find(x => x.name === 'Les Lilas'); return K.store.state.players.filter(p => p.home_id === h.id).map(p => [p.address, p.lat, p.address_type]); })()")
+    assert all(s == ['8 rue des Lilas, Bourges', 47.081, 'coloc'] for s in synced), synced
+    expect(flats.locator('.flat-row', has_text='Les Lilas')).to_contain_text('2/2 vivants')
+    pg.evaluate("(() => { const h = K.store.state.homes.find(x => x.name === 'Les Lilas'); const p = K.store.state.players.find(x => x.home_id === h.id); return K.actions.recordKill({ victimId: p.id, killerId: null }); })()")
+    expect(flats.locator('.flat-row', has_text='Les Lilas')).to_contain_text('1/2 vivants')
+    expect(flats.locator('.flat-row.is-dead', has_text='Les Lilas')).to_have_count(0)  # still alive
     assert errors == [], errors
     ctx.close()
 
     step('offline: the last copy opens read-only when the database cannot be reached')
     FAKE = r"""
-    window.__db = { players: [{ id: 'p1', name: 'VALJEAN Jean', year: '3A', td: 'TD1', points: 2 }], rounds: [], links: [], kills: [], weapons: [], events: [], spots: [], bonuses: [],
+    window.__db = { players: [{ id: 'p1', name: 'VALJEAN Jean', year: '3A', td: 'TD1', points: 2 }], rounds: [], links: [], kills: [], weapons: [], events: [], spots: [], bonuses: [], homes: [],
       settings: [{ key: 'game_name', value: 'Killer test' }], accounts: [{ email: 'moi@test.fr', name: '', role: 'admin', tabs: null, avatar_path: null }] };
     window.supabase = { createClient: function () {
       var offline = localStorage.getItem('fake.offline') === '1', fail = function () { return Promise.reject(new TypeError('Failed to fetch')); };

@@ -340,6 +340,24 @@ t('moments to catch a target', () => {
   assert.equal(L.killWindows(target, [], at(7, 0), 1).length, 4, 'no timetable of mine: every arrival and exit before 20:00');
   assert.equal(L.building('SA2.04'), 'SA2', 'building and floor'); assert.equal(L.building('SA1.01'), 'SA1'); assert.equal(L.building('Amphi Imperialis'), 'AMPHI');
 });
+t('shared flats: members, living flatmates, detected flats, backup', () => {
+  const s = base();
+  Object.assign(s.players[0], { home_id: 'h1', address: '14 rue du Port', address_type: 'coloc', lat: 47.1, lng: 2.4 });
+  Object.assign(s.players[1], { home_id: 'h1', address: '14 rue du Port', address_type: 'coloc', lat: 47.1, lng: 2.4 });
+  Object.assign(s.players[2], { address: '3 rue X', address_type: 'coloc', lat: 47.2, lng: 2.5 });
+  Object.assign(s.players[3], { address: '3 rue X', address_type: 'coloc', lat: 47.2, lng: 2.5 });
+  s.homes = [{ id: 'h1', name: 'Coloc du Port', address: '14 rue du Port', lat: 47.1, lng: 2.4 }];
+  s.kills = [{ id: 'k', victim_id: 'a' }];
+  const hm = L.homeMembers(s, 'h1');
+  assert.deepEqual([hm.members.length, hm.alive.map(p => p.id)], [2, ['b']], 'one flatmate dead, one alive');
+  assert.deepEqual(L.places(s.players).find(p => p.lat === 47.1).homeIds, ['h1']);
+  const d = L.suggestedHomes(s);
+  assert.equal(d.length, 1, 'c and d marked "shared flat" at one address, not in a flat yet'); assert.deepEqual(d[0].players.map(p => p.id), ['c', 'd']);
+  const r = L.readBackup(JSON.stringify(L.makeBackup(s)), { uuid: () => '00000000-0000-4000-8000-' + String(Math.random()).slice(2, 14).padEnd(12, '0') });
+  assert.equal(r.data.homes.length, 1);
+  assert.equal(r.data.players.find(p => p.name === 'B').home_id, r.data.homes[0].id, 'the flat link follows the new ids');
+  assert.equal(r.data.players.find(p => p.name === 'C').home_id, null);
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');

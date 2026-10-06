@@ -40,6 +40,9 @@ screen and in the profile dialog.
   or in the demo.
 - **Map** – one marker per located address, grouped by residence, with housing-type layers, strategic spots and
   optional bus lines built from a GTFS feed.
+- **Shared flats** – a name, an address, the apartment building it is in, and who lives there; the sheets of its
+  flatmates follow its address. Its marker stays lit while one of them is alive; flats are also detected from
+  sheets marked "shared flat" at the same address.
 - **Dashboard** – how much of the loop is known, who hunts each member of the team, leaderboard, incomplete
   sheets, and the activity log with the details behind each entry.
 - **Roles** – *administrator* (everything, including settings and accounts), *member* (edits the game) and

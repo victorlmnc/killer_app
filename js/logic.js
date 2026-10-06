@@ -435,16 +435,17 @@
      Defaults give the type; null = required reference; NOW = the import time when the backup has no date. */
   var BACKUP_FORMAT = 'killer-backup', NOW = {};
   var BACKUP_TABLES = {
-    players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, status: '', photo_path: '', created_at: NOW },
+    players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, status: '', home_id: '', photo_path: '', created_at: NOW },
     rounds: { name: '', position: 0, created_at: NOW },
     links: { round_id: null, hunter_id: null, target_id: null, confidence: 'sur', source: '', created_at: NOW },
     kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', points: 0, admin_reason: '', note: '', killer_weapons: null, happened_at: NOW },
     weapons: { name: '', difficulty: 'facile', owned: false, note: '' },
     events: { text: '', actor: '', details: {}, created_at: NOW },
     spots: { name: '', note: '', address: '', lat: 0, lng: 0, created_at: NOW },
+    homes: { name: '', address: '', lat: 0, lng: 0, building: '', note: '', created_at: NOW },
     bonuses: { player_id: null, name: '', price: 0, bought_at: NOW, starts_at: NOW, ends_at: NOW, note: '', created_at: NOW }
   };
-  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1, ends_at: 1 };   // empty -> null rather than the default
+  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1, ends_at: 1, home_id: 1 };   // empty -> null rather than the default
   var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile'], admin_reason: ['cheating', 'other'], status: ['', 'dangerous', 'priority'] };
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -481,12 +482,13 @@
         });
     });
     // References: ids are remapped, then anything pointing nowhere is dropped (required) or cleared (optional).
-    var has = {}; ['players', 'rounds', 'kills'].forEach(function (tb) { has[tb] = new Set(data[tb].map(function (r) { return r.id; })); });
+    var has = {}; ['players', 'rounds', 'kills', 'homes'].forEach(function (tb) { has[tb] = new Set(data[tb].map(function (r) { return r.id; })); });
     function ref(v, table) { if (v == null) return null; v = ids.get(String(v)) || String(v); return has[table].has(v) ? v : null; }
     data.players = data.players.filter(function (p) { return p.name.trim(); }); has.players = new Set(data.players.map(function (p) { return p.id; }));
     data.links = data.links.map(function (l) { l.round_id = ref(l.round_id, 'rounds'); l.hunter_id = ref(l.hunter_id, 'players'); l.target_id = ref(l.target_id, 'players'); return l; })
       .filter(function (l) { return l.round_id && l.hunter_id && l.target_id && l.hunter_id !== l.target_id; });
     var victims = new Set();
+    data.players.forEach(function (p) { p.home_id = ref(p.home_id, 'homes'); });
     data.bonuses = data.bonuses.map(function (b) { b.player_id = ref(b.player_id, 'players'); return b; }).filter(function (b) { return b.player_id; });
     data.kills = data.kills.map(function (k) { k.round_id = ref(k.round_id, 'rounds'); k.killer_id = ref(k.killer_id, 'players'); k.victim_id = ref(k.victim_id, 'players'); return k; })
       .filter(function (k) { return k.victim_id && !victims.has(k.victim_id) && victims.add(k.victim_id); });
@@ -794,12 +796,33 @@
       pl.players.push(p);
       if (typeRank(t) < typeRank(pl.type)) pl.type = t;
     });
-    var out = []; byKey.forEach(function (v) { v.players.sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', 'fr'); }); out.push(v); });
+    var out = []; byKey.forEach(function (v) {
+      v.players.sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', 'fr'); });
+      v.homeIds = v.players.map(function (p) { return p.home_id; }).filter(function (id, i, all) { return id && all.indexOf(id) === i; });   // shared flats at that address
+      out.push(v);
+    });
+    return out;
+  }
+  /* ---------- Shared flats ---------- */
+  function homeMembers(state, homeId) {
+    var dead = deadSet(state), members = state.players.filter(function (p) { return p.home_id === homeId; });
+    return { members: members, alive: members.filter(function (p) { return !dead.has(p.id); }) };
+  }
+  /* Players marked "shared flat" at the same place and not in a named flat yet: flats to name (2 or more). */
+  function suggestedHomes(state) {
+    var byKey = new Map();
+    state.players.forEach(function (p) {
+      if (p.home_id || addressType(p.address_type) !== 'coloc' || !hasCoords(p)) return;
+      var key = p.lat.toFixed(5) + ',' + p.lng.toFixed(5);
+      if (!byKey.has(key)) byKey.set(key, { address: p.address, lat: p.lat, lng: p.lng, players: [] });
+      byKey.get(key).players.push(p);
+    });
+    var out = []; byKey.forEach(function (v) { if (v.players.length > 1) out.push(v); });
     return out;
   }
 
   return {
-    hasCoords: hasCoords, hasAddress: hasAddress, places: places, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
+    hasCoords: hasCoords, hasAddress: hasAddress, places: places, homeMembers: homeMembers, suggestedHomes: suggestedHomes, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
     planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,

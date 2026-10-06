@@ -249,10 +249,13 @@
       { text: 'New round: Reroll 1', details: null }
     ].map(function (e, i) { return { id: uid(), text: e.text, details: e.details, actor: 'Arsène', created_at: new Date(now - (i + 1) * 36e5 * 7).toISOString() }; });
 
+    // the flatmates of 14 rue du Port, as a named shared flat
+    var port = { id: uid(), name: 'Coloc du Port', address: '14 rue du Port', lat: 47.07410, lng: 2.39520, building: '', note: 'Second floor, on the left.' };
+    players.forEach(function (p) { if (p.address === port.address) p.home_id = port.id; });
     var settings = JSON.parse(JSON.stringify(K.seed.settings));
     settings.game_name = 'Killer (demo)'; settings.official_players = 48; settings.school_total = 440; settings.depts = ['A', 'B'];
     settings.map_center = { lat: 47.0833, lng: 2.4 };
-    return { players: players, rounds: [r0, r1], links: links, kills: kills, events: events, settings: settings,
+    return { players: players, rounds: [r0, r1], links: links, kills: kills, events: events, settings: settings, homes: [port],
       spots: [{ id: uid(), name: 'Campus gate', note: 'Everybody walks through it between classes.', address: '', lat: 47.0822, lng: 2.4163 },
         { id: uid(), name: 'Canteen', note: 'Busy between 12:00 and 13:00.', address: '', lat: 47.0809, lng: 2.4149 }],
       weapons: WEAPONS.map(function (w) { return { id: uid(), name: w[0], difficulty: w[1] }; }),

@@ -122,6 +122,19 @@ create table if not exists public.kills (
 alter table public.kills add column if not exists killer_weapons text;
 alter table public.kills add column if not exists admin_reason text check (admin_reason is null or admin_reason in ('cheating', 'other'));
 
+-- Shared flats: a name, an address (and the apartment building it is in, if any); its members' sheets follow it.
+create table if not exists public.homes (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  address    text default '',
+  lat        double precision,
+  lng        double precision,
+  building   text default '',
+  note       text default '',
+  created_at timestamptz not null default now()
+);
+alter table public.players add column if not exists home_id uuid references public.homes(id) on delete set null;
+
 -- Each account can be linked to its own player sheet (quick actions: my target, my hunter, I am dead).
 alter table public.accounts add column if not exists player_id uuid references public.players(id) on delete set null;
 
@@ -180,7 +193,7 @@ alter table public.events add column if not exists details jsonb;
 do $$
 declare t text;
 begin
-  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots', 'bonuses'] loop
+  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots', 'bonuses', 'homes'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "membres" on public.%I', t);
     execute format('drop policy if exists "read" on public.%I', t);
@@ -247,6 +260,7 @@ begin
     'events',  coalesce((select jsonb_agg(to_jsonb(x)) from public.events x), '[]'::jsonb),
     'spots',   coalesce((select jsonb_agg(to_jsonb(x)) from public.spots x), '[]'::jsonb),
     'bonuses', coalesce((select jsonb_agg(to_jsonb(x)) from public.bonuses x), '[]'::jsonb),
+    'homes',   coalesce((select jsonb_agg(to_jsonb(x)) from public.homes x), '[]'::jsonb),
     'settings', coalesce((select jsonb_object_agg(key, value) from public.settings), '{}'::jsonb))
   returning id into new_id;
   delete from public.game_backups where taken_at < now() - interval '14 days';
@@ -294,7 +308,7 @@ create policy "photos delete" on storage.objects for delete to authenticated usi
 do $$
 declare t text;
 begin
-  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'settings', 'events', 'spots', 'accounts', 'bonuses'] loop
+  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'settings', 'events', 'spots', 'accounts', 'bonuses', 'homes'] loop
     if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
       execute format('alter publication supabase_realtime add table public.%I', t);
     end if;

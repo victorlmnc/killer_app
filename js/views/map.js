@@ -37,10 +37,10 @@
       var box = h('div', { class: 'map', role: 'application', 'aria-label': t('Map of players and places') }, h('p', { class: 'map-wait' }, t('Loading the map…')));
       var layersBody = h('div', { class: 'layers-body' });
       var layers = h('details', { class: 'panel layers', open: window.innerWidth > 820 }, h('summary', {}, h('h2', {}, t('Layers'))), layersBody);
-      var located = h('section', { class: 'panel' }), spotsList = h('section', { class: 'panel' }), missing = h('section', { class: 'panel' });
+      var located = h('section', { class: 'panel' }), flatsList = h('section', { class: 'panel' }), spotsList = h('section', { class: 'panel' }), missing = h('section', { class: 'panel' });
       root.appendChild(chips); root.appendChild(hint);
       root.appendChild(h('div', { class: 'map-layout' }, box, layers));
-      [located, spotsList, missing].forEach(function (el) { root.appendChild(el); });
+      [located, flatsList, spotsList, missing].forEach(function (el) { root.appendChild(el); });
 
       function savePrefs() { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch (e) { /* rien */ } }
       function isHidden(id) { return prefs.hidden.indexOf(id) >= 0; }
@@ -59,12 +59,30 @@
         return { dead: dead, players: st.players.filter(function (p) { return wanted ? wanted.has(p.id) : (view.list !== 'vivants' || !dead.has(p.id)); }) };
       }
 
+      function homeOf(id) { return (store.state.homes || []).find(function (x) { return x.id === id; }); }
+      /* Kind of marker: a shared flat with at least one living flatmate shows (lit) as a shared flat, even when the
+         address is an apartment building; otherwise the most collective housing type at that address. */
+      function placeKind(place) {
+        var liveFlat = (place.homeIds || []).some(function (id) { return L.homeMembers(store.state, id).alive.length; });
+        return liveFlat ? 'coloc' : place.type;
+      }
       function popupPlace(place) {
         var dead = L.deadSet(store.state), type = L.ADDRESS_TYPES.find(function (t) { return t.id === place.type; });
-        return h('div', { class: 'map-pop' }, place.type !== 'normale' ? h('span', { class: 'tag' }, t(type.label)) : null, place.players.map(function (p) {
+        function item(p) {
           return h('div', { class: 'map-pop-item' }, h('strong', { class: dead.has(p.id) ? 'is-dead' : '' }, p.name), h('span', {}, p.address),
             h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Open sheet')));
-        }));
+        }
+        var flats = (place.homeIds || []).map(homeOf).filter(Boolean), others = place.players.filter(function (p) { return !p.home_id || !homeOf(p.home_id); });
+        return h('div', { class: 'map-pop' },
+          flats.map(function (home) {
+            var hm = L.homeMembers(store.state, home.id);
+            return h('div', { class: 'map-pop-flat' }, h('span', { class: 'tag tag-flat' }, t('Shared flat') + ' · ' + home.name),
+              home.building ? h('span', { class: 'muted small' }, t('In: {building}', { building: home.building })) : null,
+              h('span', { class: 'muted small' }, t('{a}/{b} alive', { a: hm.alive.length, b: hm.members.length })),
+              place.players.filter(function (p) { return p.home_id === home.id; }).map(item),
+              edit ? h('button', { type: 'button', class: 'linkish small', onclick: function () { K.actions.editHome(home); } }, t('Edit the flat')) : null);
+          }),
+          others.length ? [place.type !== 'normale' ? h('span', { class: 'tag' }, t(type.label)) : null, others.map(item)] : null);
       }
       function popupSpot(id) {
         var s = store.state.spots.find(function (x) { return x.id === id; }); if (!s) return h('div', {});
@@ -112,9 +130,9 @@
         var Lf = window.L, bounds = [];
         places.forEach(function (place) {
           var allDead = place.players.every(function (p) { return s.dead.has(p.id); }), ally = place.players.some(function (p) { return p.is_ally; });
-          var first = place.players.find(function (p) { return !s.dead.has(p.id); }) || place.players[0];
+          var first = place.players.find(function (p) { return !s.dead.has(p.id); }) || place.players[0], kind = placeKind(place);
           var icon = Lf.divIcon({ className: 'pin-wrap', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -13],
-            html: pinHtml(place.type, { dead: allDead, ally: ally, count: place.players.length, year: hexYear(first.year) }) });
+            html: pinHtml(kind, { dead: allDead && kind !== 'coloc', ally: ally, count: place.players.length, year: hexYear(first.year) }) });
           var title = place.players.map(function (p) { return p.name; }).join(', ');
           var m = Lf.marker([place.lat, place.lng], { icon: icon, title: title, alt: title, keyboard: true }).bindPopup(function () { return popupPlace(place); }, { maxWidth: 270, minWidth: 190 });
           layer.addLayer(m); bounds.push([place.lat, place.lng]);
@@ -156,7 +174,7 @@
       function drawLayers(allPlaces, spots) {
         ui.clear(layersBody);
         L.ADDRESS_TYPES.slice().reverse().forEach(function (x) {
-          var n = allPlaces.filter(function (pl) { return pl.type === x.id; }).length;
+          var n = allPlaces.filter(function (pl) { return placeKind(pl) === x.id; }).length;
           layersBody.appendChild(layerRow({ name: t(x.plural), count: n, on: !isHidden(x.id), swatch: swatch(pinHtml(x.id, { year: '#8A93A0' })), toggle: function () { toggle(prefs.hidden, x.id); } }));
         });
         layersBody.appendChild(layerRow({ name: t('Strategic spots'), count: spots.length, on: !isHidden('spots'), swatch: swatch(pinHtml('spot')), toggle: function () { toggle(prefs.hidden, 'spots'); } }));
@@ -178,7 +196,7 @@
 
       function refresh() {
         var s = shown(), allPlaces = L.places(s.players);
-        var places = allPlaces.filter(function (pl) { return !isHidden(pl.type); });
+        var places = allPlaces.filter(function (pl) { return !isHidden(placeKind(pl)); });
         var allSpots = store.state.spots.filter(L.hasCoords).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); });
         var spots = isHidden('spots') ? [] : allSpots;
         var visibleIds = new Set(); places.forEach(function (pl) { pl.players.forEach(function (p) { visibleIds.add(p.id); }); });
@@ -213,6 +231,34 @@
               h('span', { class: 'row-tags' }, ui.statusTag(p, true), ty !== 'normale' ? h('span', { class: 'tag' }, t(L.ADDRESS_TYPES.find(function (x) { return x.id === ty; }).label)) : null, ui.yearTag(p))),
             h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Sheet'))));
         });
+
+        /* Shared flats: named, with their flatmates; flats detected from sheets marked "shared flat" at one address */
+        ui.clear(flatsList);
+        var homes = (store.state.homes || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); }), detected = L.suggestedHomes(store.state);
+        flatsList.hidden = !homes.length && !detected.length && !edit;
+        flatsList.appendChild(h('div', { class: 'panel-head' }, h('h2', {}, t('Shared flats'), h('small', { class: 'muted' }, ' ' + homes.length)),
+          edit ? h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(null); } }, K.icon('plus'), t('New shared flat')) : null));
+        if (!homes.length && !detected.length) flatsList.appendChild(h('p', { class: 'empty' }, t('No shared flat yet: create one and choose who lives there; their sheets follow its address.')));
+        homes.forEach(function (home) {
+          var hm = L.homeMembers(store.state, home.id), placed = L.hasCoords(home);
+          flatsList.appendChild(h('div', { class: 'row map-row flat-row' + (hm.alive.length ? '' : ' is-dead') },
+            h('button', { type: 'button', class: 'row row-btn', disabled: !placed, onclick: function () { if (hm.members[0]) goTo(hm.members[0].id, home.lat, home.lng); else if (map) map.setView([home.lat, home.lng], 17); } },
+              h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, home.name),
+                h('span', { class: 'row-sub' }, [home.address || t('No address'), home.building].filter(Boolean).join(' · ')),
+                h('span', { class: 'row-sub' }, t('{a}/{b} alive', { a: hm.alive.length, b: hm.members.length }) + (hm.members.length ? ' · ' + hm.members.map(function (p) { return p.name; }).join(', ') : ''))),
+              h('span', { class: 'row-tags' }, h('span', { class: 'tag tag-flat' }, t('Shared flat')))),
+            !placed && edit ? h('button', { type: 'button', class: 'btn', disabled: !map, onclick: function () { view.placing = { kind: 'homes', id: home.id, name: home.name }; refresh(); if (box.scrollIntoView) box.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }, t('Place')) : null,
+            edit ? h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(home); } }, t('Edit')) : null));
+        });
+        if (detected.length && edit) {
+          flatsList.appendChild(h('h3', {}, t('Detected shared flats')));
+          flatsList.appendChild(h('p', { class: 'muted small' }, t('Players marked "shared flat" at the same address: name the flat to group them.')));
+          detected.forEach(function (d) {
+            flatsList.appendChild(h('div', { class: 'row map-row' }, h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, d.address || '-'),
+              h('span', { class: 'row-sub' }, d.players.map(function (p) { return p.name; }).join(', '))),
+              h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editHome(null, d); } }, t('Name this flat'))));
+          });
+        }
 
         ui.clear(spotsList);
         spotsList.hidden = !allSpots.length && !lostSpots.length;
@@ -263,7 +309,7 @@
         map.on('click', function (e) {
           if (!view.placing) return;
           var job = view.placing; view.placing = null;
-          store.update(job.kind, job.id, { lat: e.latlng.lat, lng: e.latlng.lng }).then(function () { ui.toast(t('Marker placed.')); });
+          store.update(job.kind, job.id, { lat: e.latlng.lat, lng: e.latlng.lng }).then(function () { return job.kind === 'homes' ? K.actions.syncHome(job.id) : null; }).then(function () { ui.toast(t('Marker placed.')); });   // a flat moves its flatmates
         });
         refresh();
         var fp = focus && store.player(focus);

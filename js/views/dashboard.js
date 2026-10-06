@@ -102,14 +102,24 @@
     if (!list.length) return null;
     function who(id) { var p = store.player(id); return h('button', { type: 'button', class: 'linkish', onclick: function () { K.actions.openPlayer(id); } }, p ? p.name : '?'); }
     function when(b) { return K.logic.bonusStatus(b) === 'active' ? t('until {date}', { date: ui.whenShort(b.ends_at) }) : t('from {date}', { date: ui.whenShort(b.starts_at) }); }
-    var ICON = { high: '!', warn: '!', info: 'i' };
-    return h('section', { class: 'panel alerts', role: 'status' }, h('h2', {}, t('Alerts'), h('small', { class: 'muted' }, ' ' + list.length)),
-      list.map(function (a) {
-        var text = a.kind === 'cutthroat' ? [who(a.otherId), ' ' + t('hunts') + ' ', who(a.allyId), ' ' + t('with a {bonus}', { bonus: a.bonus.name }) + ' ', h('span', { class: 'muted' }, when(a.bonus))]
-          : a.kind === 'dangerous' ? [who(a.allyId), ' ' + t('is hunted by') + ' ', who(a.otherId), ', ' + t('marked dangerous.')]
-          : a.kind === 'rich' ? [who(a.otherId), ' ' + t('({n} pts) hunts', { n: a.points }) + ' ', who(a.allyId), ' ' + t('and can afford a {bonus} ({price} pts).', { bonus: a.item, price: a.price })]
-          : [t('The target of') + ' ', who(a.allyId), ', ', who(a.otherId), ', ' + t('is immune') + ' ', h('span', { class: 'muted' }, when(a.bonus))];
-        return h('p', { class: 'alert alert-' + a.level }, h('span', { class: 'alert-icon', 'aria-hidden': 'true' }, ICON[a.level]), h('span', {}, text));
+    var ICON = { high: '!', warn: '!', info: 'i' }, groups = [];
+    // one block per hunter and ally (or per ally and their immune target), every reason listed in it
+    list.forEach(function (a) {
+      var key = (a.kind === 'immune' ? 'target|' : 'hunter|') + a.allyId + '|' + a.otherId, g = groups.find(function (x) { return x.key === key; });
+      if (!g) groups.push(g = { key: key, level: a.level, kind: a.kind === 'immune' ? 'immune' : 'hunter', allyId: a.allyId, otherId: a.otherId, reasons: [] });
+      g.reasons.push(a);   // the list is sorted by gravity: the first one gives the colour
+    });
+    return h('section', { class: 'panel alerts', role: 'status' }, h('h2', {}, t('Alerts'), h('small', { class: 'muted' }, ' ' + groups.length)),
+      groups.map(function (g) {
+        var head = g.kind === 'immune' ? [t('The target of') + ' ', who(g.allyId), ', ', who(g.otherId), ', ' + t('is immune') + ' ', h('span', { class: 'muted' }, when(g.reasons[0].bonus))]
+          : [who(g.otherId), ' ' + t('hunts') + ' ', who(g.allyId)];
+        var lines = g.kind === 'immune' ? [] : g.reasons.map(function (a) {
+          return h('li', {}, a.kind === 'cutthroat' ? [t('has a {bonus}', { bonus: a.bonus.name }) + ' ', h('span', { class: 'muted' }, when(a.bonus))]
+            : a.kind === 'dangerous' ? t('is marked dangerous')
+            : t('has {n} pts: can afford a {bonus} ({price} pts)', { n: a.points, bonus: a.item, price: a.price }));
+        });
+        return h('div', { class: 'alert alert-' + g.level }, h('span', { class: 'alert-icon', 'aria-hidden': 'true' }, ICON[g.level]),
+          h('div', { class: 'alert-body' }, h('p', {}, head), lines.length ? h('ul', { class: 'alert-reasons' }, lines) : null));
       }));
   }
 

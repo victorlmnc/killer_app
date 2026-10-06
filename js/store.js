@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   var K = (window.K = window.K || {});
-  var TABLES = ['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots', 'bonuses'];
+  var TABLES = ['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots', 'bonuses', 'homes'];
   var LOCAL_KEY = 'killer.local.v1';
   var PHOTO_BUCKET = 'photos';
   var ROLES = ['admin', 'member', 'observer'];
@@ -12,7 +12,7 @@
   var listeners = [];
   var store = K.store = {
     mode: 'local',
-    state: { players: [], rounds: [], links: [], kills: [], weapons: [], events: [], spots: [], bonuses: [], settings: {}, members: [] },
+    state: { players: [], rounds: [], links: [], kills: [], weapons: [], events: [], spots: [], bonuses: [], homes: [], settings: {}, members: [] },
     user: null, role: null,
     ROLES: ROLES,
     on: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
@@ -320,7 +320,7 @@
   store.purge = function () {
     if (!store.isAdmin()) return denied();
     var paths = store.state.players.map(function (p) { return p.photo_path; }).filter(function (p) { return p && p.indexOf('data:') !== 0; });
-    ['players', 'rounds', 'links', 'kills', 'events', 'bonuses'].forEach(function (t) { store.state[t] = []; });
+    ['players', 'rounds', 'links', 'kills', 'events', 'bonuses', 'homes'].forEach(function (t) { store.state[t] = []; });
     store.emit();
     if (store.mode !== 'supabase') { local.persist(); return Promise.resolve(); }
     var all = '00000000-0000-0000-0000-000000000000';
@@ -330,6 +330,7 @@
       .then(function () { return sb.from('links').delete().neq('id', all).then(check); })   // order matters: links and kills reference players and rounds
       .then(function () { return sb.from('kills').delete().neq('id', all).then(check); })
       .then(function () { return sb.from('players').delete().neq('id', all).then(check); })
+      .then(function () { return sb.from('homes').delete().neq('id', all).then(check); })
       .then(function () { return sb.from('rounds').delete().neq('id', all).then(check); })
       .then(function () { return sb.from('events').delete().neq('id', all).then(check); }), K.t('Reset'));
   };
@@ -380,7 +381,7 @@
   store.restore = function (data, opts) {
     if (!store.isAdmin()) return denied().then(function () { return false; });
     opts = opts || {};
-    var GAME = ['players', 'rounds', 'links', 'kills', 'events', 'bonuses'], tables = opts.catalogue ? GAME.concat(['weapons', 'spots']) : GAME;
+    var GAME = ['players', 'rounds', 'links', 'kills', 'events', 'bonuses', 'homes'], tables = opts.catalogue ? GAME.concat(['weapons', 'spots']) : GAME;
     if (store.mode !== 'supabase') {
       tables.forEach(function (t) { store.state[t] = data[t]; });
       store.state.players.forEach(function (p) { if (p.photo_path && p.photo_path.indexOf('data:') !== 0) p.photo_path = null; });   // storage paths mean nothing here
@@ -406,8 +407,8 @@
       return old.length ? sb.storage.from(PHOTO_BUCKET).remove(old) : null;
     })
       // 3. empty the tables, references first; 4. refill, referenced tables first
-      .then(function () { return ['bonuses', 'links', 'kills', 'events', 'players', 'rounds'].concat(opts.catalogue ? ['weapons', 'spots'] : []).reduce(function (p, t) { return p.then(function () { return wipe(t); }); }, Promise.resolve()); })
-      .then(function () { return ['rounds', 'players', 'links', 'kills', 'events', 'bonuses'].concat(opts.catalogue ? ['weapons', 'spots'] : []).reduce(function (p, t) { return p.then(function () { return fill(t); }); }, Promise.resolve()); })
+      .then(function () { return ['bonuses', 'links', 'kills', 'events', 'players', 'homes', 'rounds'].concat(opts.catalogue ? ['weapons', 'spots'] : []).reduce(function (p, t) { return p.then(function () { return wipe(t); }); }, Promise.resolve()); })
+      .then(function () { return ['rounds', 'homes', 'players', 'links', 'kills', 'events', 'bonuses'].concat(opts.catalogue ? ['weapons', 'spots'] : []).reduce(function (p, t) { return p.then(function () { return fill(t); }); }, Promise.resolve()); })
       .then(function () {
         if (!opts.catalogue) return;
         var rows = Object.keys(data.settings).map(function (k) { return { key: k, value: data.settings[k] }; });

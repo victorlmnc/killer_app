@@ -262,6 +262,74 @@
         return Promise.all(jobs).then(function () { store.log(t('Kill undone: {name} is alive again', { name: name(playerId) })); });
       });
   };
+  /* --------------------------------------------------------- shared flats */
+  /* The sheets of a flat's members follow it: address, position, housing type "shared flat". */
+  function homePatch(home) { return { home_id: home.id, address: home.address || '', lat: home.lat == null ? null : home.lat, lng: home.lng == null ? null : home.lng, address_type: 'coloc' }; }
+  act.syncHome = function (homeId) {
+    var home = store.state.homes.find(function (x) { return x.id === homeId; }); if (!home) return Promise.resolve();
+    return Promise.all(store.state.players.filter(function (p) { return p.home_id === homeId; }).map(function (p) { return store.update('players', p.id, homePatch(home)); }));
+  };
+  /* Create or edit a flat. preset (detected flat): { address, lat, lng, players } */
+  act.editHome = function (home, preset) {
+    if (!store.canEdit()) return;
+    var isNew = !home; preset = preset || {};
+    home = home || { name: '', address: preset.address || '', building: '', note: '', lat: preset.lat == null ? null : preset.lat, lng: preset.lng == null ? null : preset.lng };
+    var members = isNew ? (preset.players || []).map(function (p) { return p.id; }) : store.state.players.filter(function (p) { return p.home_id === home.id; }).map(function (p) { return p.id; });
+    ui.dialog({ title: isNew ? t('New shared flat') : t('Shared flat: {name}', { name: home.name }), render: function (body, api) {
+      var name = h('input', { type: 'text', value: home.name, placeholder: t('e.g. The Port flat') });
+      var address = h('input', { type: 'text', value: home.address || '', placeholder: t('e.g. 12 High Street, Town') });
+      var building = h('input', { type: 'text', value: home.building || '', placeholder: t('Optional: the apartment building it is in') });
+      var note = h('textarea', { rows: '2', value: home.note || '', placeholder: t('Floor, door code, who is often there…') });
+      var list = h('div', { class: 'stack-tight home-members' }), dead = L.deadSet(store.state);
+      function drawMembers() {
+        ui.clear(list);
+        if (!members.length) list.appendChild(h('p', { class: 'muted small' }, t('Nobody yet.')));
+        members.forEach(function (id) {
+          var p = store.player(id); if (!p) return;
+          list.appendChild(h('div', { class: 'row home-member' + (dead.has(id) ? ' is-dead' : '') }, ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name),
+            p.home_id && p.home_id !== home.id ? h('span', { class: 'row-sub' }, t('moves out of another flat')) : null),
+            dead.has(id) ? h('span', { class: 'tag tag-dead' }, t('Dead')) : null,
+            h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('Remove {w}', { w: p.name }), onclick: function () { members = members.filter(function (x) { return x !== id; }); drawMembers(); } }, K.icon('close'))));
+        });
+      }
+      drawMembers();
+      body.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Address'), address, t('Include the town: every member gets this address and its marker.')),
+        ui.field(t('Apartment building'), building), ui.field(t('Note'), note),
+        h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Who lives there')), list,
+          h('button', { type: 'button', class: 'btn', onclick: function () {
+            ui.pickPlayer({ title: t('Add a flatmate'), filter: function (p) { return members.indexOf(p.id) < 0; } }).then(function (id) { if (id) { members.push(id); drawMembers(); } });
+          } }, K.icon('plus'), t('Add a flatmate')))));
+      body.appendChild(h('div', { class: 'actions' },
+        isNew ? null : h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
+          ui.confirm({ title: t('Delete this shared flat?'), text: t('Its members keep their address; they are just no longer grouped.'), action: t('Delete'), danger: true }).then(function (ok) {
+            if (!ok) return;
+            store.state.players.filter(function (p) { return p.home_id === home.id; }).forEach(function (p) { store.update('players', p.id, { home_id: null }); });
+            store.remove('homes', home.id); store.log(t('Shared flat deleted: {name}', { name: home.name })); api.close();
+          });
+        } }, t('Delete')),
+        h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
+        h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+          var row = { name: name.value.trim(), address: address.value.trim(), building: building.value.trim(), note: note.value.trim() };
+          if (!row.name) { name.focus(); return ui.toast(t('Give the flat a name.'), 'error'); }
+          var moved = row.address !== (home.address || '') || home.lat == null;
+          var where = moved && row.address ? K.geo.geocode(row.address).catch(function () { return null; }) : Promise.resolve(null);
+          api.close();
+          where.then(function (hit) {
+            if (hit) { row.lat = hit.lat; row.lng = hit.lng; } else if (moved && row.address !== (home.address || '')) { row.lat = null; row.lng = null; }
+            if (moved && row.address && !hit) ui.toast(t('Address not found: place the flat by hand from the Map tab.'), 'error');
+            var saved = isNew ? store.insert('homes', Object.assign({ lat: home.lat, lng: home.lng }, row)) : store.update('homes', home.id, row).then(function () { return store.state.homes.find(function (x) { return x.id === home.id; }); });
+            return saved.then(function (h2) {
+              if (!h2) return;
+              store.state.players.filter(function (p) { return p.home_id === h2.id && members.indexOf(p.id) < 0; }).forEach(function (p) { store.update('players', p.id, { home_id: null }); });   // moved out
+              members.forEach(function (id) { store.update('players', id, homePatch(h2)); });
+              store.log(t(isNew ? 'Shared flat created: {name}' : 'Shared flat updated: {name}', { name: h2.name }) + ' (' + K.n(members.length, '{n} flatmate', '{n} flatmates') + ')');
+              ui.toast(t('Shared flat saved: the sheets of its members are updated.'));
+            });
+          });
+        } }, t('Save'))));
+    } });
+  };
+
   /* --------------------------------------------------- when to catch a target */
   /* The coming week's moments when the target comes out of a class or goes into one, while I am not in the middle
      of one (my timetable counts when my account is linked to my sheet). Same building as my class first. */
@@ -536,6 +604,13 @@
       if (p.address) body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, t('Address: ')), p.address,
         L.addressType(p.address_type) !== 'normale' ? ' (' + t(L.ADDRESS_TYPES.find(function (x) { return x.id === L.addressType(p.address_type); }).label).toLowerCase() + ')' : '',
         L.hasCoords(p) ? [' ', h('a', { class: 'linkish', href: '#/map?player=' + p.id, onclick: function () { api.close(); } }, t('Show on map'))] : null));
+      var home = p.home_id && (st.homes || []).find(function (x) { return x.id === p.home_id; });
+      if (home) {
+        var hm = L.homeMembers(st, home.id);
+        body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, t('Shared flat:') + ' '),
+          h('button', { type: 'button', class: 'linkish', onclick: function () { act.editHome(home); } }, home.name), home.building ? ' (' + home.building + ')' : '',
+          h('span', { class: 'muted' }, ' · ' + t('{a}/{b} alive', { a: hm.alive.length, b: hm.members.length }))));
+      }
       if (p.notes) body.appendChild(h('p', { class: 'prose notes' }, p.notes));
 
       var mine = st.kills.filter(function (k) { return k.killer_id === p.id; });
@@ -618,6 +693,7 @@
           status: ui.select([{ value: '', label: t('None') }].concat(ui.STATUSES.map(function (x) { return { value: x.id, label: t(x.label) }; })), p.status || ''),
           address: h('input', { type: 'text', value: p.address || '', placeholder: t('e.g. 12 High Street, Town'), autocomplete: 'off', oninput: function () { if (!typeTouched && !p.address) f.address_type.value = L.guessAddressType(f.address.value); } }),
           address_type: ui.select(L.ADDRESS_TYPES.slice().reverse().map(function (x) { return { value: x.id, label: t(x.label) }; }), L.addressType(p.address_type), { onchange: function () { typeTouched = true; } }),
+          home_id: ui.select([{ value: '', label: t('None') }].concat((store.state.homes || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); }).map(function (x) { return { value: x.id, label: x.name + (x.address ? ' · ' + x.address : '') }; })), p.home_id || ''),
           notes: h('textarea', { rows: '3', value: p.notes || '', placeholder: t('Habits on campus, clubs, who could save them…') })
         };
         body.appendChild(h('div', { class: 'stack' },
@@ -632,7 +708,8 @@
           levelsBox,
           h('div', { class: 'grid-2 grid-align-start' }, h('label', { class: 'check' }, f.is_ally, t('Alliance member')), ui.field(t('Special status'), f.status)),
           ui.field(t('Address'), f.address, t('Include the town so the marker lands in the right place.')),
-          ui.field(t('Housing type'), f.address_type, t('Sets the icon and the layer on the map.')), ui.field(t('Notes'), f.notes)));
+          ui.field(t('Housing type'), f.address_type, t('Sets the icon and the layer on the map.')),
+          (store.state.homes || []).length ? ui.field(t('Shared flat'), f.home_id, t('The address of the flat replaces the one above.')) : null, ui.field(t('Notes'), f.notes)));
         drawLevels();
         var actions = h('div', { class: 'actions' });
         if (playerId) actions.appendChild(h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
@@ -645,10 +722,13 @@
           if (!row.name) { f.name.focus(); return ui.toast(t('A name is required.'), 'error'); }
           row.points = Math.max(0, parseInt(row.points, 10) || 0);
           row.is_ally = f.is_ally.checked;
+          row.home_id = row.home_id || null;
+          var flat = row.home_id && store.state.homes.find(function (x) { return x.id === row.home_id; });
+          if (flat) Object.assign(row, homePatch(flat));   // the flat's address, position and type
           var weaponError = levelsError(L.weaponList(row.weapons));
           if (weaponError) return ui.toast(weaponError, 'error');
           saveLevels(L.weaponList(row.weapons));
-          var moved = (p.address || '') !== row.address;
+          var moved = !flat && (p.address || '') !== row.address;   // a flat brings its own position
           if (moved) { row.lat = null; row.lng = null; }
           var saved = playerId ? store.update('players', playerId, row).then(function () { return playerId; })
             : store.insert('players', Object.assign({ is_ally: false, photo_path: null, lat: null, lng: null }, row)).then(function (r) { return r.id; });
