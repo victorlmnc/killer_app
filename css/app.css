@@ -245,6 +245,7 @@ select:disabled { opacity: .6; }
 .ring-track { fill: none; stroke: rgba(255, 255, 255, .3); stroke-width: 1; stroke-dasharray: 2 5; }
 .ring-link { fill: none; stroke: var(--thread); stroke-width: 3; stroke-linecap: round; }
 .ring-probable { stroke-dasharray: 6 5; } .ring-rumeur { stroke-dasharray: 1 6; opacity: .75; }
+.ring-arrow { fill: var(--thread); stroke: var(--bg); stroke-width: .8; stroke-linejoin: round; pointer-events: none; } .ring-arrow-rumeur { opacity: .75; }
 .ring-dot { fill: var(--year); stroke: var(--bg); stroke-width: 1.5; cursor: pointer; } .ring-loose { fill: var(--bg); stroke: var(--year); }
 .ring-ally { stroke: #fff; stroke-width: 2.5; } .ring-dot:hover, .ring-dot:focus-visible { stroke: #fff; stroke-width: 3; outline: none; }
 .hero-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }

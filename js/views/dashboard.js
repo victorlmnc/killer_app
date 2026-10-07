@@ -4,7 +4,8 @@
   var SVG = 'http://www.w3.org/2000/svg';
   function s(tag, attrs) { var el = document.createElementNS(SVG, tag); Object.keys(attrs || {}).forEach(function (k) { el.setAttribute(k, attrs[k]); }); return el; }
 
-  /* One dot per living player, a red arc where the link is known. Gaps are what is left to find. */
+  /* One dot per living player, a red arc where the link is known, an arrowhead pointing from killer to target
+     (clockwise). Gaps are what is left to find. */
   function ring(st, round) {
     var f = L.fragments(st, round.id, 'current');
     var frags = f.fragments.slice().sort(function (a, b) { return b.ids.length - a.ids.length; });
@@ -14,7 +15,18 @@
     if (!n) return svg;
     var step = 2 * Math.PI / n, dotR = Math.max(2.2, Math.min(7, (2 * Math.PI * R / n) * 0.3));
     function pt(i) { var a = i * step - Math.PI / 2; return [C + R * Math.cos(a), C + R * Math.sin(a)]; }
-    function arc(i, j, conf) { var a = pt(i), b = pt(j); svg.appendChild(s('path', { d: 'M' + a[0] + ' ' + a[1] + ' A' + R + ' ' + R + ' 0 0 1 ' + b[0] + ' ' + b[1], class: 'ring-link ring-' + conf })); }
+    var gap = 2 * Math.PI * R / n, fits = Math.min(6, (gap - 2 * dotR - 1) / 1.7), spaced = fits >= 2.4, head = spaced ? fits : 4.5, arrows = [];   // the head fits between two dots, or the dots are packed
+    function arc(i, j, conf) {
+      var a = pt(i), b = pt(j); svg.appendChild(s('path', { d: 'M' + a[0] + ' ' + a[1] + ' A' + R + ' ' + R + ' 0 0 1 ' + b[0] + ' ' + b[1], class: 'ring-link ring-' + conf }));
+      arrows.push({ at: (i + j) / 2, conf: conf });
+    }
+    /* an arrowhead on the circle at slot position `at`, pointing clockwise (towards the target) */
+    function arrow(at, conf) {
+      var ang = at * step - Math.PI / 2, x = C + R * Math.cos(ang), y = C + R * Math.sin(ang);
+      var tx = -Math.sin(ang), ty = Math.cos(ang), nx = Math.cos(ang), ny = Math.sin(ang);   // along the circle, and outwards
+      var tip = [x + tx * head, y + ty * head], l = [x - tx * head * 0.7 + nx * head * 0.8, y - ty * head * 0.7 + ny * head * 0.8], r = [x - tx * head * 0.7 - nx * head * 0.8, y - ty * head * 0.7 - ny * head * 0.8];
+      svg.appendChild(s('path', { d: 'M' + tip.join(' ') + 'L' + l.join(' ') + 'L' + r.join(' ') + 'Z', class: 'ring-arrow ring-arrow-' + conf }));
+    }
     var dots = [];
     frags.forEach(function (fr) {
       var start = slot;
@@ -22,6 +34,10 @@
       if (fr.closed && fr.ids.length === n && n > 1) arc(slot - 1, start + n, fr.edges[fr.edges.length - 1].confidence);
     });
     f.unplaced.forEach(function (id) { dots.push({ id: id, i: slot++, loose: true }); });
+    // one arrowhead per link while there is room between two dots; when they are packed, one in the middle of each run
+    if (spaced) arrows.forEach(function (a) { arrow(a.at, a.conf); });
+    else { var runs = [], cur = null; arrows.forEach(function (a) { if (cur && a.at === cur.last + 1) { cur.list.push(a); cur.last = a.at; } else runs.push(cur = { list: [a], last: a.at }); });
+      runs.forEach(function (r) { var mid = r.list[Math.floor(r.list.length / 2)]; arrow(mid.at, mid.conf); }); }
     dots.forEach(function (d) {
       var p = store.player(d.id), xy = pt(d.i);
       var c = s('circle', { cx: xy[0], cy: xy[1], r: p.is_ally ? dotR + 1.5 : dotR, class: 'ring-dot' + (d.loose ? ' ring-loose' : '') + (p.is_ally ? ' ring-ally' : ''), tabindex: '0' });
