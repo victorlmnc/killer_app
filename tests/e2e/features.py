@@ -305,6 +305,22 @@ with sync_playwright() as p:
     pg.locator('dialog[open]').last.get_by_role('button', name='Recalculer').click(); pg.wait_for_timeout(300)
     got = pg.evaluate("a => [K.store.state.kills.find(k => k.id === a.kill).points, K.store.state.kills.find(k => k.id === a.kill).weapon_level, K.store.player(a.killer).points]", c)
     assert got == [c['kp'] - c['gap'], 'facile', c['pp'] - c['gap']], (got, c)
+
+    step('deleting a reroll with kills: back exactly where the game was before it')
+    snap = "(() => { const st = K.store.state, dead = [...K.logic.deadSet(st)].sort(); return JSON.stringify({ dead, round: K.logic.currentRound(st).name, players: st.players.map(p => [p.id, p.points || 0, K.logic.weaponList(p.weapons).join(', ')]) }); })()"
+    before = pg.evaluate(snap)
+    pg.evaluate("() => { K.actions.newRound(); }"); pg.locator('dialog[open]').last.get_by_role('button', name='Créer le reroll').click(); pg.wait_for_timeout(300)
+    pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), a = st.players.filter(x => !dead.has(x.id) && !x.is_mystery);
+      a[0].weapons = 'Seau'; a[2].weapons = 'Pelle';
+      return K.actions.recordKill({ victimId: a[1].id, killerId: a[0].id, weapon: 'Seau', level: 'facile', parts: { bonus: 0, firstBlood: false, mates: 0 } })
+        .then(() => K.actions.recordKill({ victimId: a[0].id, killerId: a[2].id, weapon: 'Pelle', level: 'difficile', parts: { bonus: 1, firstBlood: false, mates: 0 } })); }""")
+    pg.wait_for_timeout(300)
+    pg.goto(URL + '#/settings')
+    pg.locator('section.panel', has=pg.locator('h2', has_text='Boucles et rerolls')).get_by_role('button', name='Supprimer').click()
+    conf = pg.locator('dialog[open]').last
+    expect(conf).to_contain_text('Ses 2 kills sont annulés'); expect(conf).to_contain_text('récupère les armes')
+    conf.get_by_role('button', name='Supprimer').click(); pg.wait_for_timeout(400)
+    assert pg.evaluate(snap) == before, 'the same dead, points, weapons and current loop as before the reroll'
     assert errors == [], errors
     ctx.close()
 

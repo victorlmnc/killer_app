@@ -459,6 +459,24 @@ t('a known weapon changes difficulty: the kills recorded with the other one are 
   assert.deepEqual(L.reclassWeapon(s, 'Chaise', 'difficile').map(x => [x.kill.id, x.patch.points, x.delta]), [['k4', 3, 0]], 'no killer yet: the kill only');
   assert.deepEqual(L.reclassWeapon(s, 'Chaise', 'inconnue'), []);
 });
+t('deleting a round: its kills undone, points and weapons back as before it', () => {
+  const s = base();
+  s.rounds = [{ id: 'r0', name: 'Initial loop', position: 0, held_weapons: { a: 'Banane', c: 'Lacet' } }, { id: 'r1', name: 'Reroll 1', position: 1 }];
+  Object.assign(s.players[0], { points: 9, weapons: 'Chaise' });   // a: killed b then c in the reroll
+  s.links = [link('r1', 'a', 'b'), link('r0', 'd', 'e')];
+  s.kills = [{ id: 'k0', round_id: 'r0', killer_id: 'd', victim_id: 'f', points: 1 },
+    { id: 'k1', round_id: 'r1', killer_id: 'a', victim_id: 'b', points: 3, killer_weapons: '', happened_at: '2026-10-01T10:00:00Z' },
+    { id: 'k2', round_id: 'r1', killer_id: 'a', victim_id: 'c', points: 2, killer_weapons: 'Gant', happened_at: '2026-10-02T10:00:00Z' }];
+  const plan = L.undoRoundPlan(s, 'r1');
+  assert.deepEqual(plan.kills.map(k => k.id), ['k2', 'k1'], 'only the kills of that round, newest first');
+  assert.equal(plan.links, 1);
+  assert.ok(plan.restoreHeld);
+  const pa = plan.patches.find(x => x.id === 'a').patch;
+  assert.deepEqual(pa, { points: 4, weapons: 'Banane' }, 'the points of both kills taken back; the weapons held at the reroll');
+  assert.deepEqual(plan.patches.find(x => x.id === 'c').patch, { weapons: 'Lacet' });
+  delete s.rounds[0].held_weapons;
+  assert.deepEqual(L.undoRoundPlan(s, 'r1').patches.find(x => x.id === 'a').patch, { points: 4, weapons: '' }, 'no history: each kill gives back what the killer had before it');
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');

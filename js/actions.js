@@ -672,6 +672,27 @@
     });
   };
 
+  /* Delete the last round: back exactly where the game was before it (see L.undoRoundPlan). */
+  act.deleteRound = function (roundId) {
+    if (!store.canEdit()) return Promise.resolve(false);
+    var plan = L.undoRoundPlan(store.state, roundId); if (!plan.round) return Promise.resolve(false);
+    var dead = plan.kills.length, text = [K.n(plan.links, 'Its {n} link is erased.', 'Its {n} links are erased.')];
+    if (dead) text.push(K.n(dead, 'Its {n} kill is undone: that player is alive again and the killer loses the points of the kill and gets back the weapons they had.', 'Its {n} kills are undone: those players are alive again and the killers lose the points of these kills and get back the weapons they had.'));
+    if (plan.restoreHeld) text.push(t('Everyone gets back the weapons they held at the start of the reroll; "{name}" becomes the current loop again.', { name: plan.prev.name }));
+    else if (plan.prev) text.push(t('"{name}" becomes the current loop again.', { name: plan.prev.name }));
+    return ui.confirm({ title: t('Delete "{name}"?', { name: plan.round.name }), text: text, action: t('Delete'), danger: true }).then(function (ok) {
+      if (!ok) return false;
+      var jobs = plan.kills.map(function (k) { return store.remove('kills', k.id); });
+      plan.patches.forEach(function (x) { jobs.push(store.update('players', x.id, x.patch)); });
+      if (plan.restoreHeld) jobs.push(store.update('rounds', plan.prev.id, { held_weapons: null }));   // back in play: no longer history
+      return Promise.all(jobs).then(function () { return store.remove('rounds', roundId); }).then(function () {
+        store.log(t('Round deleted: {name}', { name: plan.round.name }) + (dead ? ' (' + K.n(dead, '{n} kill undone', '{n} kills undone') + ')' : ''));
+        ui.toast(t('Round deleted: back to where the game was before it.'));
+        return true;
+      });
+    });
+  };
+
   /* ------------------------------------------------------- player sheet */
   act.openPlayer = function (playerId, ctx) {
     ctx = ctx || {};

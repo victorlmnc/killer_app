@@ -40,7 +40,7 @@
           rs.appendChild(h('div', { class: 'row' }, h('input', { type: 'text', value: r.name, 'aria-label': t('Round name'), onchange: function (e) { store.update('rounds', r.id, { name: e.target.value.trim() || r.name }); } }),
             h('span', { class: 'muted small' }, K.n(n, '{n} link', '{n} links')),
             i === rounds.length - 1 ? h('button', { type: 'button', class: 'btn btn-danger', onclick: function () {
-              ui.confirm({ title: t('Delete "{name}"?', { name: r.name }), text: t('Its {n} links are erased. Kills are kept.', { n: n }), action: t('Delete'), danger: true }).then(function (ok) { if (ok) store.remove('rounds', r.id); });
+              K.actions.deleteRound(r.id);   // its kills are undone too: back to where the game was before it
             } }, t('Delete')) : null));
         });
         if (!rounds.length) rs.appendChild(h('p', { class: 'empty' }, t('The first round is created automatically with the first link.')));

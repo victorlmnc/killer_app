@@ -600,6 +600,33 @@
     state.players.forEach(function (p) { if (weaponList(p.weapons).length) out[p.id] = weaponList(p.weapons).join(', '); });
     return out;
   }
+  /* Deleting a round puts the game back where it was before it: its kills are undone (newest first: the killers lose
+     their points and get back the weapons they had), and the weapons everyone held at the reroll come back.
+     -> { round, prev, kills, links, patches: [{ id, patch }], restoreHeld } */
+  function undoRoundPlan(state, roundId) {
+    var rounds = sortedRounds(state), i = rounds.map(function (r) { return r.id; }).indexOf(roundId), prev = i > 0 ? rounds[i - 1] : null;
+    var kills = state.kills.filter(function (k) { return k.round_id === roundId; }).sort(function (a, b) { return Date.parse(b.happened_at) - Date.parse(a.happened_at); });
+    var now = new Map();
+    function get(id) {
+      if (!now.has(id)) { var p = state.players.find(function (x) { return x.id === id; }); if (!p) return null; now.set(id, { points: p.points || 0, weapons: p.weapons || '' }); }
+      return now.get(id);
+    }
+    kills.forEach(function (k) {
+      var p = !k.admin_reason && k.killer_id && get(k.killer_id); if (!p) return;
+      p.points = Math.max(0, p.points - (k.points || 0));
+      if (k.killer_weapons != null) p.weapons = k.killer_weapons;   // what they held before that kill
+    });
+    var restoreHeld = !!(prev && prev.held_weapons);
+    if (restoreHeld) state.players.forEach(function (p) { get(p.id).weapons = prev.held_weapons[p.id] || ''; });   // as at the reroll
+    var patches = [];
+    now.forEach(function (v, id) {
+      var p = state.players.find(function (x) { return x.id === id; }), patch = {};
+      if (v.points !== (p.points || 0)) patch.points = v.points;
+      if (weaponList(v.weapons).join(', ') !== weaponList(p.weapons).join(', ')) patch.weapons = weaponList(v.weapons).join(', ');
+      if (Object.keys(patch).length) patches.push({ id: id, patch: patch });
+    });
+    return { round: rounds[i], prev: prev, kills: kills, links: state.links.filter(function (l) { return l.round_id === roundId; }).length, patches: patches, restoreHeld: restoreHeld };
+  }
   function pastWeapons(state, playerId) {
     return sortedRounds(state).filter(function (r) { return r.held_weapons && r.held_weapons[playerId]; })
       .map(function (r) { return { round: r, weapons: weaponList(r.held_weapons[playerId]) }; }).reverse();   // latest first
@@ -992,6 +1019,6 @@
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
     planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, LEVEL_GAP: LEVEL_GAP, SCORING: SCORING, scoring: scoring, bonusChoices: bonusChoices, levelGap: levelGap, rescoreKills: rescoreKills, reclassWeapon: reclassWeapon, pendingKills: pendingKills, pointsRange: pointsRange, settleKills: settleKills, settleWeapon: settleWeapon, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
-    leaderboard: leaderboard, generalRanking: generalRanking, realPlayers: realPlayers, heldWeapons: heldWeapons, pastWeapons: pastWeapons, intelOf: intelOf, lastSightings: lastSightings, mysteryCandidates: mysteryCandidates, mysteryMerge: mysteryMerge, MYSTERY_CLUES: CLUES, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
+    leaderboard: leaderboard, generalRanking: generalRanking, realPlayers: realPlayers, heldWeapons: heldWeapons, pastWeapons: pastWeapons, undoRoundPlan: undoRoundPlan, intelOf: intelOf, lastSightings: lastSightings, mysteryCandidates: mysteryCandidates, mysteryMerge: mysteryMerge, MYSTERY_CLUES: CLUES, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });
