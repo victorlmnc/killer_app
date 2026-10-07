@@ -477,6 +477,14 @@ t('deleting a round: its kills undone, points and weapons back as before it', ()
   delete s.rounds[0].held_weapons;
   assert.deepEqual(L.undoRoundPlan(s, 'r1').patches.find(x => x.id === 'a').patch, { points: 4, weapons: '' }, 'no history: each kill gives back what the killer had before it');
 });
+t('a weapon is in play once per loop: who holds it already', () => {
+  const s = base();
+  s.players[0].weapons = 'Banane, Lacet'; s.players[1].weapons = 'banane'; s.players[2].weapons = 'Chaise';
+  s.kills = [{ id: 'k', killer_id: 'c', victim_id: 'b' }];   // b is dead: their weapon is no longer in play
+  assert.deepEqual(L.weaponHolders(s, 'BANANE').map(p => p.id), ['a']);
+  assert.deepEqual(L.weaponHolders(s, 'Banane', 'a'), [], 'the player being edited does not count');
+  assert.deepEqual(L.weaponHolders(s, 'Gant'), []);
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');

@@ -842,17 +842,25 @@
   /* The weapons of a sheet: the picker (catalogue first) and the difficulty of each one. It belongs to the catalogue:
      a weapon already there can be switched easy/hard (for everyone), an unknown one added or left as "don't know".
      A player holds at most one easy and one hard weapon. Used by the sheet form and the quick weapons dialog. */
-  function weaponEditor(text) {
+  function weaponEditor(text, playerId) {
+    var had = new Set(L.weaponList(text).map(L.norm));
+    function inPlay(name) {   // a weapon is in play once per loop: held by another living player -> why it cannot be taken
+      var other = L.weaponHolders(store.state, name, playerId)[0];
+      return other ? t('Already in play: {name} holds it.', { name: other.name }) : null;
+    }
     var levels = {}, levelsBox = h('div', { class: 'weapon-levels' });
     function levelOf(w) { var k = L.norm(w); return k in levels ? levels[k].value : ui.weaponDifficulty(w) || ''; }
     function holderOf(level, names, except) { return level ? names.find(function (n) { return L.norm(n) !== L.norm(except || '') && levelOf(n) === level; }) : null; }
     function weaponRule(name, names) {   // why this weapon cannot be added, or null
       if (names.length >= 2) return t('Two weapons at most: one easy and one hard.');
+      if (inPlay(name)) return inPlay(name);
       var d = ui.weaponDifficulty(name), other = holderOf(d, names);
       return other ? t(d === 'difficile' ? 'Already a hard weapon: {w}' : 'Already an easy weapon: {w}', { w: other }) : null;
     }
     function levelsError(names) {
       if (names.length > 2) return t('Two weapons at most: one easy and one hard.');
+      var taken = names.find(function (n) { return !had.has(L.norm(n)) && inPlay(n); });   // only the ones added now: an old duplicate does not block the sheet
+      if (taken) return taken + ' ' + inPlay(taken);
       var e = names.filter(function (n) { return levelOf(n) === 'facile'; }).length, d = names.filter(function (n) { return levelOf(n) === 'difficile'; }).length;
       return e > 1 ? t('Only one easy weapon per player.') : d > 1 ? t('Only one hard weapon per player.') : null;
     }
@@ -896,7 +904,7 @@
   act.editWeapons = function (playerId) {
     var p = store.player(playerId); if (!p || !store.canEdit()) return;
     ui.dialog({ title: t('Weapons of {name}', { name: p.name }), render: function (body, api) {
-      var we = weaponEditor(p.weapons || '');
+      var we = weaponEditor(p.weapons || '', p.id);
       body.appendChild(h('div', { class: 'stack' },
         h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Weapons in hand')), we.picker.el, h('span', { class: 'field-hint' }, t('Pick from the catalogue; a new weapon is added only if it is not there.'))),
         we.levelsBox));
@@ -922,7 +930,7 @@
       title: playerId ? t('Edit sheet') : t('Add a player'),
       render: function (body, api) {
         var typeTouched = false;
-        var we = weaponEditor(p.weapons || ''), levelsBox = we.levelsBox, levelsError = we.error, saveLevels = we.save, drawLevels = we.draw;
+        var we = weaponEditor(p.weapons || '', playerId), levelsBox = we.levelsBox, levelsError = we.error, saveLevels = we.save, drawLevels = we.draw;
         /* a shared flat or a residence to pick, following the housing type */
         function homeSelect(kind) {
           var list = (store.state.homes || []).filter(function (x) { return L.homeKind(x) === kind; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });

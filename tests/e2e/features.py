@@ -265,19 +265,29 @@ with sync_playwright() as p:
 
     step('sheet: quick button to change or add a weapon (one easy, one hard at most)')
     q = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st), p = st.players.find(x => !dead.has(x.id) && !x.is_mystery && !(x.weapons || '').trim()); return { id: p.id, name: p.name }; })()")
+    free = pg.evaluate("K.store.state.weapons.find(w => w.difficulty === 'facile' && !K.logic.weaponHolders(K.store.state, w.name).length).name")   # a weapon nobody holds now
     pg.evaluate("id => K.actions.openPlayer(id)", q['id'])
     pg.locator('dialog[open]').get_by_role('button', name='Ajouter une arme').click()
     dlg = pg.locator('dialog[open]').last
     expect(dlg.locator('h2')).to_have_text('Armes de ' + q['name'])
-    dlg.locator('.wpick input').fill('Banane'); dlg.locator('.wpick input').press('Enter')
+    dlg.locator('.wpick input').fill(free); dlg.locator('.wpick input').press('Enter')
     dlg.locator('.wpick input').fill('Objet inédit'); pg.wait_for_timeout(100); dlg.locator('.wpick-option.is-new').click()
     expect(dlg.locator('.weapon-level')).to_have_count(2)
     dlg.get_by_role('button', name='Enregistrer').click(); pg.wait_for_timeout(300)
-    assert pg.evaluate("id => K.store.player(id).weapons", q['id']) == 'Banane, Objet inédit'
+    assert pg.evaluate("id => K.store.player(id).weapons", q['id']) == free + ', Objet inédit'
     assert pg.evaluate("K.store.state.weapons.find(w => w.name === 'Objet inédit').difficulty") == 'inconnue', 'a new weapon joins the catalogue as "don\'t know"'
     expect(pg.locator('dialog[open] .sheet-weapons')).to_contain_text('Objet inédit')
     expect(pg.locator('dialog[open] .sheet-weapons').get_by_role('button', name='Modifier les armes')).to_be_visible()
     pg.keyboard.press('Escape')
+    # a weapon is in play once per loop: another living player cannot take it
+    q2 = pg.evaluate("(a) => { const st = K.store.state, dead = K.logic.deadSet(st); return st.players.find(x => x.id !== a && !dead.has(x.id) && !x.is_mystery && !(x.weapons || '').trim()).id; }", q['id'])
+    pg.evaluate("id => K.actions.editWeapons(id)", q2)
+    dlg = pg.locator('dialog[open]').last
+    dlg.locator('.wpick input').fill(free); pg.wait_for_timeout(100)
+    expect(dlg.locator('.wpick-option.is-blocked')).to_contain_text("Déjà en jeu : %s l'a." % q['name'])
+    dlg.locator('.wpick input').press('Enter')
+    expect(dlg.locator('.field-hint.danger').first).to_contain_text('Déjà en jeu')
+    dlg.get_by_role('button', name='Annuler').click()
 
     step('kill: another difficulty than the catalogue\'s for a known weapon switches it, and its other kills on request')
     bn = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), r = K.logic.currentRound(st), alive = st.players.filter(x => !dead.has(x.id) && !x.is_mystery);

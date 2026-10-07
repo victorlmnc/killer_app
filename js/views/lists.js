@@ -188,11 +188,13 @@
         st.players.forEach(function (p) { if (!dead.has(p.id)) L.weaponList(p.weapons).forEach(function (w) { var c = catalog.get(L.norm(w)); inPlay.push({ name: w, holder: p, listed: !!c, difficulty: c && c.difficulty !== 'inconnue' ? c.difficulty : null, owned: !!(c && c.owned) }); }); });
         inPlay = inPlay.filter(function (w) { return !nq || L.norm(w.name).indexOf(nq) >= 0; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });
         var sec = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Currently in play'), h('small', { class: 'muted' }, ' ' + inPlay.length)), h('span', { class: 'muted small' }, t('From the weapons noted on living players\' sheets'))));
+        var count = new Map(); inPlay.forEach(function (w) { var k = L.norm(w.name); count.set(k, (count.get(k) || 0) + 1); });   // a weapon is in play once per loop
         if (!inPlay.length) sec.appendChild(h('p', { class: 'empty' }, nq ? t('No weapon in play matches this search.') : t('Note weapons on player sheets and they will show here with their holder.')));
         else sec.appendChild(h('div', { class: 'weapon-grid' }, inPlay.map(function (w) {
-          return h('div', { class: 'weapon-card weapon-' + (w.difficulty || 'unknown') },
+          var twice = count.get(L.norm(w.name)) > 1;
+          return h('div', { class: 'weapon-card weapon-' + (w.difficulty || 'unknown') + (twice ? ' is-twice' : '') },
             h('button', { type: 'button', class: 'weapon-open', onclick: function () { K.actions.openPlayer(w.holder.id); } },
-              h('span', { class: 'weapon-name' }, w.name, w.owned ? h('span', { class: 'tag tag-owned' }, t('We have it')) : null),
+              h('span', { class: 'weapon-name' }, w.name, w.owned ? h('span', { class: 'tag tag-owned' }, t('We have it')) : null, twice ? h('span', { class: 'tag tag-twice', title: t('A weapon is in play only once per loop: one of these sheets is wrong.') }, t('Held twice')) : null),
               h('span', { class: 'weapon-meta' }, h('span', { class: 'tag tag-' + (w.difficulty || 'none') }, w.difficulty ? ui.levelText(w.difficulty) : w.listed ? t('Unknown difficulty') : t('Not in catalogue')),
                 h('span', { class: 'weapon-holder' }, ui.avatar(w.holder, 'sm'), h('span', {}, w.holder.name)))),
             !w.listed && store.canEdit() ? h('button', { type: 'button', class: 'linkish small weapon-add', onclick: function () { edit(null, w.name); } }, K.icon('plus', 'ic-sm'), t('Add to the catalogue')) : null);

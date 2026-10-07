@@ -627,6 +627,11 @@
     });
     return { round: rounds[i], prev: prev, kills: kills, links: state.links.filter(function (l) { return l.round_id === roundId; }).length, patches: patches, restoreHeld: restoreHeld };
   }
+  /* A weapon is in play once per loop: the living players (but exceptId) who hold it already */
+  function weaponHolders(state, name, exceptId) {
+    var n = norm(name), dead = deadSet(state);
+    return state.players.filter(function (p) { return p.id !== exceptId && !dead.has(p.id) && weaponList(p.weapons).some(function (w) { return norm(w) === n; }); });
+  }
   function pastWeapons(state, playerId) {
     return sortedRounds(state).filter(function (r) { return r.held_weapons && r.held_weapons[playerId]; })
       .map(function (r) { return { round: r, weapons: weaponList(r.held_weapons[playerId]) }; }).reverse();   // latest first
@@ -1019,6 +1024,6 @@
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
     planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, LEVEL_GAP: LEVEL_GAP, SCORING: SCORING, scoring: scoring, bonusChoices: bonusChoices, levelGap: levelGap, rescoreKills: rescoreKills, reclassWeapon: reclassWeapon, pendingKills: pendingKills, pointsRange: pointsRange, settleKills: settleKills, settleWeapon: settleWeapon, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
-    leaderboard: leaderboard, generalRanking: generalRanking, realPlayers: realPlayers, heldWeapons: heldWeapons, pastWeapons: pastWeapons, undoRoundPlan: undoRoundPlan, intelOf: intelOf, lastSightings: lastSightings, mysteryCandidates: mysteryCandidates, mysteryMerge: mysteryMerge, MYSTERY_CLUES: CLUES, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
+    leaderboard: leaderboard, generalRanking: generalRanking, realPlayers: realPlayers, heldWeapons: heldWeapons, pastWeapons: pastWeapons, weaponHolders: weaponHolders, undoRoundPlan: undoRoundPlan, intelOf: intelOf, lastSightings: lastSightings, mysteryCandidates: mysteryCandidates, mysteryMerge: mysteryMerge, MYSTERY_CLUES: CLUES, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });
