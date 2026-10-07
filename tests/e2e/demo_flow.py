@@ -61,7 +61,9 @@ with sync_playwright() as p:
     pg.evaluate("id => K.actions.killDialog(id)", pid('SCAPIN Léandre'))
     dlg = pg.locator('dialog[open]'); expect(dlg.locator('.btn-block')).to_contain_text('AROUET Candide')
     assert not dlg.locator('input[type=checkbox]').first.is_checked()
-    dlg.get_by_placeholder('Arme utilisée').fill('Chaudron'); dlg.locator('textarea').fill('Au Learning Center, 14 h.')
+    held = dlg.locator('select[aria-label="Arme utilisée"]')
+    if held.is_visible(): held.select_option('__other')   # not one of the killer's weapons: the search below
+    dlg.locator('.wpick input').fill('Chaudron'); dlg.locator('textarea').fill('Au Learning Center, 14 h.')
     dlg.get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
     assert pg.evaluate("K.store.state.players.find(p=>p.name==='AROUET Candide').weapons") == 'Chaudron, Lacet'
     pg.goto(URL + '#/dashboard'); ev = pg.locator('.event', has_text='a éliminé SCAPIN').first

@@ -156,8 +156,19 @@
         var adminReason = ui.select([{ value: 'cheating', label: t('Cheating') }, { value: 'other', label: t('Other') }], 'cheating');
         var killerField = ui.field(t('Killed by'), killerBtn, guess ? t('Suggested from the chain. Tap to change.') : null);
         var adminReasonField = ui.field(t('Reason for administrative elimination'), adminReason);
-        var weapon = h('input', { type: 'text', list: 'kill-weapons', placeholder: t('Weapon used'), oninput: onWeapon });
-        var options = h('datalist', { id: 'kill-weapons' });
+        /* the weapon: a menu of what the killer holds, and below a search in the catalogue (or a new weapon) for
+           anything else, e.g. when their sheet is wrong. Killer unknown or without weapons: the search only. */
+        var held = ui.select([], '', { 'aria-label': t('Weapon used'), onchange: function () { showPicker(); onWeapon(); } });
+        var picker = ui.weaponPicker('', { max: 1, onChange: onWeapon });
+        picker.input.addEventListener('input', onWeapon);   // a catalogue name typed in full sets the difficulty too
+        var heldField = ui.field(t('Weapon'), held), pickerField = h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Another weapon')), picker.el,
+          h('span', { class: 'field-hint' }, t('Search the catalogue, or type a new weapon.')));
+        var OTHER = '__other';
+        function weaponValue() { return !heldField.hidden && held.value !== OTHER ? held.value : picker.value.trim(); }
+        function showPicker() {
+          pickerField.hidden = !heldField.hidden && held.value !== OTHER;
+          pickerField.querySelector('.field-label').textContent = heldField.hidden ? t('Weapon') : t('Another weapon');
+        }
         var sc = L.scoring(st);   // the scoring set in Settings
         var diff = ui.select(ui.levelOptions(true), 'facile', { onchange: total });
         var bonus = ui.select(ui.bonusOptions(), '0', { onchange: total });
@@ -167,7 +178,7 @@
         var note = h('textarea', { rows: '2', placeholder: t('Place, circumstances, who was there…') });
         var sum = h('strong', {}), noKiller = h('p', { class: 'muted small' }, t('The killer gets these points once you say who it is (from the sheet of the victim).'));
         var scoring = h('div', { class: 'stack' },
-          ui.field(t('Weapon'), weapon), options,
+          heldField, pickerField,
           h('div', { class: 'grid-2' }, ui.field(t('Difficulty'), diff), ui.field(t('Bonus'), bonus)),
           h('div', { class: 'grid-2' }, ui.field(t('Teammates (multi-kill)'), mates), h('label', { class: 'check' }, fb, t('First blood (+{n})', { n: sc.first_blood }))),
           h('p', { class: 'muted' }, t('Points earned: '), sum), noKiller);
@@ -180,16 +191,19 @@
           adminReasonField.hidden = !administrative;
           scoring.hidden = administrative;   // known killer or not: the weapon and how the kill was made are recorded
           noKiller.hidden = !!k;
-          ui.clear(options);
-          // suggestions: the killer's weapons; killer unknown: every weapon in play and in the catalogue
-          var names = k ? L.weaponList(k.weapons) : st.players.filter(function (p) { return !act.isDead(p.id); }).reduce(function (a, p) { return a.concat(L.weaponList(p.weapons)); }, []).concat(st.weapons.map(function (w) { return w.name; }));
-          names.filter(function (w, i) { return names.map(L.norm).indexOf(L.norm(w)) === i; }).forEach(function (w) { options.appendChild(h('option', { value: w })); });
+          var mine = L.weaponList(k && k.weapons), keep = held.value;
+          ui.clear(held);
+          mine.forEach(function (w) { var d = ui.weaponDifficulty(w); held.appendChild(h('option', { value: w }, w + (d ? ' (' + (d === 'difficile' ? t('hard') : t('easy')) + ')' : ''))); });
+          held.appendChild(h('option', { value: OTHER }, t('Another weapon (catalogue or new)…')));
+          held.value = mine.indexOf(keep) >= 0 || keep === OTHER ? keep : mine.length ? mine[0] : OTHER;
+          heldField.hidden = !mine.length;
+          showPicker(); onWeapon();
         }
         function pickKiller() {
           ui.pickPlayer({ title: t('Who killed them?'), filter: function (p) { return p.id !== victimId && !act.isDead(p.id); }, extra: [{ label: t('Killer unknown for now'), value: null }] })
             .then(function (v) { if (v !== undefined) { killerId = v; refreshKiller(); } });
         }
-        function onWeapon() { var d = catalog.get(L.norm(weapon.value)); if (d) diff.value = d; total(); }
+        function onWeapon() { var d = catalog.get(L.norm(weaponValue())); if (d) diff.value = d; total(); }
         function total() {
           var n = L.killPoints({ difficulty: diff.value, bonus: bonus.value, firstBlood: fb.checked, mates: mates.value }, sc);
           sum.textContent = diff.value === 'inconnue' ? t('{a} or {b}', { a: n, b: n + L.levelGap(sc) }) + ' (' + t('settled once the difficulty is known') + ')' : String(n);
@@ -206,7 +220,7 @@
             var reason = adminAllowed && adminKill.checked ? adminReason.value : null;
             if (reason === 'other' && !note.value.trim()) { note.focus(); return ui.toast(t('Specify the reason in the note.'), 'error'); }
             api.close();
-            act.recordKill({ victimId: victimId, killerId: reason ? null : killerId, adminReason: reason, weapon: reason ? '' : weapon.value.trim(), level: diff.value, note: note.value.trim(), when: when.value ? parisInput(when.value).toISOString() : null,
+            act.recordKill({ victimId: victimId, killerId: reason ? null : killerId, adminReason: reason, weapon: reason ? '' : weaponValue(), level: diff.value, note: note.value.trim(), when: when.value ? parisInput(when.value).toISOString() : null,
               parts: { bonus: parseInt(bonus.value, 10) || 0, firstBlood: fb.checked, mates: Math.max(0, parseInt(mates.value, 10) || 0) } });
           } }, t('Record the kill'))));
         refreshKiller(); total();

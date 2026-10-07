@@ -96,7 +96,10 @@ with sync_playwright() as p:
     v = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st), r = K.logic.currentRound(st); const p = st.players.find(x => !dead.has(x.id) && K.logic.resolveHunter(st, r.id, x.id).id); return { victim: p.id, killer: K.logic.resolveHunter(st, r.id, p.id).id }; })()")
     before = pg.evaluate("id => K.store.player(id).points", v['killer'])
     pg.evaluate("id => K.actions.killDialog(id)", v['victim'])
-    pg.locator('dialog[open] input[list="kill-weapons"]').fill('Parapluie')
+    held = pg.locator('dialog[open] select[aria-label="Arme utilisée"]')
+    if held.is_visible():   # the killer's weapons first; another one from the search below
+        expect(held.locator('option').last).to_have_text('Autre arme (catalogue ou nouvelle)…'); held.select_option('__other')
+    pg.locator('dialog[open] .wpick input').fill('Parapluie')
     pg.locator('dialog[open] select:has(option[value="inconnue"])').select_option('inconnue')
     expect(pg.locator('dialog[open]')).to_contain_text('1 ou 3')
     pg.get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
@@ -240,13 +243,24 @@ with sync_playwright() as p:
     expect(past).to_contain_text('Armes des boucles précédentes'); expect(past).to_contain_text(before['round'])
     pg.keyboard.press('Escape')
 
+    step('kill: the weapon comes from the menu of what the killer holds')
+    w = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), r = K.logic.currentRound(st), alive = st.players.filter(x => !dead.has(x.id) && !x.is_mystery);
+      const killer = alive[2], victim = alive[3]; killer.weapons = 'Banane, Lacet'; K.store.emit(); return K.actions.setTarget(killer.id, victim.id, { roundId: r.id, noConfirm: true, silent: true }).then(() => ({ victim: victim.id })); }""")
+    pg.evaluate("id => K.actions.killDialog(id)", w['victim'])
+    held = pg.locator('dialog[open] select[aria-label="Arme utilisée"]')
+    expect(held.locator('option')).to_have_count(3); held.select_option('Lacet')
+    expect(pg.locator('dialog[open] .wpick')).to_be_hidden()
+    pg.locator('dialog[open]').get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
+    assert pg.evaluate("v => K.store.state.kills.find(k => k.victim_id === v).weapon", w['victim']) == 'Lacet'
+
     step('kill with an unknown killer: the weapon and the points are recorded; the killer gets them once named')
     u = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), alive = st.players.filter(x => !dead.has(x.id) && !x.is_mystery);
       const v = alive[0]; v.weapons = 'Gant'; const k = alive[1]; K.store.emit(); return { victim: v.id, victimName: v.name, killer: k.id, killerName: k.name, points: k.points || 0 }; }""")
     pg.evaluate("id => K.actions.killDialog(id)", u['victim'])
     dlg = pg.locator('dialog[open]').last
     expect(dlg).to_contain_text("Killer inconnu pour l'instant")
-    dlg.locator('input[list="kill-weapons"]').fill('Parapluie')
+    expect(dlg.locator('select[aria-label="Arme utilisée"]')).to_be_hidden()   # killer unknown: the search straight away
+    dlg.locator('.wpick input').fill('Parapluie')
     dlg.locator('select:has(option[value="inconnue"])').select_option('difficile')
     expect(dlg).to_contain_text('Le killer recevra ces points')
     dlg.get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
