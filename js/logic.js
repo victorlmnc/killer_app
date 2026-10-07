@@ -204,31 +204,70 @@
     return { remove: removed, add: add };
   }
 
-  function killPoints(o) {
-    var base = o.difficulty === 'difficile' ? 3 : 1;   // unknown difficulty: the easy points, for now
-    return base + (Number(o.bonus) || 0) + (o.firstBlood ? 5 : 0) + (Number(o.mates) || 0);
+  /* ---------- Scoring ----------
+     Set in Settings: points of an easy and a hard weapon, the video and "witnessed by the organiser" bonuses (a range:
+     the organiser picks within it), first blood, and each teammate of a multi-kill. */
+  var SCORING = { easy: 1, hard: 3, video_min: 1, video_max: 3, witness_min: 2, witness_max: 4, first_blood: 5, teammate: 1 };
+  function scoring(state) {
+    var raw = (state && state.settings && state.settings.scoring) || {}, out = {};
+    Object.keys(SCORING).forEach(function (k) { var n = parseInt(raw[k], 10); out[k] = isFinite(n) && n >= 0 && n < 1000 ? n : SCORING[k]; });
+    if (out.video_max < out.video_min) out.video_max = out.video_min;
+    if (out.witness_max < out.witness_min) out.witness_max = out.witness_min;
+    return out;
   }
-  /* A kill made with a weapon of unknown difficulty ('inconnue') counts the easy points; a hard weapon gives LEVEL_GAP more.
+  /* o: { difficulty, bonus, firstBlood, mates }; the bonus is the number the organiser gave, within the range */
+  function killPoints(o, sc) {
+    sc = sc || SCORING;
+    var base = o.difficulty === 'difficile' ? sc.hard : sc.easy;   // unknown difficulty: the easy points, for now
+    return base + (Number(o.bonus) || 0) + (o.firstBlood ? sc.first_blood : 0) + (Number(o.mates) || 0) * sc.teammate;
+  }
+  /* The bonuses the kill form offers: "Video +1", "Video or witnessed +2"… from both ranges */
+  function bonusChoices(sc) {
+    var out = [], lo = Math.min(sc.video_min, sc.witness_min), hi = Math.max(sc.video_max, sc.witness_max);
+    for (var n = Math.max(1, lo); n <= hi; n++) {
+      var v = n >= sc.video_min && n <= sc.video_max, w = n >= sc.witness_min && n <= sc.witness_max;
+      if (v || w) out.push({ value: n, kind: v && w ? 'both' : v ? 'video' : 'witness' });
+    }
+    return out;
+  }
+  /* A kill made with a weapon of unknown difficulty ('inconnue') counts the easy points; a hard weapon gives the gap more.
      The player's points hold the sure part, the range says how many more they may have. */
-  var LEVEL_GAP = killPoints({ difficulty: 'difficile' }) - killPoints({ difficulty: 'facile' });
+  function levelGap(sc) { return Math.max(0, sc.hard - sc.easy); }
+  var LEVEL_GAP = levelGap(SCORING);
   function pendingKills(state, playerId) {
     return (state.kills || []).filter(function (k) { return k.weapon_level === 'inconnue' && k.killer_id && (!playerId || k.killer_id === playerId); });
   }
   function pointsRange(state, p) {
     var min = (p && p.points) || 0;
-    return { min: min, max: min + (p ? LEVEL_GAP * pendingKills(state, p.id).length : 0) };
+    return { min: min, max: min + (p ? levelGap(scoring(state)) * pendingKills(state, p.id).length : 0) };
   }
+  /* The parts of a kill are known (recorded since the scoring is computed): its points follow the scoring. */
+  function hasParts(k) { return k.first_blood != null && k.bonus != null && k.mates != null; }
+  function partsPoints(k, difficulty, sc) { return killPoints({ difficulty: difficulty || k.weapon_level, bonus: k.bonus, firstBlood: k.first_blood, mates: k.mates }, sc); }
   /* The kills to settle once the difficulty of a weapon is known -> [{ kill, patch, killerId, delta }] */
-  function settleKills(kills, difficulty) {
+  function settleKills(kills, difficulty, sc) {
     if (difficulty !== 'facile' && difficulty !== 'difficile') return [];
-    var delta = difficulty === 'difficile' ? LEVEL_GAP : 0;
+    sc = sc || SCORING;
     return kills.filter(function (k) { return k.weapon_level === 'inconnue'; }).map(function (k) {
-      return { kill: k, patch: { weapon_level: difficulty, points: (k.points || 0) + delta }, killerId: k.killer_id, delta: k.killer_id ? delta : 0 };
+      var points = hasParts(k) ? partsPoints(k, difficulty, sc) : (k.points || 0) + (difficulty === 'difficile' ? levelGap(sc) : 0);
+      return { kill: k, patch: { weapon_level: difficulty, points: points }, killerId: k.killer_id, delta: k.killer_id ? points - (k.points || 0) : 0 };
     });
   }
   function settleWeapon(state, name, difficulty) {
     var n = norm(name);
-    return settleKills(pendingKills(state).filter(function (k) { return k.weapon && norm(k.weapon) === n; }), difficulty);
+    return settleKills(pendingKills(state).filter(function (k) { return k.weapon && norm(k.weapon) === n; }), difficulty, scoring(state));
+  }
+  /* A new scoring: the kills whose points change -> { changes: [{ kill, patch, killerId, delta }], kept: kills recorded
+     before (their parts are unknown, they keep their points) } */
+  function rescoreKills(state, sc) {
+    var changes = [], kept = 0;
+    (state.kills || []).forEach(function (k) {
+      if (k.admin_reason || !k.killer_id) return;
+      if (!hasParts(k)) { kept++; return; }
+      var points = partsPoints(k, null, sc);
+      if (points !== (k.points || 0)) changes.push({ kill: k, patch: { points: points }, killerId: k.killer_id, delta: points - (k.points || 0) });
+    });
+    return { changes: changes, kept: kept };
   }
 
   function weaponList(text) {
@@ -460,7 +499,7 @@
     players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, status: '', home_id: '', apartment: '', is_mystery: false, photo_path: '', created_at: NOW },
     rounds: { name: '', position: 0, created_at: NOW },
     links: { round_id: null, hunter_id: null, target_id: null, confidence: 'sur', source: '', created_at: NOW },
-    kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', weapon_level: '', points: 0, admin_reason: '', note: '', killer_weapons: null, happened_at: NOW },
+    kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', weapon_level: '', bonus: 0, first_blood: false, mates: 0, points: 0, admin_reason: '', note: '', killer_weapons: null, happened_at: NOW },
     weapons: { name: '', difficulty: 'facile', owned: false, note: '' },
     events: { text: '', actor: '', details: {}, created_at: NOW },
     spots: { name: '', note: '', address: '', lat: 0, lng: 0, created_at: NOW },
@@ -468,7 +507,7 @@
     intel: { player_id: null, text: '', place: '', lat: 0, lng: 0, seen_at: NOW, author: '', created_at: NOW },
     bonuses: { player_id: null, name: '', price: 0, bought_at: NOW, starts_at: NOW, ends_at: NOW, note: '', created_at: NOW }
   };
-  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1, ends_at: 1, home_id: 1, weapon_level: 1 };   // empty -> null rather than the default
+  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1, ends_at: 1, home_id: 1, weapon_level: 1, bonus: 1, first_blood: 1, mates: 1 };   // empty -> null rather than the default
   var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile', 'inconnue'], weapon_level: ['facile', 'difficile', 'inconnue'], admin_reason: ['cheating', 'other'], status: ['', 'dangerous', 'priority'], kind: ['coloc', 'residence'] };
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -923,7 +962,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, homeMembers: homeMembers, suggestedHomes: suggestedHomes, homeKind: homeKind, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, LEVEL_GAP: LEVEL_GAP, pendingKills: pendingKills, pointsRange: pointsRange, settleKills: settleKills, settleWeapon: settleWeapon, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, LEVEL_GAP: LEVEL_GAP, SCORING: SCORING, scoring: scoring, bonusChoices: bonusChoices, levelGap: levelGap, rescoreKills: rescoreKills, pendingKills: pendingKills, pointsRange: pointsRange, settleKills: settleKills, settleWeapon: settleWeapon, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, realPlayers: realPlayers, intelOf: intelOf, lastSightings: lastSightings, mysteryCandidates: mysteryCandidates, mysteryMerge: mysteryMerge, MYSTERY_CLUES: CLUES, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

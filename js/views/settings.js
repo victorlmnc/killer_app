@@ -59,14 +59,22 @@
         root.appendChild(ys);
 
         /* Scoring and links */
-        var pr = h('section', { class: 'panel' }, h('h2', {}, t('Kill scoring')));
-        (s.point_rules || []).forEach(function (r, i) {
-          function save(patch) { var a = s.point_rules.slice(); a[i] = Object.assign({}, r, patch); store.setSetting('point_rules', a); }
-          pr.appendChild(h('div', { class: 'row row-wrap' }, h('input', { type: 'text', value: t(r.label), 'aria-label': t('Rule'), onchange: function (e) { save({ label: e.target.value.trim() }); } }),
-            h('input', { type: 'text', value: t(r.points), 'aria-label': t('Points'), style: { 'max-width': '10rem' }, onchange: function (e) { save({ points: e.target.value.trim() }); } }),
-            h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('Remove'), onclick: function () { store.setSetting('point_rules', s.point_rules.filter(function (_, j) { return j !== i; })); } }, K.icon('close'))));
-        });
-        pr.appendChild(h('button', { type: 'button', class: 'btn', onclick: function () { store.setSetting('point_rules', (s.point_rules || []).concat([{ label: '', points: '' }])); } }, t('Add a rule')));
+        /* the scoring: numbers the app computes with; saving it recomputes the points of the kills */
+        var cur = L.scoring(st), num = {};
+        function numField(k, label) { num[k] = h('input', { type: 'number', min: '0', max: '99', inputmode: 'numeric', value: String(cur[k]), 'aria-label': label }); return num[k]; }
+        var pr = h('section', { class: 'panel scoring' }, h('h2', {}, t('Kill scoring')),
+          h('p', { class: 'muted small' }, t('Every kill is computed from these numbers: change them and the points of the kills already recorded, of the players, and every label follow.')),
+          h('div', { class: 'grid-2' }, ui.field(t('Easy weapon'), numField('easy', t('Easy weapon'))), ui.field(t('Hard weapon'), numField('hard', t('Hard weapon')))),
+          h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Video bonus (the organiser picks within)')),
+            h('div', { class: 'range-pair' }, t('from +'), numField('video_min', t('Video bonus, at least')), t('to +'), numField('video_max', t('Video bonus, at most')))),
+          h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Kill witnessed by the organiser')),
+            h('div', { class: 'range-pair' }, t('from +'), numField('witness_min', t('Witnessed bonus, at least')), t('to +'), numField('witness_max', t('Witnessed bonus, at most')))),
+          h('div', { class: 'grid-2' }, ui.field(t('First blood'), numField('first_blood', t('First blood'))), ui.field(t('Per teammate (multi-kill)'), numField('teammate', t('Per teammate (multi-kill)')))),
+          h('div', { class: 'actions actions-start' }, h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+            var sc = {}; Object.keys(num).forEach(function (k) { sc[k] = num[k].value; });
+            sc = L.scoring({ settings: { scoring: sc } });   // cleaned: whole numbers, ranges in order
+            K.actions.saveScoring(sc);
+          } }, t('Save the scoring'))));
         root.appendChild(pr);
 
         var ls = h('section', { class: 'panel' }, h('h2', {}, t('Useful links')));

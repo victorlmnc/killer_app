@@ -209,6 +209,23 @@ with sync_playwright() as p:
     pg.evaluate("(() => { const h = K.store.state.homes.find(x => x.name === 'Les Lilas'); const p = K.store.state.players.find(x => x.home_id === h.id); return K.actions.recordKill({ victimId: p.id, killerId: null }); })()")
     expect(flats.locator('.flat-row', has_text='Les Lilas')).to_contain_text('1/2 vivants')
     expect(flats.locator('.flat-row.is-dead', has_text='Les Lilas')).to_have_count(0)  # still alive
+
+    step('scoring: a new scoring in Settings recomputes the kills and the points of their killers, labels follow')
+    k = pg.evaluate("(() => { const k = K.store.state.kills.find(x => x.weapon === 'Arrosoir'); return { kill: k.id, killer: k.killer_id, points: K.store.player(k.killer_id).points }; })()")
+    pg.goto(URL + '#/settings')
+    sc = pg.locator('section.scoring')
+    sc.get_by_label('Arme difficile').fill('4'); sc.get_by_label('First blood').fill('6')
+    sc.get_by_role('button', name='Enregistrer le barème').click()
+    expect(pg.locator('dialog[open]')).to_contain_text('changent de points')
+    pg.locator('dialog[open]').get_by_role('button', name='Appliquer').click(); pg.wait_for_timeout(300)
+    got = pg.evaluate("a => [K.store.state.kills.find(x => x.id === a.kill).points, K.store.player(a.killer).points, K.logic.scoring(K.store.state).hard]", k)
+    assert got == [4, k['points'] + 2, 4], (got, k)   # Arrosoir 3 -> 4; the same killer's first blood (Banane) 5 -> 6
+    pg.goto(URL + '#/shop'); expect(pg.locator('section.panel', has=pg.locator('h2', has_text='Barème des kills'))).to_contain_text('4 pts')
+    v = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st); return st.players.find(x => !dead.has(x.id)).id; })()")
+    pg.evaluate("id => K.actions.killDialog(id)", v)
+    expect(pg.locator('dialog[open] select:has(option[value="inconnue"])')).to_contain_text('Difficile (4 pts)')
+    expect(pg.locator('dialog[open]')).to_contain_text('First blood (+6)')
+    pg.keyboard.press('Escape')
     assert errors == [], errors
     ctx.close()
 

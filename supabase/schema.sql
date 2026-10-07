@@ -169,6 +169,10 @@ alter table public.weapons add column if not exists note text default '';
 alter table public.weapons drop constraint if exists weapons_difficulty_check;
 alter table public.weapons add constraint weapons_difficulty_check check (difficulty in ('facile', 'difficile', 'inconnue'));
 alter table public.kills add column if not exists weapon_level text check (weapon_level is null or weapon_level in ('facile', 'difficile', 'inconnue'));
+-- what the points of a kill are made of, so they follow a change of the scoring (null: recorded before, kept as is)
+alter table public.kills add column if not exists bonus integer;
+alter table public.kills add column if not exists first_blood boolean;
+alter table public.kills add column if not exists mates integer;
 
 -- Shop bonuses bought by players: what, when it takes effect and until when (ends_at null = one-off, e.g. a reveal).
 create table if not exists public.bonuses (

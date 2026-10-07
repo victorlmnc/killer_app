@@ -183,6 +183,22 @@
     }));
   };
 
+  /* A menu that looks like a filter chip: the chip shows the choice (o.empty when nothing is chosen, lit when
+     something is), a native select lies invisible on top of it so the phone's own picker opens. The select keeps
+     16px text, so iOS does not zoom in on it. o: { empty, prefix (before a chosen value), lit (false: never lit), onchange, 'aria-label' } */
+  ui.chipSelect = function (options, value, o) {
+    o = o || {};
+    var opts = options.map(function (x) { return typeof x === 'string' ? { value: x, label: x } : x; });
+    var text = h('span', { class: 'chip-select-text' }), wrap = h('label', { class: 'chip chip-select' }, text, K.icon('chevron', 'chip-select-chevron'));
+    var sel = ui.select(opts, value, { class: 'chip-select-native', 'aria-label': o['aria-label'] || null, onchange: function (e) { show(); if (o.onchange) o.onchange(e); } });
+    function show() {
+      var v = sel.value, cur = opts.find(function (x) { return String(x.value) === v; });
+      text.textContent = !v && o.empty ? o.empty : (v && o.prefix ? o.prefix + ' ' : '') + (cur ? cur.label : v);
+      wrap.classList.toggle('is-on', o.lit !== false && !!v);
+    }
+    wrap.appendChild(sel); show();
+    return wrap;
+  };
   ui.yearColor = function (year) {
     var y = (K.store.state.settings.years || []).find(function (x) { return x.name === year; });
     return y ? y.color : 'var(--muted)';
@@ -211,6 +227,22 @@
   ui.weaponDifficulty = function (name) {
     var n = K.logic.norm(name), w = K.store.state.weapons.find(function (x) { return K.logic.norm(x.name) === n; });
     return w && w.difficulty !== 'inconnue' ? w.difficulty : null;
+  };
+  /* Labels that follow the scoring set in Settings */
+  function pts(n) { return K.n(n, '{n} pt', '{n} pts'); }
+  ui.levelOptions = function (withUnknown) {
+    var sc = K.logic.scoring(K.store.state);
+    return [{ value: 'facile', label: t('Easy ({p})', { p: pts(sc.easy) }) }, { value: 'difficile', label: t('Hard ({p})', { p: pts(sc.hard) }) }]
+      .concat(withUnknown ? [{ value: 'inconnue', label: t("Don't know ({a} or {b} pts)", { a: sc.easy, b: sc.hard }) }] : []);
+  };
+  ui.levelText = function (d) {   // "Hard, 3 pts"
+    var sc = K.logic.scoring(K.store.state);
+    return d === 'difficile' ? t('Hard, {p}', { p: pts(sc.hard) }) : d === 'facile' ? t('Easy, {p}', { p: pts(sc.easy) }) : t('{a} or {b} points', { a: sc.easy, b: sc.hard });
+  };
+  ui.bonusOptions = function () {
+    return [{ value: '0', label: t('None') }].concat(K.logic.bonusChoices(K.logic.scoring(K.store.state)).map(function (b) {
+      return { value: String(b.value), label: t(b.kind === 'both' ? 'Video or witnessed +{n}' : b.kind === 'video' ? 'Video +{n}' : 'Witnessed +{n}', { n: b.value }) };
+    }));
   };
   /* "12 pts", or "12 to 14 pts" while kills made with a weapon of unknown difficulty are not settled */
   ui.pointsText = function (p) {

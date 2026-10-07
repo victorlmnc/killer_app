@@ -42,9 +42,9 @@
             return h('button', { type: 'button', class: 'chip' + (view.extra === x[0] ? ' is-on' : ''), 'aria-pressed': String(view.extra === x[0]), onclick: function () { view.extra = view.extra === x[0] ? '' : x[0]; refresh(); } }, x[1]);
           }))));
         filters.appendChild(h('div', { class: 'filter-selects' },
-          ui.select([{ value: '', label: t('All years') }].concat((s.years || []).map(function (y) { return y.name; })), view.year, { 'aria-label': t('Year'), onchange: function (e) { view.year = e.target.value; refresh(); } }),
-          (s.depts || []).length ? ui.select([{ value: '', label: t('All departments') }].concat(s.depts), view.dept, { 'aria-label': t('Department'), onchange: function (e) { view.dept = e.target.value; refresh(); } }) : null,
-          ui.select([{ value: 'name', label: t('Sort: name') }, { value: 'points', label: t('Sort: points') }, { value: 'kills', label: t('Sort: kills') }, { value: 'class', label: t('Sort: class') }], view.sort, { 'aria-label': t('Sort'), onchange: function (e) { view.sort = e.target.value; paint(); } })));
+          ui.chipSelect([{ value: '', label: t('All years') }].concat((s.years || []).map(function (y) { return y.name; })), view.year, { empty: t('Year'), prefix: t('Year'), 'aria-label': t('Year'), onchange: function (e) { view.year = e.target.value; refresh(); } }),
+          (s.depts || []).length ? ui.chipSelect([{ value: '', label: t('All departments') }].concat(s.depts), view.dept, { empty: t('Department'), prefix: t('Department'), 'aria-label': t('Department'), onchange: function (e) { view.dept = e.target.value; refresh(); } }) : null,
+          ui.chipSelect([{ value: 'name', label: t('Sort: name') }, { value: 'points', label: t('Sort: points') }, { value: 'kills', label: t('Sort: kills') }, { value: 'class', label: t('Sort: class') }], view.sort, { lit: false, 'aria-label': t('Sort'), onchange: function (e) { view.sort = e.target.value; paint(); } })));
         var changed = ['state', 'extra', 'year', 'dept'].some(function (k) { return view[k] !== DEFAULT[k]; });
         filters.appendChild(h('div', { class: 'filter-foot' }, count,
           changed ? h('button', { type: 'button', class: 'linkish small', onclick: function () { Object.assign(view, DEFAULT, { q: view.q, sort: view.sort }); refresh(); } }, t('Reset filters')) : null));
@@ -106,7 +106,7 @@
       function edit(w, preset) {   // preset: name of a weapon seen in play but missing from the catalogue
         if (!store.canEdit()) return;
         ui.dialog({ title: w ? t('Edit weapon') : t('Add a weapon'), render: function (b, api) {
-          var name = h('input', { type: 'text', value: w ? w.name : preset || '' }), diff = ui.select([{ value: 'facile', label: t('Easy (1 pt)') }, { value: 'difficile', label: t('Hard (3 pts)') }, { value: 'inconnue', label: t('Unknown difficulty') }], w ? w.difficulty : 'facile');
+          var name = h('input', { type: 'text', value: w ? w.name : preset || '' }), diff = ui.select(ui.levelOptions(false).concat([{ value: 'inconnue', label: t('Unknown difficulty') }]), w ? w.difficulty : 'facile');
           var owned = h('input', { type: 'checkbox', checked: !!(w && w.owned) });
           var note = h('textarea', { rows: '3', value: (w && w.note) || '', placeholder: t('e.g. in the kitchen of the residence, Emma keeps one, buy at the market') });
           b.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Difficulty'), diff),
@@ -192,7 +192,7 @@
           return h('div', { class: 'weapon-card weapon-' + (w.difficulty || 'unknown') },
             h('button', { type: 'button', class: 'weapon-open', onclick: function () { K.actions.openPlayer(w.holder.id); } },
               h('span', { class: 'weapon-name' }, w.name, w.owned ? h('span', { class: 'tag tag-owned' }, t('We have it')) : null),
-              h('span', { class: 'weapon-meta' }, h('span', { class: 'tag tag-' + (w.difficulty || 'none') }, w.difficulty ? (w.difficulty === 'difficile' ? t('Hard, 3 pts') : t('Easy, 1 pt')) : w.listed ? t('Unknown difficulty') : t('Not in catalogue')),
+              h('span', { class: 'weapon-meta' }, h('span', { class: 'tag tag-' + (w.difficulty || 'none') }, w.difficulty ? ui.levelText(w.difficulty) : w.listed ? t('Unknown difficulty') : t('Not in catalogue')),
                 h('span', { class: 'weapon-holder' }, ui.avatar(w.holder, 'sm'), h('span', {}, w.holder.name)))),
             !w.listed && store.canEdit() ? h('button', { type: 'button', class: 'linkish small weapon-add', onclick: function () { edit(null, w.name); } }, K.icon('plus', 'ic-sm'), t('Add to the catalogue')) : null);
         })));
@@ -213,7 +213,7 @@
         var lost = L.pendingKills(st).filter(function (k) { return !k.weapon; });   // kills of unknown difficulty and no weapon name
         if (unknownList.length || lost.length) {
           var unk = h('section', { class: 'panel unknown-weapons' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Unknown difficulty'), h('small', { class: 'muted' }, ' ' + unknownList.length)),
-            h('span', { class: 'tag tag-none' }, t('1 or 3 points'))),
+            h('span', { class: 'tag tag-none' }, ui.levelText('inconnue'))),
             h('p', { class: 'muted small' }, t('Say whether it is easy or hard once you know: the kills made with it get their points.')));
           unknownList.forEach(function (u) {
             unk.appendChild(h('div', { class: 'row unknown-weapon' }, h('span', { class: 'row-main' }, h('button', { type: 'button', class: 'linkish row-title', onclick: function () { if (u.weapon) edit(u.weapon); else edit(null, u.name); } }, u.name),
@@ -227,7 +227,8 @@
           body.appendChild(unk);
         }
         var cols = h('div', { class: 'cols-2' }), held = new Set(inPlay.map(function (w) { return L.norm(w.name); }));
-        [['facile', t('Easy'), t('1 point')], ['difficile', t('Hard'), t('3 points')]].forEach(function (d) {
+        var sc = L.scoring(st);
+        [['facile', t('Easy'), K.n(sc.easy, '{n} point', '{n} points')], ['difficile', t('Hard'), K.n(sc.hard, '{n} point', '{n} points')]].forEach(function (d) {
           var items = st.weapons.filter(function (w) { return w.difficulty === d[0] && (!nq || L.norm(w.name).indexOf(nq) >= 0) && (!stock || !!w.owned === (stock === 'owned')); }).sort(byName);
           cols.appendChild(h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, d[1], h('small', { class: 'muted' }, ' ' + items.length)), h('span', { class: 'tag tag-' + d[0] }, d[2])),
             items.length ? h('div', { class: 'weapon-cloud' }, items.map(function (w) {
@@ -302,8 +303,12 @@
         });
         if (hunters.size) items.appendChild(h('p', { class: 'muted small' }, t('In red: players hunting a member of the alliance.')));
         cols.appendChild(items);
+        var sc = L.scoring(store.state), range = function (a, b) { return a === b ? '+' + a : t('+{a} to +{b}', { a: a, b: b }); };
+        var rules = [[t('Easy weapon'), K.n(sc.easy, '{n} pt', '{n} pts')], [t('Hard weapon'), K.n(sc.hard, '{n} pt', '{n} pts')],
+          [t('Video'), range(sc.video_min, sc.video_max)], [t('Kill witnessed by the organiser'), range(sc.witness_min, sc.witness_max)],
+          [t('First blood'), '+' + sc.first_blood], [t('Multi-kill'), t('+{n} per teammate', { n: sc.teammate })]];
         cols.appendChild(h('section', { class: 'panel' }, h('h2', {}, t('Kill scoring')),
-          h('table', { class: 'table' }, h('tbody', {}, (s.point_rules || []).map(function (r) { return h('tr', {}, h('th', { scope: 'row' }, t(r.label)), h('td', {}, t(r.points))); }))),
+          h('table', { class: 'table' }, h('tbody', {}, rules.map(function (r) { return h('tr', {}, h('th', { scope: 'row' }, r[0]), h('td', {}, r[1])); }))),
           h('p', { class: 'muted small' }, t('Video and witnessed bonuses do not stack. Edit the scoring and the shop in Settings.'))));
       }
       refresh();

@@ -421,6 +421,23 @@ t('mystery players: candidates from the clues and the chain, merge into the real
   s.links = [link('r0', 'm', 'a')];
   assert.deepEqual(L.mysteryMerge(s, m, s.players[1]).links.map(x => x.patch), [{ hunter_id: 'b', target_id: 'a' }]);
 });
+t('scoring from Settings: points of a kill, bonus choices, a new scoring recomputes the kills', () => {
+  const sc = L.scoring({ settings: { scoring: { easy: '2', hard: 5, video_min: 1, video_max: 2, witness_min: 2, witness_max: 3, first_blood: 4, teammate: 'x' } } });
+  assert.deepEqual([sc.easy, sc.hard, sc.teammate], [2, 5, 1], 'numbers, and the default when it is not one');
+  assert.equal(L.scoring({}).hard, 3, 'no scoring set: the usual one');
+  assert.equal(L.killPoints({ difficulty: 'difficile', bonus: 2, firstBlood: true, mates: 2 }, sc), 5 + 2 + 4 + 2);
+  assert.deepEqual(L.bonusChoices(sc).map(b => b.value + b.kind), ['1video', '2both', '3witness']);
+  const s = base();
+  s.kills = [{ id: 'k1', killer_id: 'a', victim_id: 'b', weapon_level: 'difficile', bonus: 1, first_blood: false, mates: 0, points: 4 },
+    { id: 'k2', killer_id: 'a', victim_id: 'c', weapon_level: 'inconnue', bonus: 0, first_blood: true, mates: 0, points: 6 },
+    { id: 'k3', killer_id: 'b', victim_id: 'd', points: 3 }];   // recorded before: its parts are unknown
+  const r = L.rescoreKills(s, sc);
+  assert.deepEqual(r.changes.map(c => [c.kill.id, c.patch.points, c.delta]), [['k1', 6, 2], ['k2', 6, 0]].filter(x => x[2]), 'hard 5 + video 1; unknown counts the easy points');
+  assert.equal(r.kept, 1);
+  s.settings = { scoring: sc };
+  assert.deepEqual(L.pointsRange(s, { id: 'a', points: 10 }), { min: 10, max: 13 }, 'the gap follows the scoring (5 - 2)');
+  assert.deepEqual(L.settleWeapon(Object.assign(s, { kills: [Object.assign({ weapon: 'Lacet' }, s.kills[1])] }), 'lacet', 'difficile').map(x => [x.patch.points, x.delta]), [[9, 3]], 'settled with its parts: hard 5 + first blood 4');
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');

@@ -117,7 +117,13 @@ button, input, select, textarea { font: inherit; color: var(--ink); }
 .scroll-hint.more-right::after { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6 3l5 5-5 5' fill='none' stroke='%238f8f96' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right .6rem center / .75rem, linear-gradient(to right, transparent, var(--surface) 55%); }   /* the chevron above the fade */
 .chips-wrap { flex-wrap: wrap; overflow: visible; } .chips-wrap .chip { min-height: 32px; padding: .3rem .75rem; font-size: .84rem; }
 .chip-toggle { border-style: dashed; } .chip-toggle.is-on { border-style: solid; }
-.filter-selects { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .5rem; } .filter-selects select { width: 100%; }
+.filter-selects { display: flex; flex-wrap: wrap; gap: .4rem; } .filter-selects select { width: 100%; }
+/* a menu shown as a chip (ui.chipSelect): the invisible native select on top opens the phone's picker */
+.chip.chip-select { position: relative; display: inline-flex; align-items: center; gap: .35rem; min-height: 32px; padding: .3rem .65rem .3rem .8rem; font-size: .84rem; max-width: 100%; }
+.chip-select-text { overflow: hidden; text-overflow: ellipsis; }
+.chip-select-chevron { width: .8rem; height: .8rem; flex: none; opacity: .8; }
+.chip-select > .chip-select-native { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; appearance: none; border: 0; padding: 0; margin: 0; font-size: 16px; }
+.chip-select:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
 .filter-foot { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 1.4rem; }
 .toolbar-search > input[type="search"] { flex: 1 1 14rem; } .toolbar-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 /* folding panels (map lists) */
@@ -573,6 +579,9 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .mystery-box { border: 1px dashed color-mix(in srgb, #b45ad8 55%, transparent); border-radius: var(--radius); padding: .8rem .9rem; margin: .8rem 0; display: grid; gap: .45rem; }
 .mystery-box > p { margin: 0; }
 .mystery-cand { gap: .6rem; } .mystery-cand > .row-main { text-align: left; text-decoration: none; display: grid; }
+/* scoring in Settings: "from +1 to +3" */
+.range-pair { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; color: var(--muted); } .range-pair input { width: 5.5rem; }
+.kill-parts { display: block; margin-top: .15rem; }
 /* intel feed */
 .intel { display: grid; gap: .55rem; margin-top: .9rem; }
 .intel-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }

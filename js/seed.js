@@ -165,12 +165,6 @@
       }
   ];
 
-  var POINT_RULES = [
-    { label: 'Easy weapon', points: '1' }, { label: 'Hard weapon', points: '3' },
-    { label: 'Easy weapon + video', points: '2 to 4' }, { label: 'Hard weapon + video', points: '4 to 6' },
-    { label: 'Easy weapon + kill witnessed by the organiser', points: '3 to 5' }, { label: 'Hard weapon + kill witnessed by the organiser', points: '5 to 7' },
-    { label: 'First blood', points: '+5' }, { label: 'Multi-kill', points: '+1 per teammate' }
-  ];
 
   K.seed = {
     weapons: WEAPONS,
@@ -183,8 +177,7 @@
       map_center: { lat: 48.8566, lng: 2.3522 },
       geocoder_url: '',
       links: [],
-      shop: SHOP,
-      point_rules: POINT_RULES
+      shop: SHOP
     }
   };
 
@@ -239,6 +232,9 @@
     [[40, 41], [41, 24]].forEach(function (e) { L(r1, e[0], e[1]); });
     X(r1, 7, 20, 'Écocup', 2, 3); X(r1, 40, 41, 'Tronçonneuse', 5, 2); X(r1, null, 19, '', 0, 1);
 
+    // what each kill is made of (so its points follow the scoring of Settings)
+    var PARTS = { Banane: ['facile', 0, true], Arrosoir: ['difficile', 0], Lacet: ['facile', 0], Chaise: ['difficile', 1], Briquet: ['inconnue', 0], Cravate: ['facile', 0], 'Écocup': ['facile', 1], 'Tronçonneuse': ['difficile', 2] };
+    kills.forEach(function (k) { var x = PARTS[k.weapon]; if (x && k.killer_id) Object.assign(k, { weapon_level: x[0], bonus: x[1], first_blood: !!x[2], mates: 0 }); });
     // nobody knows yet whether the lighter is easy or hard: that kill counts 1 point for now (1 or 3)
     kills.filter(function (k) { return k.weapon === 'Briquet'; })[0].weapon_level = 'inconnue';
     var now = Date.now();
