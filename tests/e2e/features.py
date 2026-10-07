@@ -82,6 +82,30 @@ with sync_playwright() as p:
     plan = pg.locator('section.panel', has=pg.locator('h2', has_text='Préshot'))
     expect(plan).to_contain_text(ids['targetName']); expect(plan).to_contain_text('dans le frigo'); expect(plan).to_contain_text('À trouver')
 
+    step('weapon of unknown difficulty: the kill counts a range of points until someone says easy or hard')
+    k = pg.evaluate("(() => { const k = K.store.state.kills.find(x => x.weapon === 'Briquet'), p = K.store.player(k.killer_id); return { killer: p.id, name: p.name, points: p.points, kill: k.id }; })()")
+    unk = pg.locator('section.panel', has=pg.locator('h2', has_text='Difficulté inconnue'))
+    expect(unk.locator('.unknown-weapon', has_text='Briquet')).to_contain_text('1 kill en attente')
+    pg.evaluate("id => K.actions.openPlayer(id)", k['killer'])
+    expect(pg.locator('dialog[open] .tag-points')).to_have_text(f"{k['points']} à {k['points'] + 2} pts"); pg.keyboard.press('Escape')
+    unk.locator('.unknown-weapon', has_text='Briquet').get_by_role('button', name='Difficile').click(); pg.wait_for_timeout(200)
+    after = pg.evaluate("a => [K.store.player(a.killer).points, K.store.state.kills.find(x => x.id === a.kill).weapon_level, K.store.state.kills.find(x => x.id === a.kill).points, K.store.state.weapons.find(w => w.name === 'Briquet').difficulty]", k)
+    assert after == [k['points'] + 2, 'difficile', 3, 'difficile'], after
+    expect(pg.locator('.toast').last).to_contain_text('2 points de plus')
+    # a kill recorded with a new weapon and "don't know": the weapon joins the catalogue as unknown, the killer gets a range
+    v = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st), r = K.logic.currentRound(st); const p = st.players.find(x => !dead.has(x.id) && K.logic.resolveHunter(st, r.id, x.id).id); return { victim: p.id, killer: K.logic.resolveHunter(st, r.id, p.id).id }; })()")
+    before = pg.evaluate("id => K.store.player(id).points", v['killer'])
+    pg.evaluate("id => K.actions.killDialog(id)", v['victim'])
+    pg.locator('dialog[open] input[list="kill-weapons"]').fill('Parapluie')
+    pg.locator('dialog[open] select:has(option[value="inconnue"])').select_option('inconnue')
+    expect(pg.locator('dialog[open]')).to_contain_text('1 ou 3')
+    pg.get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
+    got = pg.evaluate("a => [K.store.player(a.killer).points, (K.store.state.weapons.find(w => w.name === 'Parapluie') || {}).difficulty, K.store.state.kills.find(x => x.victim_id === a.victim).weapon_level]", v)
+    assert got == [before + 1, 'inconnue', 'inconnue'], got
+    expect(unk.locator('.unknown-weapon', has_text='Parapluie')).to_contain_text('1 kill en attente')
+    pg.evaluate("id => { K.actions.revive(id); }", v["victim"]); pg.get_by_role('button', name='Annuler le kill').click(); pg.wait_for_timeout(200)
+    assert pg.evaluate("id => K.store.player(id).points", v['killer']) == before, 'undo takes back the sure point only'
+
     step('photo: cropped before saving (drag, zoom), square; "Crop" again from the photo viewer; GIFs untouched')
     import struct, zlib
     def png(w, hgt):   # left half red, right half blue
@@ -111,6 +135,58 @@ with sync_playwright() as p:
     pg.locator('dialog[open] input[type=file]').first.set_input_files({ 'name': 'a.gif', 'mimeType': 'image/gif', 'buffer': gif })
     pg.wait_for_function("id => (K.store.player(id).photo_path || '').startsWith('data:image/gif')", arg=pid2)   # no cropper, still a GIF
     pg.keyboard.press('Escape')
+
+    step('share a sheet: you choose what goes in the text')
+    sp = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st), r = K.logic.currentRound(st); const p = st.players.find(x => !dead.has(x.id) && x.weapons && K.logic.resolveTarget(st, r.id, x.id).id); return { id: p.id, name: p.name, target: K.store.player(K.logic.resolveTarget(st, r.id, p.id).id).name }; })()")
+    pg.evaluate("id => K.actions.openPlayer(id)", sp['id'])
+    pg.locator('dialog[open]').get_by_role('button', name='Partager').click()
+    share = pg.locator('dialog[open]').last
+    expect(share.locator('h2')).to_contain_text('Partager ' + sp['name'])
+    txt = lambda: share.locator('textarea').input_value()
+    assert txt().startswith(sp['name']) and ('Chasse ' + sp['target']) in txt() and 'Armes : ' in txt(), txt()
+    share.locator('label.check', has_text='Killer et cible').locator('input').uncheck()
+    assert ('Chasse ' + sp['target']) not in txt(), 'unticked: left out'
+    pg.keyboard.press('Escape'); pg.keyboard.press('Escape')
+
+    step('mystery player: their killer is "a 2A in TD 2"; the candidates; once known, merged into the real sheet')
+    my = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), r = K.logic.currentRound(st);
+      const free = st.players.filter(x => !dead.has(x.id) && !x.is_ally);
+      const victim = free.find(x => !K.logic.resolveHunter(st, r.id, x.id).id);
+      const real = free.find(x => x.id !== victim.id && x.year && x.td && !K.logic.resolveTarget(st, r.id, x.id).id);
+      return { victim: victim.id, real: real.id, realName: real.name, year: real.year, td: real.td.split(',')[0] }; }""")
+    pg.evaluate("id => K.actions.openPlayer(id)", my['victim'])
+    pg.locator('dialog[open] select[aria-label="Killer"]').select_option('__mystery')
+    dlg = pg.locator('dialog[open]').last
+    expect(dlg.locator('h2')).to_contain_text('Killer inconnu de')
+    dlg.locator('select').first.select_option(my['year']); dlg.get_by_placeholder('TD1').fill(my['td'])
+    expect(dlg).to_contain_text('correspond')
+    dlg.get_by_role('button', name='Ajouter à la chaîne').click(); pg.wait_for_timeout(300)
+    mid = pg.evaluate("v => { const st = K.store.state, r = K.logic.currentRound(st), h = K.logic.resolveHunter(st, r.id, v).id; return K.store.player(h).is_mystery ? h : null; }", my['victim'])
+    assert mid, 'the mystery sheet hunts the victim'
+    assert pg.evaluate("id => !K.logic.stats(K.store.state).incomplete.some(p => p.id === id) && !K.logic.generalRanking(K.store.state).some(r => r.id === id)", mid)
+    pg.keyboard.press('Escape'); pg.evaluate("id => K.actions.openPlayer(id)", mid)
+    box = pg.locator('dialog[open] .mystery-box')
+    expect(box).to_contain_text('Qui est-ce ?'); expect(box).to_contain_text(my['realName'])
+    box.locator('.mystery-cand', has_text=my['realName']).get_by_role('button', name='C\'est lui/elle').click()
+    pg.locator('dialog[open]').get_by_role('button', name='Fusionner').click(); pg.wait_for_timeout(300)
+    assert pg.evaluate("id => !K.store.player(id)", mid), 'the mystery sheet is gone'
+    assert pg.evaluate("v => { const st = K.store.state, r = K.logic.currentRound(st); return K.logic.resolveHunter(st, r.id, v).id; }", my['victim']) == my['real'], 'the link moved to the real sheet'
+    expect(pg.locator('dialog[open] h2').last).to_have_text(my['realName'])
+    pg.keyboard.press('Escape'); pg.keyboard.press('Escape')
+
+    step('intel feed: an info with a place on the map, on the sheet and on the dashboard')
+    pid3 = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st); return st.players.find(x => !dead.has(x.id) && !K.logic.intelOf(st, x.id).length).id; })()")
+    pg.evaluate("id => K.actions.openPlayer(id)", pid3)
+    pg.locator('dialog[open]').get_by_role('button', name='Ajouter une info').click()
+    dlg = pg.locator('dialog[open]').last
+    dlg.locator('textarea').fill('Vu au self avec un parapluie')
+    dlg.locator('select').first.select_option(label='Canteen')
+    dlg.get_by_role('button', name='Ajouter l\'info').click(); pg.wait_for_timeout(300)
+    x = pg.evaluate("id => K.logic.intelOf(K.store.state, id)[0]", pid3)
+    assert x['text'] == 'Vu au self avec un parapluie' and x['place'] == 'Canteen' and x['lat'] == 47.0809, x
+    expect(pg.locator('dialog[open] .intel')).to_contain_text('Vu au self avec un parapluie'); expect(pg.locator('dialog[open] .intel')).to_contain_text('Sur la carte')
+    pg.keyboard.press('Escape')
+    pg.goto(URL + '#/dashboard'); expect(pg.locator('.intel-panel')).to_contain_text('Vu au self avec un parapluie')
 
     step('shared flat: created from the map, its flatmates follow its address; it stays alive while one of them is')
     ctx.route('**/leaflet.min.*', lambda r: r.abort())                                # no map tiles needed: the lists work without

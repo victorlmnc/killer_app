@@ -380,6 +380,47 @@ t('student residences: kind, apartments, detected residences, backup', () => {
   const odd = L.makeBackup(s); odd.homes[0].kind = 'castle';
   assert.equal(L.readBackup(JSON.stringify(odd)).data.homes[0].kind, 'coloc', 'an unknown kind falls back to a shared flat');
 });
+t('weapons of unknown difficulty: points range, settling the kills', () => {
+  const s = base();
+  s.players[0].points = 4;
+  s.kills = [{ id: 'k1', killer_id: 'a', victim_id: 'b', weapon: 'Briquet', weapon_level: 'inconnue', points: 1 },
+    { id: 'k2', killer_id: 'a', victim_id: 'c', weapon: 'briquet ', weapon_level: 'inconnue', points: 6 },
+    { id: 'k3', killer_id: 'a', victim_id: 'd', weapon: 'Lacet', weapon_level: 'inconnue', points: 1 },
+    { id: 'k4', killer_id: null, victim_id: 'e', weapon: 'Briquet', weapon_level: 'inconnue', points: 0 }];
+  assert.equal(L.LEVEL_GAP, 2);
+  assert.equal(L.killPoints({ difficulty: 'inconnue', bonus: 1 }), 2, 'unknown: the easy points for now');
+  assert.deepEqual(L.pointsRange(s, s.players[0]), { min: 4, max: 10 }, 'three kills of unknown difficulty: up to 2 more each');
+  const hard = L.settleWeapon(s, 'BRIQUET', 'difficile');
+  assert.deepEqual(hard.map(x => [x.kill.id, x.patch.points, x.delta]), [['k1', 3, 2], ['k2', 8, 2]], 'same weapon whatever the spelling; a kill without killer is not pending');
+  assert.equal(L.settleWeapon(s, 'Briquet', 'facile').every(x => x.delta === 0 && x.patch.weapon_level === 'facile'), true);
+  assert.deepEqual(L.settleWeapon(s, 'Briquet', 'inconnue'), [], 'still unknown: nothing to settle');
+  const b = L.readBackup(JSON.stringify(L.makeBackup(s)), { uuid: () => '00000000-0000-4000-8000-' + String(Math.random()).slice(2, 14).padEnd(12, '0') });
+  assert.equal(b.data.kills.find(k => k.points === 6).weapon_level, 'inconnue', 'kept in a backup');
+});
+t('mystery players: candidates from the clues and the chain, merge into the real sheet', () => {
+  const s = base();
+  Object.assign(s.players[1], { year: '2A', dept: 'MRI', td: 'TD 2, TD 1 MRI' });   // b
+  Object.assign(s.players[2], { year: '2A', dept: 'MRI', td: 'TD2' });              // c, but already hunts e
+  Object.assign(s.players[3], { year: '2A', dept: 'STI', td: 'TD2' });              // d: wrong department
+  Object.assign(s.players[5], { year: '2A', dept: 'MRI', td: 'TD3' });              // f: wrong group
+  const m = { id: 'm', name: 'Killer inconnu de a', is_mystery: true, year: '2A', dept: 'mri', td: 'td2', notes: 'heard at the BDE', weapons: 'Lacet' };
+  s.players.push(m);
+  s.links = [link('r0', 'm', 'a'), link('r0', 'c', 'e')];
+  assert.deepEqual(L.mysteryCandidates(s, m, 'r0').map(p => p.id), ['b'], '"td2" matches "TD 2, TD 1 MRI"; c already hunts someone else');
+  assert.deepEqual(L.mysteryCandidates(s, m, null).map(p => p.id), ['b', 'c'], 'without the chain: the clues only');
+  assert.equal(L.stats(s).incomplete.some(p => p.id === 'm'), false, 'not a real player in the stats');
+  assert.equal(L.generalRanking(s).some(r => r.id === 'm'), false);
+  s.links.push(link('r0', 'b', 'a'));   // already known separately: the moved link would repeat it
+  s.kills = [{ id: 'k', killer_id: 'm', victim_id: 'f' }];
+  s.bonuses = [{ id: 'bo', player_id: 'm' }];
+  const plan = L.mysteryMerge(s, m, s.players[1]);
+  assert.deepEqual(plan.links, []); assert.equal(plan.drop.length, 1, 'the duplicate link goes');
+  assert.deepEqual(plan.kills, [{ id: 'k', patch: { killer_id: 'b' } }]);
+  assert.deepEqual(plan.bonuses, [{ id: 'bo', patch: { player_id: 'b' } }]);
+  assert.deepEqual(plan.player, { weapons: 'Lacet', notes: 'heard at the BDE' }, 'the clues fill only what is empty');
+  s.links = [link('r0', 'm', 'a')];
+  assert.deepEqual(L.mysteryMerge(s, m, s.players[1]).links.map(x => x.patch), [{ hunter_id: 'b', target_id: 'a' }]);
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');

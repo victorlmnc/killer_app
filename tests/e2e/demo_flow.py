@@ -159,7 +159,7 @@ with sync_playwright() as p:
     pg.get_by_role('button', name='Vider le journal').click(); pg.locator('dialog[open]').get_by_role('button', name='Vider le journal').click(); pg.wait_for_timeout(150)
     assert pg.evaluate('K.store.state.events.length') == 0
     pg.get_by_role('button', name='Effacer la partie').click(); pg.locator('dialog').get_by_role('button', name='Effacer la partie').click(); pg.wait_for_timeout(200)
-    s = state(); assert not s['players'] and len(s['weapons']) == 120 and len(s['spots']) == 2
+    s = state(); assert not s['players'] and len(s['weapons']) == 121 and len(s['spots']) == 2
     assert json.loads(pg.evaluate('localStorage.getItem("killer.local.v1")'))['players'] == []   # persisted (reloads on file:// are not reliable in headless Chromium)
     ctx.close()
 

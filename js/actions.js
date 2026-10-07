@@ -158,7 +158,7 @@
         var adminReasonField = ui.field(t('Reason for administrative elimination'), adminReason);
         var weapon = h('input', { type: 'text', list: 'kill-weapons', placeholder: t('Weapon used'), oninput: onWeapon });
         var options = h('datalist', { id: 'kill-weapons' });
-        var diff = ui.select([{ value: 'facile', label: t('Easy (1 pt)') }, { value: 'difficile', label: t('Hard (3 pts)') }], 'facile', { onchange: total });
+        var diff = ui.select([{ value: 'facile', label: t('Easy (1 pt)') }, { value: 'difficile', label: t('Hard (3 pts)') }, { value: 'inconnue', label: t("Don't know (1 or 3 pts)") }], 'facile', { onchange: total });
         var bonus = ui.select([{ value: '0', label: t('None') }, { value: '1', label: t('Video +1') }, { value: '2', label: t('Video or witnessed +2') }, { value: '3', label: t('Video or witnessed +3') }, { value: '4', label: t('Witnessed +4') }], '0', { onchange: total });
         var fb = h('input', { type: 'checkbox', checked: false, onchange: total });
         var mates = h('input', { type: 'number', min: '0', max: '20', value: '0', inputmode: 'numeric', oninput: total });
@@ -186,7 +186,10 @@
             .then(function (v) { if (v !== undefined) { killerId = v; refreshKiller(); } });
         }
         function onWeapon() { var d = catalog.get(L.norm(weapon.value)); if (d) diff.value = d; total(); }
-        function total() { sum.textContent = String(L.killPoints({ difficulty: diff.value, bonus: bonus.value, firstBlood: fb.checked, mates: mates.value })); }
+        function total() {
+          var n = L.killPoints({ difficulty: diff.value, bonus: bonus.value, firstBlood: fb.checked, mates: mates.value });
+          sum.textContent = diff.value === 'inconnue' ? t('{a} or {b}', { a: n, b: n + L.LEVEL_GAP }) + ' (' + t('settled once the difficulty is known') + ')' : String(n);
+        }
         body.appendChild(killerField);
         if (adminAllowed) body.appendChild(h('label', { class: 'check' }, adminKill, t('Administrative elimination')));
         body.appendChild(adminReasonField);
@@ -199,7 +202,7 @@
             var reason = adminAllowed && adminKill.checked ? adminReason.value : null;
             if (reason === 'other' && !note.value.trim()) { note.focus(); return ui.toast(t('Specify the reason in the note.'), 'error'); }
             api.close();
-            act.recordKill({ victimId: victimId, killerId: reason ? null : killerId, adminReason: reason, weapon: reason ? '' : weapon.value.trim(), note: note.value.trim(), when: when.value ? parisInput(when.value).toISOString() : null,
+            act.recordKill({ victimId: victimId, killerId: reason ? null : killerId, adminReason: reason, weapon: reason ? '' : weapon.value.trim(), level: diff.value, note: note.value.trim(), when: when.value ? parisInput(when.value).toISOString() : null,
               points: !reason && killerId ? L.killPoints({ difficulty: diff.value, bonus: bonus.value, firstBlood: fb.checked, mates: mates.value }) : 0 });
           } }, t('Record the kill'))));
         refreshKiller(); total();
@@ -215,6 +218,9 @@
     var killerId = adminReason ? null : k.killerId;
     var weapon = adminReason ? '' : k.weapon || '';
     var points = adminReason ? 0 : k.points || 0;
+    var level = !adminReason && killerId && ['facile', 'difficile', 'inconnue'].indexOf(k.level) >= 0 ? k.level : null;
+    var cat = weapon && store.state.weapons.find(function (x) { return L.norm(x.name) === L.norm(weapon); });
+    if (level === 'inconnue' && cat && cat.difficulty !== 'inconnue') { level = cat.difficulty; if (level === 'difficile') points += L.LEVEL_GAP; }   // the catalogue knows it
     return ensureRound().then(function (roundId) {
       var pre = Promise.resolve(true);
       // A kill proves the killer was hunting the victim: complete the chain if we did not know.
@@ -225,7 +231,7 @@
         var victim = store.player(k.victimId), killer = killerId && store.player(killerId);
         var killId = store.uuid();
         var inherits = !!(killer && victim.weapons);   // the victim's contract always passes to the killer; theirs is kept on the kill for an undo
-        var jobs = [store.insert('kills', { id: killId, round_id: roundId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, weapon: weapon, points: points, note: k.note || '', killer_weapons: inherits ? killer.weapons || '' : null, happened_at: k.when || new Date().toISOString() })];
+        var jobs = [store.insert('kills', { id: killId, round_id: roundId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, weapon: weapon, weapon_level: level, points: points, note: k.note || '', killer_weapons: inherits ? killer.weapons || '' : null, happened_at: k.when || new Date().toISOString() })];
         if (killer) {
           var patch = { points: (killer.points || 0) + points };
           if (inherits) patch.weapons = victim.weapons;
@@ -233,7 +239,10 @@
         }
         var text = adminReason ? t('Administrative elimination of {name}: {reason}', { name: victim.name, reason: t(adminReason === 'cheating' ? 'Cheating' : 'Other') })
           : killer ? t('{a} eliminated {b}', { a: killer.name, b: victim.name }) + (weapon ? ' (' + weapon + ')' : '') : t('{name} is dead', { name: victim.name });
-        store.log(text, { type: 'kill', kill_id: killId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, killer: killer ? killer.name : '', victim: victim.name, weapon: weapon, points: points, note: k.note || '' });
+        store.log(text, { type: 'kill', kill_id: killId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, killer: killer ? killer.name : '', victim: victim.name, weapon: weapon, weapon_level: level, points: points, note: k.note || '' });
+        // the weapon goes to the catalogue; a difficulty learnt from this kill settles the other kills made with it
+        if (weapon && level && !cat) jobs.push(store.insert('weapons', { name: weapon, difficulty: level }));
+        else if (cat && cat.difficulty === 'inconnue' && level && level !== 'inconnue') jobs.push(Promise.all(jobs).then(function () { return act.setWeaponDifficulty(weapon, level); }));
         return Promise.all(jobs);
       }).then(function () {
         var next = killerId ? L.resolveTarget(store.state, roundId, killerId) : null;
@@ -387,7 +396,7 @@
       title: t('Record a purchase: {name}', { name: item.name }),
       render: function (body, api) {
         var who = h('button', { type: 'button', class: 'btn btn-block' });
-        function drawWho() { var p = chosen && store.player(chosen); ui.clear(who); if (p) { who.appendChild(ui.avatar(p, 'sm')); who.appendChild(h('span', {}, p.name + ' (' + K.n(p.points || 0, '{n} pt', '{n} pts') + ')')); } else who.appendChild(h('span', {}, t('Choose the player'))); }
+        function drawWho() { var p = chosen && store.player(chosen); ui.clear(who); if (p) { who.appendChild(ui.avatar(p, 'sm')); who.appendChild(h('span', {}, p.name + ' (' + ui.pointsText(p) + ')')); } else who.appendChild(h('span', {}, t('Choose the player'))); }
         who.addEventListener('click', function () {
           ui.pickPlayer({ title: t('Who bought "{name}"?', { name: item.name }), filter: function (p) { return !act.isDead(p.id); }, prefer: function (p) { return !p.is_ally; }, otherLabel: t('Alliance') })
             .then(function (v) { if (v) { chosen = v; drawWho(); } });
@@ -449,7 +458,37 @@
   };
   act.killSummary = function (k) {
     return [k.admin_reason ? t('Administrative elimination: {reason}', { reason: t(k.admin_reason === 'cheating' ? 'Cheating' : 'Other') }) : null,
-      k.weapon ? t('Weapon: {w}', { w: k.weapon }) : null, K.n(k.points || 0, '{n} pt', '{n} pts'), k.note ? t('Note: {n}', { n: k.note }) : t('No note'), ui.ago(k.happened_at)].filter(Boolean).join('. ') + '.';
+      k.weapon ? t('Weapon: {w}', { w: k.weapon }) : null, killPointsText(k), k.note ? t('Note: {n}', { n: k.note }) : t('No note'), ui.ago(k.happened_at)].filter(Boolean).join('. ') + '.';
+  };
+  function killPointsText(k) {
+    return k.weapon_level === 'inconnue' && k.killer_id ? t('{a} or {b} pts (difficulty unknown)', { a: k.points || 0, b: (k.points || 0) + L.LEVEL_GAP }) : K.n(k.points || 0, '{n} pt', '{n} pts');
+  }
+  /* --------------------------------------------- weapons of unknown difficulty */
+  /* The kills made with a weapon while its difficulty was unknown get their points: the hard ones add LEVEL_GAP to their killer. */
+  function applySettle(list, what) {
+    var jobs = [], gain = new Map();
+    list.forEach(function (s) { jobs.push(store.update('kills', s.kill.id, s.patch)); if (s.delta) gain.set(s.killerId, (gain.get(s.killerId) || 0) + s.delta); });
+    gain.forEach(function (d, id) { var p = store.player(id); if (p) jobs.push(store.update('players', id, { points: (p.points || 0) + d })); });
+    if (list.length) {
+      store.log(t('{what}: {n} kills settled', { what: what, n: list.length }), { type: 'settle', kills: list.map(function (s) { return s.kill.id; }) });
+      gain.forEach(function (d, id) { ui.toast(t('{name} gets {n} more points.', { name: name(id), n: d })); });
+    }
+    return Promise.all(jobs).then(function () { return list.length; });
+  }
+  /* The difficulty of a weapon becomes known (or changes): catalogue, then the kills made with it while it was unknown. */
+  act.setWeaponDifficulty = function (weapon, difficulty) {
+    var key = L.norm(weapon), cat = store.state.weapons.find(function (x) { return L.norm(x.name) === key; });
+    var first = cat ? (cat.difficulty !== difficulty ? store.update('weapons', cat.id, { difficulty: difficulty }) : Promise.resolve()) : store.insert('weapons', { name: weapon, difficulty: difficulty });
+    return first.then(function () { return act.settleWeapon(weapon, difficulty); });
+  };
+  act.settleWeapon = function (weapon, difficulty) {
+    var label = difficulty === 'difficile' ? t('hard') : t('easy');
+    return applySettle(L.settleWeapon(store.state, weapon, difficulty), t('{w} is {level}', { w: weapon, level: label }));
+  };
+  /* A kill without a weapon name: its own difficulty only */
+  act.settleKill = function (kill, difficulty) {
+    if (kill.weapon) return act.setWeaponDifficulty(kill.weapon, difficulty);
+    return applySettle(L.settleKills([kill], difficulty), t('Kill of {name}', { name: name(kill.victim_id) }));
   };
   act.killDetails = function (killId) {
     var k = store.state.kills.find(function (x) { return x.id === killId; });
@@ -465,7 +504,13 @@
           h('div', {}, h('dt', {}, t('When')), h('dd', {}, ui.when(k.happened_at))),
           h('div', {}, h('dt', {}, t('Round')), h('dd', {}, round ? round.name : t('Unknown'))),
           k.admin_reason ? h('div', {}, h('dt', {}, t('Reason')), h('dd', {}, t(k.admin_reason === 'cheating' ? 'Cheating' : 'Other'))) : null,
-          h('div', {}, h('dt', {}, t('Points')), h('dd', {}, String(k.points || 0)))));
+          h('div', {}, h('dt', {}, t('Points')), h('dd', {}, killPointsText(k)))));
+        if (k.weapon_level === 'inconnue' && k.killer_id && store.canEdit()) {
+          body.appendChild(h('div', { class: 'settle' }, h('p', { class: 'muted small' }, k.weapon ? t('Once you know the difficulty of {w}, every kill made with it gets its points.', { w: k.weapon }) : t('Once you know the difficulty of the weapon, the killer gets their points.')),
+            h('div', { class: 'actions actions-start' }, [['facile', t('It was easy')], ['difficile', t('It was hard')]].map(function (o) {
+              return h('button', { type: 'button', class: 'btn', onclick: function () { api.close(); act.settleKill(k, o[0]); } }, o[1]);
+            }))));
+        }
         if (store.canEdit()) {
           body.appendChild(h('div', { class: 'stack' }, ui.field(t('Weapon'), weapon), ui.field(t('Note'), note)));
           body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Close')),
@@ -537,7 +582,7 @@
   /* ------------------------------------------------------- player sheet */
   act.openPlayer = function (playerId, ctx) {
     ctx = ctx || {};
-    var off = null;
+    var off = null, intelAll = false;
     var dlg = ui.dialog({ title: '', onClose: function () { if (off) off(); }, render: function (body, api) { draw(body, api); } });
     off = store.on(function () { if (dlg.el.open) draw(dlg.body, dlg); });
 
@@ -562,9 +607,11 @@
           if (other && x.id === other.id) return true;
           return dir === 'target' ? !maps.hunterOf.has(x.id) : !L.resolveTarget(st, roundId, x.id, maps, deadNow).id;
         }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });
-        var select = ui.select([{ value: '', label: dir === 'target' ? t('Unknown target') : t('Unknown killer') }].concat(free.map(function (x) { return { value: x.id, label: x.name }; })), other ? other.id : '', {
+        var mysteryOption = edit && isCurrent && !other ? [{ value: '__mystery', label: t('Someone unknown, with clues…') }] : [];
+        var select = ui.select([{ value: '', label: dir === 'target' ? t('Unknown target') : t('Unknown killer') }].concat(mysteryOption, free.map(function (x) { return { value: x.id, label: x.name + (x.is_mystery ? ' (' + t('mystery') + ')' : '') }; })), other ? other.id : '', {
           'aria-label': label, disabled: !isCurrent || !edit, onchange: function (e) {
             var id = e.target.value;
+            if (id === '__mystery') { e.target.value = ''; act.newMystery(p.id, dir, roundId); return; }
             if (!id) { var cut = dir === 'target' ? (other && maps.hunterOf.get(other.id)) : maps.hunterOf.get(p.id); if (cut) store.remove('links', cut.id); return; }
             if (dir === 'target') act.setTarget(p.id, id, { roundId: roundId, confidence: 'sur', noConfirm: true });
             else act.setTarget(id, p.id, { roundId: roundId, confidence: 'sur', noConfirm: true });
@@ -606,8 +653,10 @@
         h('div', { class: 'profile-meta' },
           h('div', { class: 'tags' }, ui.yearTag(p), p.tp ? h('span', { class: 'tag' }, p.tp) : null, p.lang_group ? h('span', { class: 'tag' }, p.lang_group) : null, p.option ? h('span', { class: 'tag' }, p.option) : null),
           h('div', { class: 'tags' }, h('span', { class: 'tag ' + (dead ? 'tag-dead' : 'tag-alive') }, dead ? t('Dead') : t('Alive')),
-            p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, ui.statusTag(p), h('span', { class: 'tag tag-points' }, K.n(p.points || 0, '{n} pt', '{n} pts'))))));
+            p.is_mystery ? h('span', { class: 'tag tag-mystery' }, t('Mystery player')) : null,
+            p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, ui.statusTag(p), h('span', { class: 'tag tag-points', title: L.pendingKills(store.state, p.id).length ? t('Kills with a weapon of unknown difficulty: settled once it is known.') : null }, ui.pointsText(p))))));
 
+      if (p.is_mystery) body.appendChild(mysteryBox(p, roundId, edit, api));
       var bonusTags = ui.bonusTags(p);
       if (bonusTags) body.appendChild(h('div', { class: 'sheet-bonuses' }, h('span', { class: 'relation-label' }, t('Bonuses')), bonusTags));
       if (dead && kill) {
@@ -634,16 +683,26 @@
       }
       if (p.notes) body.appendChild(h('p', { class: 'prose notes' }, p.notes));
 
+      /* intel feed: what was seen or heard, when, where, by whom */
+      var intel = L.intelOf(st, p.id), feed = h('section', { class: 'intel' }, h('div', { class: 'intel-head' }, h('span', { class: 'relation-label' }, t('Intel feed')),
+        edit ? h('button', { type: 'button', class: 'btn btn-sm', onclick: function () { act.intelDialog(p.id); } }, K.icon('plus', 'ic-sm'), t('Add an info')) : null));
+      if (!intel.length) feed.appendChild(h('p', { class: 'muted small' }, t('Nothing yet: note here what you see or hear about them, with the time and the place.')));
+      intel.slice(0, intelAll ? intel.length : 4).forEach(function (x) { feed.appendChild(intelItem(x, edit, function () { api.close(); })); });
+      if (intel.length > 4) feed.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { intelAll = !intelAll; draw(body, api); } }, intelAll ? t('Show less') : t('Show all ({n})', { n: intel.length })));
+      body.appendChild(feed);
+
       var mine = st.kills.filter(function (k) { return k.killer_id === p.id; });
       if (mine.length) body.appendChild(h('div', { class: 'victims' }, h('span', { class: 'muted' }, K.n(mine.length, '{n} kill', '{n} kills')),
         mine.map(function (k) { return h('button', { type: 'button', class: 'tag tag-victim', title: act.killSummary(k), onclick: function () { act.killDetails(k.id); } }, name(k.victim_id), k.note ? h('span', { class: 'has-note', 'aria-label': t('with a note') }, '✎') : null); })));
 
-      if (!edit) return;
       var A = h('div', { class: 'action-grid' });
       function add(label, fn, cls) { A.appendChild(h('button', { type: 'button', class: 'btn ' + (cls || ''), onclick: fn }, label)); }
-      if (!dead && isCurrent) add(t('Mark as dead'), function () { api.close(); act.killDialog(p.id); }, 'btn-danger');
-      if (dead && kill) { add(kill.killer_id ? t('Change killer') : t('Set killer'), function () { act.editKill(kill); }); add(t('Undo the kill'), function () { act.revive(p.id); }); }
-      add(t('Edit sheet'), function () { act.editPlayer(p.id); });
+      if (edit) {
+        if (!dead && isCurrent) add(t('Mark as dead'), function () { api.close(); act.killDialog(p.id); }, 'btn-danger');
+        if (dead && kill) { add(kill.killer_id ? t('Change killer') : t('Set killer'), function () { act.editKill(kill); }); add(t('Undo the kill'), function () { act.revive(p.id); }); }
+        add(t('Edit sheet'), function () { act.editPlayer(p.id); });
+      }
+      add([K.icon('share'), t('Share')], function () { act.shareSheet(p.id); });
       body.appendChild(A);
     }
   };
@@ -698,8 +757,8 @@
           names.forEach(function (w) {
             var key = L.norm(w), lv = levels[key]; if (!lv || done[key]) return; done[key] = true;
             var cat = store.state.weapons.find(function (x) { return L.norm(x.name) === key; });
-            if (cat && lv.value && lv.value !== cat.difficulty) store.update('weapons', cat.id, { difficulty: lv.value });
-            else if (!cat && lv.value) store.insert('weapons', { name: w, difficulty: lv.value });
+            if (cat && lv.value && lv.value !== cat.difficulty) act.setWeaponDifficulty(cat.name, lv.value);
+            else if (!cat) store.insert('weapons', { name: w, difficulty: lv.value || 'inconnue' });   // "don't know": in the catalogue all the same
           });
         }
         /* a shared flat or a residence to pick, following the housing type */
@@ -783,6 +842,177 @@
     });
   };
 
+  /* ------------------------------------------------------------ intel feed */
+  function intelItem(x, edit, leave) {
+    return h('div', { class: 'intel-item' }, h('p', { class: 'intel-text' }, x.text),
+      h('p', { class: 'muted small intel-meta' }, [x.place ? t('at {place}', { place: x.place }) : null, ui.ago(x.seen_at), x.author ? t('by {name}', { name: x.author }) : null].filter(Boolean).join(' · '),
+        L.hasCoords(x) ? [' · ', h('a', { class: 'linkish', href: '#/map?seen=' + x.id, onclick: leave }, t('On the map'))] : null,
+        edit ? [' · ', h('button', { type: 'button', class: 'linkish', onclick: function () {
+          ui.confirm({ title: t('Delete this info?'), text: x.text, action: t('Delete'), danger: true }).then(function (ok) { if (ok) store.remove('intel', x.id); });
+        } }, t('Delete'))] : null));
+  }
+  act.intelDialog = function (playerId) {
+    var p = store.player(playerId); if (!p || !store.canEdit()) return;
+    var spots = store.state.spots.filter(L.hasCoords).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });
+    ui.dialog({ title: t('Info on {name}', { name: p.name }), render: function (body, api) {
+      var text = h('textarea', { rows: '3', placeholder: t('e.g. seen at the library with a cushion, leaves the gym every Tuesday at 6 pm…') });
+      var where = ui.select([{ value: '', label: t('No place on the map') }, { value: 'here', label: t('Where I am now') }].concat(spots.map(function (s) { return { value: 'spot:' + s.id, label: s.name }; })), '');
+      var place = h('input', { type: 'text', placeholder: t('e.g. library, 2nd floor') });
+      var when = h('input', { type: 'datetime-local', value: localIso(new Date()) });
+      body.appendChild(h('div', { class: 'stack' }, ui.field(t('What you saw or heard'), text),
+        h('div', { class: 'grid-2' }, ui.field(t('Location'), place), ui.field(t('On the map'), where, t('A strategic spot, or your position (asks for location).'))),
+        h('div', { class: 'grid-2' }, ui.field(t('When'), when))));
+      body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
+        h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+          var row = { player_id: p.id, text: text.value.trim(), place: place.value.trim(), lat: null, lng: null, seen_at: when.value ? parisInput(when.value).toISOString() : new Date().toISOString(), author: store.displayName() || '' };
+          if (!row.text) { text.focus(); return ui.toast(t('Write what you saw or heard.'), 'error'); }
+          var spot = where.value.indexOf('spot:') === 0 && spots.find(function (s) { return 'spot:' + s.id === where.value; });
+          var pos = Promise.resolve(null);
+          if (spot) { row.lat = spot.lat; row.lng = spot.lng; if (!row.place) row.place = spot.name; }
+          else if (where.value === 'here') pos = new Promise(function (ok) {
+            if (!navigator.geolocation) return ok(null);
+            navigator.geolocation.getCurrentPosition(function (g) { ok({ lat: g.coords.latitude, lng: g.coords.longitude }); }, function () { ok(null); }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+          });
+          api.close();
+          pos.then(function (g) {
+            if (g) { row.lat = g.lat; row.lng = g.lng; } else if (where.value === 'here') ui.toast(t('Position unavailable: the info is saved without it.'), 'error');
+            return store.insert('intel', row);
+          }).then(function () { store.log(t('Info on {name}: {text}', { name: p.name, text: row.text })); ui.toast(t('Info added.')); });
+        } }, t('Add the info'))));
+    } });
+  };
+
+  /* --------------------------------------------------------- mystery players */
+  /* "Their killer is a 2A in MRI": a sheet with what we know, put in the chain at once. Once we know who it is,
+     it is merged into the real sheet (links, kills, bonuses, intel and clues follow). */
+  act.newMystery = function (playerId, dir, roundId) {
+    var p = store.player(playerId); if (!p || !store.canEdit()) return;
+    var st = store.state, s = st.settings, title = dir === 'hunter' ? t('Unknown killer of {name}', { name: p.name }) : t('Unknown target of {name}', { name: p.name });
+    ui.dialog({ title: title, render: function (body, api) {
+      var f = {
+        year: ui.select([{ value: '', label: t('Unknown') }].concat((s.years || []).map(function (y) { return y.name; })), '', { onchange: count }),
+        dept: ui.select([{ value: '', label: t('Unknown') }].concat(s.depts || []), '', { onchange: count }),
+        td: h('input', { type: 'text', placeholder: 'TD1', oninput: count }), tp: h('input', { type: 'text', placeholder: 'TP1', oninput: count }),
+        option: h('input', { type: 'text', oninput: count }), lang_group: h('input', { type: 'text', placeholder: 'G2', oninput: count }),
+        notes: h('textarea', { rows: '2', placeholder: t('Where it comes from, anything else we know…') })
+      };
+      var matches = h('p', { class: 'muted small', role: 'status' });
+      function clues() { var row = {}; L.MYSTERY_CLUES.forEach(function (k) { row[k] = f[k].value.trim(); }); return row; }
+      function count() {   // as if the sheet were already in the chain
+        var tmp = Object.assign({ id: '__new', name: title, is_mystery: true }, clues());
+        var link = { id: '__link', round_id: roundId, hunter_id: dir === 'hunter' ? tmp.id : p.id, target_id: dir === 'hunter' ? p.id : tmp.id, confidence: 'sur', source: '', created_at: new Date().toISOString() };
+        var n = L.mysteryCandidates(Object.assign({}, st, { players: st.players.concat([tmp]), links: st.links.concat(roundId ? [link] : []) }), tmp, roundId).length;
+        matches.textContent = n ? K.n(n, '{n} player matches these clues.', '{n} players match these clues.') : t('Nobody matches these clues.');
+      }
+      body.appendChild(h('p', { class: 'muted small' }, t('Fill in what you know; leave the rest empty. The sheet takes its place in the chain, and you say who it is once you know.')));
+      body.appendChild(h('div', { class: 'stack' },
+        h('div', { class: 'grid-2' }, ui.field(t('Year'), f.year), ui.field(t('Department'), f.dept)),
+        h('div', { class: 'grid-2' }, ui.field('TD', f.td), ui.field('TP', f.tp)),
+        h('div', { class: 'grid-2' }, ui.field(t('Option'), f.option), ui.field(t('Language group'), f.lang_group)),
+        ui.field(t('Note'), f.notes), matches));
+      count();
+      body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
+        h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+          var row = Object.assign({ name: title, is_mystery: true, is_ally: false, photo_path: null, lat: null, lng: null, points: 0, notes: f.notes.value.trim() }, clues());
+          api.close();
+          store.insert('players', row).then(function (m) {
+            return dir === 'hunter' ? act.setTarget(m.id, p.id, { roundId: roundId, confidence: 'sur', noConfirm: true, silent: true }) : act.setTarget(p.id, m.id, { roundId: roundId, confidence: 'sur', noConfirm: true, silent: true });
+          }).then(function () { store.log(t('Mystery player added: {name}', { name: title })); ui.toast(t('Mystery player added to the chain.')); });
+        } }, t('Add to the chain'))));
+    } });
+  };
+  /* The block at the top of a mystery sheet: its clues and the players it may be */
+  function mysteryBox(p, roundId, edit, api) {
+    var clues = L.MYSTERY_CLUES.map(function (k) { return p[k]; }).filter(Boolean).join(' · ');
+    var cands = L.mysteryCandidates(store.state, p, roundId), shown = cands.slice(0, 12);
+    return h('section', { class: 'mystery-box' },
+      h('p', {}, h('strong', {}, t('Who is it?')), ' ', h('span', { class: 'muted' }, clues ? t('Clues: {c}', { c: clues }) : t('No clue yet: edit the sheet to add some.'))),
+      h('p', { class: 'muted small' }, cands.length ? K.n(cands.length, '{n} player matches.', '{n} players match.') : t('Nobody matches these clues.')),
+      shown.length ? h('div', { class: 'stack-tight mystery-cands' }, shown.map(function (c) {
+        return h('div', { class: 'row mystery-cand' }, ui.avatar(c, 'sm'),
+          h('button', { type: 'button', class: 'row-main linkish', onclick: function () { api.close(); act.openPlayer(c.id); } }, h('span', { class: 'row-title' }, c.name), h('span', { class: 'row-sub' }, [c.year, c.dept, c.td, c.tp].filter(Boolean).join(' '))),
+          edit ? h('button', { type: 'button', class: 'btn', onclick: function () { act.mergeMystery(p.id, c.id); } }, t('It is them')) : null);
+      })) : null,
+      cands.length > shown.length ? h('p', { class: 'muted small' }, t('…and {n} more: add clues to narrow it down.', { n: cands.length - shown.length })) : null,
+      edit ? h('button', { type: 'button', class: 'linkish small', onclick: function () { ui.pickPlayer({ title: t('Who is it?'), filter: function (x) { return !x.is_mystery && x.id !== p.id; } }).then(function (id) { if (id) act.mergeMystery(p.id, id); }); } }, t('Someone else…')) : null);
+  }
+  act.mergeMystery = function (mysteryId, realId) {
+    var m = store.player(mysteryId), r = store.player(realId); if (!m || !r || !store.canEdit()) return Promise.resolve();
+    return ui.confirm({ title: t('It is {name}?', { name: r.name }), text: t('What we know about "{m}" (links, kills, bonuses, intel, clues) moves to the sheet of {name}, then the mystery sheet is deleted.', { m: m.name, name: r.name }), action: t('Merge') }).then(function (ok) {
+      if (!ok) return;
+      var plan = L.mysteryMerge(store.state, m, r), jobs = [];
+      plan.links.forEach(function (x) { jobs.push(store.update('links', x.id, x.patch)); });
+      plan.drop.forEach(function (id) { jobs.push(store.remove('links', id)); });
+      plan.kills.forEach(function (x) { jobs.push(store.update('kills', x.id, x.patch)); });
+      plan.bonuses.forEach(function (x) { jobs.push(store.update('bonuses', x.id, x.patch)); });
+      plan.intel.forEach(function (x) { jobs.push(store.update('intel', x.id, x.patch)); });
+      if (Object.keys(plan.player).length) jobs.push(store.update('players', r.id, plan.player));
+      return Promise.all(jobs).then(function () { return store.remove('players', m.id); }).then(function () {
+        store.log(t('{m} identified: it is {name}', { m: m.name, name: r.name }));
+        ui.toast(t('Merged into the sheet of {name}.', { name: r.name }));
+        act.openPlayer(r.id);   // the mystery sheet, if open, closes itself now that it is gone
+      });
+    });
+  };
+
+  /* ------------------------------------------------------------ share a sheet */
+  /* A sheet as a text, with its photo, to send to allies on WhatsApp, Messenger…: you choose what goes in,
+     since once sent it leaves the app. */
+  act.shareSheet = function (playerId) {
+    var p = store.player(playerId); if (!p) return;
+    var st = store.state, roundId = act.currentRoundId(), dead = L.deadSet(st).has(p.id);
+    var home = p.home_id && (st.homes || []).find(function (x) { return x.id === p.home_id; });
+    var PARTS = [['class', t('Year and groups'), true], ['points', t('Points'), true], ['chain', t('Killer and target'), true], ['weapons', t('Weapons'), true],
+      ['timetable', t('Timetable now'), true], ['address', t('Address'), false], ['notes', t('Notes'), false], ['photo', t('Photo'), !!p.photo_path]];
+    var sched = null, photo = null;
+    ui.dialog({ title: t('Share {name}', { name: p.name }), render: function (body, api) {
+      var boxes = {}, text = h('textarea', { rows: '9', class: 'share-text', 'aria-label': t('Text to send') });
+      function on(id) { return boxes[id] && boxes[id].checked; }
+      function build() {
+        var lines = [p.name + (dead ? ' (' + t('dead') + ')' : '')];
+        if (on('class')) { var c = [[p.year, p.dept, p.td].filter(Boolean).join(' '), p.tp, p.option, p.lang_group].filter(Boolean).join(' · '); if (c) lines.push(c); }   // as on the year tag
+        if (on('points')) lines.push(ui.pointsText(p));
+        if (on('chain') && roundId && !dead) {
+          var hu = L.resolveHunter(st, roundId, p.id).id, tg = L.resolveTarget(st, roundId, p.id).id;
+          if (hu) lines.push(t('Hunted by') + ' ' + name(hu));
+          if (tg) lines.push(t('Hunts') + ' ' + name(tg));
+        }
+        if (on('weapons') && p.weapons) lines.push(t('Weapons') + ' : ' + L.weaponList(p.weapons).map(function (w) { var d = ui.weaponDifficulty(w); return w + (d ? ' (' + (d === 'difficile' ? t('hard') : t('easy')) + ')' : ''); }).join(', '));
+        if (on('timetable') && sched) lines = lines.concat(sched);
+        if (on('address') && (p.address || home)) lines.push(t('Address') + ' : ' + [home ? home.name : null, home && L.homeKind(home) === 'residence' && p.apartment ? t('apt. {n}', { n: p.apartment }) : null, p.address && (!home || p.address !== home.name) ? p.address : null].filter(Boolean).join(', '));
+        if (on('notes') && p.notes) lines.push(p.notes);
+        text.value = lines.join('\n');
+      }
+      var list = h('div', { class: 'share-parts' }, PARTS.map(function (x) {
+        if (x[0] === 'photo' && !p.photo_path) return null;
+        if (x[0] === 'timetable' && !store.calendarsFor(p).length) return null;
+        boxes[x[0]] = h('input', { type: 'checkbox', checked: x[2], onchange: build });
+        return h('label', { class: 'check' }, boxes[x[0]], x[1]);
+      }));
+      body.appendChild(h('p', { class: 'muted small' }, t('Choose what to send: once shared, it leaves the app.')));
+      body.appendChild(list);
+      body.appendChild(ui.field(t('Text to send'), text, t('You can still change it before sending.')));
+      var canShare = !!navigator.share;
+      body.appendChild(h('div', { class: 'actions' },
+        h('button', { type: 'button', class: 'btn', onclick: function () {
+          (navigator.clipboard ? navigator.clipboard.writeText(text.value) : Promise.reject()).then(function () { ui.toast(t('Copied: paste it in the conversation.')); }, function () { text.select(); ui.toast(t('Select the text and copy it.'), 'error'); });
+        } }, t('Copy')),
+        h('a', { class: 'btn', target: '_blank', rel: 'noopener', href: '#', onclick: function (e) { e.currentTarget.href = 'https://wa.me/?text=' + encodeURIComponent(text.value); } }, 'WhatsApp'),
+        canShare ? h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+          var data = { title: p.name, text: text.value };
+          if (on('photo') && photo && navigator.canShare && navigator.canShare({ files: [photo] })) data.files = [photo];
+          navigator.share(data).then(function () { api.close(); }, function (err) { if (err && err.name !== 'AbortError') ui.toast(t('Sharing failed: {err}', { err: err.message || err }), 'error'); });
+        } }, K.icon('share'), t('Share…')) : null));
+      build();
+      if (store.calendarsFor(p).length) store.playerEvents(p).then(function (res) { sched = ui.scheduleLines(res.events); build(); }, function () {});
+      // the photo is fetched beforehand: sharing must follow the tap straight away
+      var url = p.photo_path && store.photoUrl(p.photo_path);
+      if (url && window.fetch && window.File) fetch(url).then(function (r) { return r.blob(); }).then(function (b) {
+        photo = new File([b], L.norm(p.name).replace(/[^a-z0-9]+/g, '-') + '.' + ((b.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')), { type: b.type || 'image/jpeg' });
+      }).catch(function () {});
+    } });
+  };
+
   /* ------------------------------------------------------------ import */
   act.importDialog = function () {
     if (!store.canEdit()) return;
@@ -854,7 +1084,7 @@
   /* ------------------------------------------------------------ export */
   function playerRows() {
     var st = store.state, dead = L.deadSet(st), round = L.currentRound(st), maps = round && L.linkMaps(st, round.id);
-    return st.players.slice().sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); }).map(function (p) {
+    return L.realPlayers(st).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); }).map(function (p) {
       var d = dead.has(p.id), tg = round && !d ? L.resolveTarget(st, round.id, p.id, maps, dead) : null, hu = round && !d ? L.resolveHunter(st, round.id, p.id, maps, dead) : null;
       return { p: p, dead: d, target: tg && tg.id ? name(tg.id) : '', hunter: hu && hu.id ? name(hu.id) : '', targetConf: tg && tg.id ? ui.confLabel(tg.confidence) : '' };
     });

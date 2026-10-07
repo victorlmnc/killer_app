@@ -10,7 +10,8 @@
     coloc: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5.5" cy="5.5" r="2.3"/><circle cx="11" cy="6" r="2"/><path d="M1 13.5c0-2.6 2-4.2 4.5-4.2s4.5 1.6 4.5 4.2zM10.6 13.5c0-1.5-.5-2.7-1.4-3.6.5-.3 1.100-.4 1.800-.4 2.200 0 4 1.400 4 4z"/></svg>',
     immeuble: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.500h10v13H9.500v-3h-3v3H3zM5 3.500v2h2v-2zm4 0v2h2v-2zM5 7.500v2h2v-2zm4 0v2h2v-2z" fill-rule="evenodd"/></svg>',
     residence: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.500 3h1.800v5.500h11.200V14h-1.800v-2H3.300v2H1.500zM4.300 5.200h3.200v2.300H4.300zM8.500 5.200h4.200c1 0 1.800.8 1.800 1.800v.5h-6z"/></svg>',
-    spot: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.500 1.500h1.500v.8h8l-2 3 2 3h-8v6.200H3.500z"/></svg>'
+    spot: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.500 1.500h1.500v.8h8l-2 3 2 3h-8v6.200H3.500z"/></svg>',
+    seen: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M8 3.500C4.500 3.500 1.800 6 1 8c.8 2 3.500 4.500 7 4.500S14.200 10 15 8c-.8-2-3.500-4.500-7-4.500zm0 7.200a2.700 2.700 0 1 1 0-5.400 2.700 2.700 0 0 1 0 5.400z"/></svg>'
   };
   function hex(c, fallback) { return /^#[0-9a-f]{3,8}$/i.test(String(c || '')) ? c : fallback; } // only a real colour reaches a style attribute
   function hexYear(year) { var y = (store.state.settings.years || []).find(function (x) { return x.name === year; }); return hex(y && y.color, '#8A93A0'); }
@@ -27,8 +28,10 @@
     render: function (root) {
       var LISTS = [['tous', t('All')], ['vivants', t('Alive')], ['cibles', t('Alliance targets')], ['killers', t('Alliance killers')]];
       var focus = (location.hash.match(/[?&]player=([^&]+)/) || [])[1] || null;
+      var focusSeen = (location.hash.match(/[?&]seen=([^&]+)/) || [])[1] || null;
+      var SEEN_DAYS = 3;   // sightings older than that are not on the map
       var edit = store.canEdit();
-      var view = { list: 'tous', placing: null, fit: true, busy: false, q: '' }, searchTimer = null;
+      var view = { list: 'tous', placing: null, fit: true, busy: false, q: '' }, searchTimer = null, sightsCount = 0;
       var prefs = loadPrefs(), bus = null, busReady = false;
       var map = null, layer = null, busLayer = null, pins = new Map(), gone = false;
 
@@ -149,7 +152,14 @@
         } });
       }
 
-      function drawPins(s, places, spots) {
+      function popupSeen(x) {
+        var p = store.player(x.player_id); if (!p) return h('div', {});
+        return h('div', { class: 'map-pop' }, h('div', { class: 'map-pop-item' }, h('span', { class: 'tag tag-seen' }, t('Last seen')),
+          h('div', { class: 'map-pop-item map-pop-person' }, h('strong', {}, p.name), h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Open sheet')),
+            h('span', { class: 'map-pop-address' }, [x.place, ui.ago(x.seen_at)].filter(Boolean).join(' · '))),
+          h('span', {}, x.text)));
+      }
+      function drawPins(s, places, spots, sights) {
         if (!map) return;
         layer.clearLayers(); pins.clear();
         var Lf = window.L, bounds = [];
@@ -167,6 +177,12 @@
           var icon = Lf.divIcon({ className: 'pin-wrap', iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -15], html: pinHtml('spot') });
           var m = Lf.marker([sp.lat, sp.lng], { icon: icon, title: sp.name, alt: sp.name, keyboard: true, zIndexOffset: 500 }).bindPopup(function () { return popupSpot(sp.id); }, { maxWidth: 300, minWidth: Math.min(220, window.innerWidth - 90) });
           layer.addLayer(m); pins.set('spot:' + sp.id, m); bounds.push([sp.lat, sp.lng]);
+        });
+        (sights || []).forEach(function (x) {
+          var p = store.player(x.player_id), title = t('{name}, seen {when}', { name: p ? p.name : '?', when: ui.ago(x.seen_at) });
+          var icon = Lf.divIcon({ className: 'pin-wrap', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12], html: pinHtml('seen', { year: hexYear(p && p.year) }) });
+          var m = Lf.marker([x.lat, x.lng], { icon: icon, title: title, alt: title, keyboard: true, zIndexOffset: 800 }).bindPopup(function () { return popupSeen(x); }, { maxWidth: 300, minWidth: Math.min(240, window.innerWidth - 90) });
+          layer.addLayer(m); pins.set('seen:' + x.id, m);
         });
         if (view.fit && bounds.length) {
           view.fit = false;
@@ -203,6 +219,7 @@
           layersBody.appendChild(layerRow({ name: t(x.plural), count: n, on: !isHidden(x.id), swatch: swatch(pinHtml(x.id, { year: '#8A93A0' })), toggle: function () { toggle(prefs.hidden, x.id); } }));
         });
         layersBody.appendChild(layerRow({ name: t('Strategic spots'), count: spots.length, on: !isHidden('spots'), swatch: swatch(pinHtml('spot')), toggle: function () { toggle(prefs.hidden, 'spots'); } }));
+        layersBody.appendChild(layerRow({ name: t('Seen lately ({n} days)', { n: SEEN_DAYS }), count: sightsCount, on: !isHidden('seen'), swatch: swatch(pinHtml('seen', { year: '#8A93A0' })), toggle: function () { toggle(prefs.hidden, 'seen'); } }));
         if (edit) layersBody.appendChild(h('button', { type: 'button', class: 'btn btn-block', disabled: !map, onclick: function () { editSpot(null); } }, t('Add a strategic spot')));
 
         layersBody.appendChild(h('h3', {}, t('Bus lines')));
@@ -224,6 +241,10 @@
         var places = allPlaces.filter(function (pl) { return !isHidden(placeKind(pl)); });
         var allSpots = store.state.spots.filter(L.hasCoords).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); });
         var spots = isHidden('spots') ? [] : allSpots;
+        var shownIds = new Set(s.players.map(function (p) { return p.id; }));   // the filters and the search apply to sightings too
+        var allSights = L.lastSightings(store.state, Date.now() - SEEN_DAYS * 864e5).filter(function (x) { return shownIds.has(x.player_id) || x.id === focusSeen; });
+        if (focusSeen && !allSights.some(function (x) { return x.id === focusSeen; })) { var fx = (store.state.intel || []).find(function (x) { return x.id === focusSeen; }); if (fx && L.hasCoords(fx)) allSights.push(fx); }   // an older one, asked for
+        var sights = isHidden('seen') ? allSights.filter(function (x) { return x.id === focusSeen; }) : allSights; sightsCount = allSights.length;
         var visibleIds = new Set(); places.forEach(function (pl) { pl.players.forEach(function (p) { visibleIds.add(p.id); }); });
         var here = s.players.filter(function (p) { return visibleIds.has(p.id); }).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); });
         var lost = store.state.players.filter(function (p) { return L.hasAddress(p) && !L.hasCoords(p); }).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); });
@@ -241,7 +262,7 @@
           hint.appendChild(h('button', { type: 'button', class: 'btn', onclick: function () { view.placing = null; refresh(); } }, t('Cancel'))); }
         box.classList.toggle('is-placing', !!view.placing);
 
-        drawPins(s, places, spots); drawBus(); drawLayers(allPlaces, allSpots);
+        drawPins(s, places, spots, sights); drawBus(); drawLayers(allPlaces, allSpots);
 
         ui.clear(located);
         foldHead(located, 'located', t('Located players'), here.length);
@@ -344,10 +365,11 @@
           var job = view.placing; view.placing = null;
           store.update(job.kind, job.id, { lat: e.latlng.lat, lng: e.latlng.lng }).then(function () { return job.kind === 'homes' ? K.actions.syncHome(job.id) : null; }).then(function () { ui.toast(t('Marker placed.')); });   // a flat moves its flatmates
         });
-        var fp = focus && store.player(focus);
-        if (fp && L.hasCoords(fp)) view.fit = false;   // straight to that player: a fit animation would move the map away from their popup
+        var fp = focus && store.player(focus), fs = focusSeen && (store.state.intel || []).find(function (x) { return x.id === focusSeen; });
+        if ((fp && L.hasCoords(fp)) || (fs && L.hasCoords(fs))) view.fit = false;   // straight to that player: a fit animation would move the map away from their popup
         refresh();
         if (fp && L.hasCoords(fp)) setTimeout(function () { goTo(fp.id, fp.lat, fp.lng); }, 60);
+        else if (fs && L.hasCoords(fs)) setTimeout(function () { goTo('seen:' + fs.id, fs.lat, fs.lng); }, 60);
       }).catch(function () {
         if (gone) return;
         box.classList.add('map-off');

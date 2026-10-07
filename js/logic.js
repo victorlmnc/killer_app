@@ -205,8 +205,30 @@
   }
 
   function killPoints(o) {
-    var base = o.difficulty === 'difficile' ? 3 : 1;
+    var base = o.difficulty === 'difficile' ? 3 : 1;   // unknown difficulty: the easy points, for now
     return base + (Number(o.bonus) || 0) + (o.firstBlood ? 5 : 0) + (Number(o.mates) || 0);
+  }
+  /* A kill made with a weapon of unknown difficulty ('inconnue') counts the easy points; a hard weapon gives LEVEL_GAP more.
+     The player's points hold the sure part, the range says how many more they may have. */
+  var LEVEL_GAP = killPoints({ difficulty: 'difficile' }) - killPoints({ difficulty: 'facile' });
+  function pendingKills(state, playerId) {
+    return (state.kills || []).filter(function (k) { return k.weapon_level === 'inconnue' && k.killer_id && (!playerId || k.killer_id === playerId); });
+  }
+  function pointsRange(state, p) {
+    var min = (p && p.points) || 0;
+    return { min: min, max: min + (p ? LEVEL_GAP * pendingKills(state, p.id).length : 0) };
+  }
+  /* The kills to settle once the difficulty of a weapon is known -> [{ kill, patch, killerId, delta }] */
+  function settleKills(kills, difficulty) {
+    if (difficulty !== 'facile' && difficulty !== 'difficile') return [];
+    var delta = difficulty === 'difficile' ? LEVEL_GAP : 0;
+    return kills.filter(function (k) { return k.weapon_level === 'inconnue'; }).map(function (k) {
+      return { kill: k, patch: { weapon_level: difficulty, points: (k.points || 0) + delta }, killerId: k.killer_id, delta: k.killer_id ? delta : 0 };
+    });
+  }
+  function settleWeapon(state, name, difficulty) {
+    var n = norm(name);
+    return settleKills(pendingKills(state).filter(function (k) { return k.weapon && norm(k.weapon) === n; }), difficulty);
   }
 
   function weaponList(text) {
@@ -267,7 +289,7 @@
   }
 
   function generalRanking(state) {
-    var players = state.players, deathByPlayer = new Map();
+    var players = realPlayers(state), deathByPlayer = new Map();
     state.kills.forEach(function (kill) {
       if (!players.some(function (p) { return p.id === kill.victim_id; })) return;
       var previous = deathByPlayer.get(kill.victim_id);
@@ -290,7 +312,7 @@
   function stats(state) {
     var round = currentRound(state);
     var dead = deadSet(state);
-    var players = state.players;
+    var players = realPlayers(state);
     var alive = players.filter(function (p) { return !dead.has(p.id); });
     var byYear = {};
     players.forEach(function (p) {
@@ -342,7 +364,7 @@
 
   function classesTree(state) {
     var tree = {};
-    state.players.forEach(function (p) {
+    realPlayers(state).forEach(function (p) {
       var y = p.year || '?', d = p.dept || '—', t = p.td || '?';
       tree[y] = tree[y] || {}; tree[y][d] = tree[y][d] || {}; (tree[y][d][t] = tree[y][d][t] || []).push(p);
     });
@@ -435,18 +457,19 @@
      Defaults give the type; null = required reference; NOW = the import time when the backup has no date. */
   var BACKUP_FORMAT = 'killer-backup', NOW = {};
   var BACKUP_TABLES = {
-    players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, status: '', home_id: '', apartment: '', photo_path: '', created_at: NOW },
+    players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, status: '', home_id: '', apartment: '', is_mystery: false, photo_path: '', created_at: NOW },
     rounds: { name: '', position: 0, created_at: NOW },
     links: { round_id: null, hunter_id: null, target_id: null, confidence: 'sur', source: '', created_at: NOW },
-    kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', points: 0, admin_reason: '', note: '', killer_weapons: null, happened_at: NOW },
+    kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', weapon_level: '', points: 0, admin_reason: '', note: '', killer_weapons: null, happened_at: NOW },
     weapons: { name: '', difficulty: 'facile', owned: false, note: '' },
     events: { text: '', actor: '', details: {}, created_at: NOW },
     spots: { name: '', note: '', address: '', lat: 0, lng: 0, created_at: NOW },
     homes: { kind: 'coloc', name: '', address: '', lat: 0, lng: 0, building: '', note: '', created_at: NOW },
+    intel: { player_id: null, text: '', place: '', lat: 0, lng: 0, seen_at: NOW, author: '', created_at: NOW },
     bonuses: { player_id: null, name: '', price: 0, bought_at: NOW, starts_at: NOW, ends_at: NOW, note: '', created_at: NOW }
   };
-  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1, ends_at: 1, home_id: 1 };   // empty -> null rather than the default
-  var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile'], admin_reason: ['cheating', 'other'], status: ['', 'dangerous', 'priority'], kind: ['coloc', 'residence'] };
+  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1, ends_at: 1, home_id: 1, weapon_level: 1 };   // empty -> null rather than the default
+  var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile', 'inconnue'], weapon_level: ['facile', 'difficile', 'inconnue'], admin_reason: ['cheating', 'other'], status: ['', 'dangerous', 'priority'], kind: ['coloc', 'residence'] };
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   function cleanValue(key, v, def, now) {
@@ -490,6 +513,7 @@
     var victims = new Set();
     data.players.forEach(function (p) { p.home_id = ref(p.home_id, 'homes'); });
     data.bonuses = data.bonuses.map(function (b) { b.player_id = ref(b.player_id, 'players'); return b; }).filter(function (b) { return b.player_id; });
+    data.intel = data.intel.map(function (x) { x.player_id = ref(x.player_id, 'players'); return x; }).filter(function (x) { return x.player_id && x.text.trim(); });
     data.kills = data.kills.map(function (k) { k.round_id = ref(k.round_id, 'rounds'); k.killer_id = ref(k.killer_id, 'players'); k.victim_id = ref(k.victim_id, 'players'); return k; })
       .filter(function (k) { return k.victim_id && !victims.has(k.victim_id) && victims.add(k.victim_id); });
     data.events.forEach(function (e) {
@@ -513,6 +537,76 @@
      whose field ('td', 'tp', 'lang_group', 'option', or '' for everyone) contains that value. */
   var CAL_FIELDS = ['td', 'tp', 'lang_group', 'option'];
   /* Group names are compared word by word, in any order: "TD 1 MRI", "TD1 MRI" and "MRI TD1" are the same group. */
+  /* ---------- Intel feed ----------
+     The intel of a player, newest sighting first; and on the map, where each living player was last seen lately. */
+  function intelOf(state, playerId) {
+    return (state.intel || []).filter(function (x) { return x.player_id === playerId; }).sort(function (a, b) { return Date.parse(b.seen_at) - Date.parse(a.seen_at); });
+  }
+  function lastSightings(state, sinceMs) {
+    var dead = deadSet(state), best = new Map();
+    (state.intel || []).forEach(function (x) {
+      var at = Date.parse(x.seen_at);
+      if (!hasCoords(x) || dead.has(x.player_id) || !(at >= sinceMs)) return;
+      var cur = best.get(x.player_id);
+      if (!cur || at > Date.parse(cur.seen_at)) best.set(x.player_id, x);
+    });
+    return Array.from(best.values()).sort(function (a, b) { return Date.parse(b.seen_at) - Date.parse(a.seen_at); });
+  }
+
+  /* ---------- Mystery players ----------
+     A sheet for someone we only know a few things about ("the killer of X is a 2A MRI"): it sits in the chain like
+     anyone else, and once we know who it is, it is merged into the real sheet. */
+  function realPlayers(state) { return state.players.filter(function (p) { return !p.is_mystery; }); }
+  var CLUES = ['year', 'dept', 'td', 'tp', 'option', 'lang_group'];
+  function clueMatches(clue, value, field) {
+    if (!clue) return true;
+    if (field === 'year' || field === 'dept') return norm(clue) === norm(value);
+    var want = groupKey(clue);   // "TD2", "td 2" and "2" are the same group; a player may be in several
+    return splitValues(value).some(function (k) { return k === want || looseKey(k) === looseKey(want); });
+  }
+  /* Who the mystery may be: alive, every clue matching; not someone already hunting another player when the mystery
+     is a killer, nor already hunted by another when the mystery is a target. */
+  function mysteryCandidates(state, mystery, roundId) {
+    var dead = deadSet(state), maps = roundId ? linkMaps(state, roundId) : null;
+    var hunts = roundId ? resolveTarget(state, roundId, mystery.id, maps, dead).id : null, hunted = roundId ? resolveHunter(state, roundId, mystery.id, maps, dead).id : null;
+    return state.players.filter(function (p) {
+      if (p.is_mystery || p.id === mystery.id || dead.has(p.id) || p.id === hunts || p.id === hunted) return false;
+      if (!CLUES.every(function (f) { return clueMatches(mystery[f], p[f], f); })) return false;
+      if (hunts) { var tg = resolveTarget(state, roundId, p.id, maps, dead).id; if (tg && tg !== hunts) return false; }
+      if (hunted) { var hu = resolveHunter(state, roundId, p.id, maps, dead).id; if (hu && hu !== hunted) return false; }
+      return true;
+    }).sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', 'fr'); });
+  }
+  /* What changes when a mystery sheet turns out to be `real`: every reference moves to the real sheet (a link that
+     would repeat one it already has, or point at itself, goes), and the clues fill what the real sheet leaves empty. */
+  function mysteryMerge(state, mystery, real) {
+    var m = mystery.id, r = real.id, out = { links: [], drop: [], kills: [], bonuses: [], intel: [], player: {} };
+    var key = function (round, a, b) { return round + '|' + a + '|' + b; }, seen = new Set();
+    state.links.forEach(function (l) { if (l.hunter_id !== m && l.target_id !== m) seen.add(key(l.round_id, l.hunter_id, l.target_id)); });
+    state.links.forEach(function (l) {
+      if (l.hunter_id !== m && l.target_id !== m) return;
+      var hu = l.hunter_id === m ? r : l.hunter_id, tg = l.target_id === m ? r : l.target_id, k = key(l.round_id, hu, tg);
+      if (hu === tg || seen.has(k)) { out.drop.push(l.id); return; }
+      seen.add(k); out.links.push({ id: l.id, patch: { hunter_id: hu, target_id: tg } });
+    });
+    var realDead = state.kills.some(function (k) { return k.victim_id === r; });
+    state.kills.forEach(function (k) {
+      var patch = {};
+      if (k.killer_id === m) patch.killer_id = r;
+      if (k.victim_id === m && !realDead) patch.victim_id = r;
+      if (Object.keys(patch).length) out.kills.push({ id: k.id, patch: patch });
+    });
+    (state.bonuses || []).forEach(function (b) { if (b.player_id === m) out.bonuses.push({ id: b.id, patch: { player_id: r } }); });
+    (state.intel || []).forEach(function (x) { if (x.player_id === m) out.intel.push({ id: x.id, patch: { player_id: r } }); });
+    CLUES.forEach(function (f) { if (!real[f] && mystery[f]) out.player[f] = mystery[f]; });
+    var weapons = weaponList(real.weapons), have = new Set(weapons.map(norm));
+    weaponList(mystery.weapons).forEach(function (w) { if (!have.has(norm(w))) { have.add(norm(w)); weapons.push(w); } });
+    if (weapons.join(', ') !== weaponList(real.weapons).join(', ')) out.player.weapons = weapons.join(', ');
+    if (mystery.notes) out.player.notes = [real.notes, mystery.notes].filter(Boolean).join('\n');
+    if ((mystery.points || 0) > (real.points || 0)) out.player.points = mystery.points;
+    return out;
+  }
+
   function groupKey(v) {
     return (String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().match(/[a-z]+|\d+/g) || [])
       .map(function (w) { return /^\d+$/.test(w) ? String(+w) : w; }).sort().join(' ');
@@ -726,8 +820,9 @@
       if (h && !h.is_ally) {
         bonusesOf(h.id, /coupe/i).forEach(function (b) { out.push({ level: bonusStatus(b, now) === 'active' ? 'high' : 'warn', kind: 'cutthroat', allyId: ally.id, otherId: h.id, bonus: b }); });
         if (h.status === 'dangerous') out.push({ level: 'warn', kind: 'dangerous', allyId: ally.id, otherId: h.id });
-        var afford = cutthroats.filter(function (i) { return (h.points || 0) >= (i.price || 0); });   // any Coupe-Gorge they can pay for
-        if (afford.length && !bonusesOf(h.id, /coupe/i).length) out.push({ level: 'warn', kind: 'rich', allyId: ally.id, otherId: h.id, points: h.points || 0, items: afford, item: afford[0].name, price: afford[0].price });
+        var most = pointsRange(state, h).max;   // a kill with a weapon of unknown difficulty may have given them more
+        var afford = cutthroats.filter(function (i) { return most >= (i.price || 0); });   // any Coupe-Gorge they can pay for
+        if (afford.length && !bonusesOf(h.id, /coupe/i).length) out.push({ level: 'warn', kind: 'rich', allyId: ally.id, otherId: h.id, points: most, items: afford, item: afford[0].name, price: afford[0].price });
       }
       var target = resolveTarget(state, round.id, ally.id, maps, dead).id;
       var tp = target && state.players.find(function (p) { return p.id === target; });
@@ -828,7 +923,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, homeMembers: homeMembers, suggestedHomes: suggestedHomes, homeKind: homeKind, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
-    leaderboard: leaderboard, generalRanking: generalRanking, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, LEVEL_GAP: LEVEL_GAP, pendingKills: pendingKills, pointsRange: pointsRange, settleKills: settleKills, settleWeapon: settleWeapon, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    leaderboard: leaderboard, generalRanking: generalRanking, realPlayers: realPlayers, intelOf: intelOf, lastSightings: lastSightings, mysteryCandidates: mysteryCandidates, mysteryMerge: mysteryMerge, MYSTERY_CLUES: CLUES, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

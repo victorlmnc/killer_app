@@ -196,6 +196,7 @@
     var url = K.store.photoUrl(p && (p.photo_path || p.avatar_path));
     var el = h('span', { class: 'avatar' + (size ? ' avatar-' + size : ''), style: { '--year': ui.yearColor(p && p.year) } });
     if (url) el.appendChild(h('img', { src: url, alt: '', loading: 'lazy' }));
+    else if (p && p.is_mystery) { el.classList.add('avatar-mystery'); el.appendChild(h('span', { 'aria-hidden': 'true' }, '?')); }
     else el.appendChild(h('span', { 'aria-hidden': 'true' }, ui.initials(p && p.name)));
     // members of the alliance: a white star badge on the photo (the avatar clips its content, so it sits on a wrapper)
     if (!p || !p.is_ally) return el;
@@ -209,7 +210,13 @@
   /* A weapon as a tag coloured by its catalogue difficulty (green easy, brass hard, grey unknown); the text says it too. */
   ui.weaponDifficulty = function (name) {
     var n = K.logic.norm(name), w = K.store.state.weapons.find(function (x) { return K.logic.norm(x.name) === n; });
-    return w ? w.difficulty : null;
+    return w && w.difficulty !== 'inconnue' ? w.difficulty : null;
+  };
+  /* "12 pts", or "12 to 14 pts" while kills made with a weapon of unknown difficulty are not settled */
+  ui.pointsText = function (p) {
+    if (p && p.is_mystery && !p.points) return t('points unknown');
+    var r = K.logic.pointsRange(K.store.state, p);
+    return r.max > r.min ? t('{a} to {b} pts', { a: r.min, b: r.max }) : K.n(r.min, '{n} pt', '{n} pts');
   };
   ui.weaponTag = function (name, small) {
     var d = ui.weaponDifficulty(name), label = d === 'difficile' ? t('hard') : d === 'facile' ? t('easy') : t('unknown difficulty');
@@ -317,6 +324,14 @@
   function dayLabel(d) { var s = fmt(d, { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1); }
   function sameDay(a, b) { return K.logic.parisDay(a) === K.logic.parisDay(b); }
   ui.hm = function (d) { return hm(d); }; ui.dayLabel = function (d) { return dayLabel(d); };
+  /* "Now: Maths · SA2.04 · until 12:20" and "Next: …" as plain text (to share a sheet) */
+  ui.scheduleLines = function (events, now) {
+    now = now || new Date();
+    var s = K.logic.scheduleAt(events, now), out = [];
+    if (s.current) out.push(t('Now') + ' : ' + classText(s.current) + ' · ' + (s.current.allDay ? t('until {date}', { date: shortDate(new Date(s.current.end - 1)) }) : t('until {time}', { time: hm(s.current.end) })));
+    if (s.next) out.push(t('Next') + ' : ' + classText(s.next) + ' · ' + whenNext(s.next, now));
+    return out;
+  };
   function dayStart(date, plusDays) { var p = K.logic.parisParts(date); return K.logic.parisDate(p.y, p.m, p.d + (plusDays || 0), 0, 0); }
   // HyperPlanning colours by kind of class: lecture (purple), TD (blue), TP (green), special event (orange)
   var KINDS = ['cm', 'td', 'tp', 'event'];

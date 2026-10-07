@@ -84,8 +84,8 @@
               h('span', { class: 'row-sub' }, d ? t('Dead') : tg ? t('Hunts {name}', { name: tg.name }) : t('Unknown target')),
               p.weapons && !d ? h('span', { class: 'row-sub tags' }, L.weaponList(p.weapons).map(function (w) { return ui.weaponTag(w, true); })) : null,
               d ? null : ui.bonusTags(p, true)),
-            h('span', { class: 'row-side' }, h('span', { class: 'tags' }, p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, ui.statusTag(p, true), ui.yearTag(p)),
-              h('span', { class: 'muted small' }, K.n(p.points || 0, '{n} pt', '{n} pts') + (n ? ', ' + K.n(n, '{n} kill', '{n} kills') : '')))));
+            h('span', { class: 'row-side' }, h('span', { class: 'tags' }, p.is_mystery ? h('span', { class: 'tag tag-mystery' }, t('Mystery player')) : null, p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, ui.statusTag(p, true), ui.yearTag(p)),
+              h('span', { class: 'muted small' }, ui.pointsText(p) + (n ? ', ' + K.n(n, '{n} kill', '{n} kills') : '')))));
         });
       }
       refresh();
@@ -106,7 +106,7 @@
       function edit(w, preset) {   // preset: name of a weapon seen in play but missing from the catalogue
         if (!store.canEdit()) return;
         ui.dialog({ title: w ? t('Edit weapon') : t('Add a weapon'), render: function (b, api) {
-          var name = h('input', { type: 'text', value: w ? w.name : preset || '' }), diff = ui.select([{ value: 'facile', label: t('Easy (1 pt)') }, { value: 'difficile', label: t('Hard (3 pts)') }], w ? w.difficulty : 'facile');
+          var name = h('input', { type: 'text', value: w ? w.name : preset || '' }), diff = ui.select([{ value: 'facile', label: t('Easy (1 pt)') }, { value: 'difficile', label: t('Hard (3 pts)') }, { value: 'inconnue', label: t('Unknown difficulty') }], w ? w.difficulty : 'facile');
           var owned = h('input', { type: 'checkbox', checked: !!(w && w.owned) });
           var note = h('textarea', { rows: '3', value: (w && w.note) || '', placeholder: t('e.g. in the kitchen of the residence, Emma keeps one, buy at the market') });
           b.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Difficulty'), diff),
@@ -120,7 +120,9 @@
               var row = { name: name.value.trim(), difficulty: diff.value, owned: owned.checked, note: note.value.trim() }; if (!row.name) return name.focus();
               var twin = store.state.weapons.find(function (x) { return x !== w && L.norm(x.name) === L.norm(row.name); });
               if (twin) return ui.toast(t('"{w}" is already in the catalogue.', { w: twin.name }), 'error');
-              if (w) store.update('weapons', w.id, row); else store.insert('weapons', row); api.close();
+              if (w) store.update('weapons', w.id, row).then(function () { if (row.difficulty !== w.difficulty) K.actions.settleWeapon(row.name, row.difficulty); });
+              else store.insert('weapons', row).then(function () { K.actions.settleWeapon(row.name, row.difficulty); });   // kills already made with it
+              api.close();
             } }, w ? t('Save') : t('Add the weapon'))));
         } });
       }
@@ -129,7 +131,7 @@
         var others = store.state.weapons.filter(function (x) { return x !== from; }).sort(byName);
         var close = L.matchWeapons(from.name, others)[0];
         ui.dialog({ title: t('Merge "{w}"', { w: from.name }), render: function (b, api) {
-          var into = ui.select(others.map(function (x) { return { value: x.id, label: x.name + ' (' + (x.difficulty === 'difficile' ? t('hard') : t('easy')) + ')' }; }), close ? close.weapon.id : others[0].id);
+          var into = ui.select(others.map(function (x) { return { value: x.id, label: x.name + ' (' + (x.difficulty === 'difficile' ? t('hard') : x.difficulty === 'facile' ? t('easy') : t('unknown difficulty')) + ')' }; }), close ? close.weapon.id : others[0].id);
           b.appendChild(h('p', { class: 'prose' }, t('"{w}" is removed from the catalogue and replaced by the weapon chosen below on every sheet and kill that mentions it. Its stock and note are kept.', { w: from.name })));
           b.appendChild(ui.field(t('Merge into'), into, close ? t('Closest spelling selected.') : null));
           b.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
@@ -182,7 +184,7 @@
         else plan.querySelector('.panel-head').appendChild(h('span', { class: 'tag ' + (toFind ? 'tag-tofind' : 'tag-owned') }, toFind ? K.n(toFind, '{n} weapon to find', '{n} weapons to find') : t('Everything is ready')));
         preshot.appendChild(plan);
         var inPlay = [];
-        st.players.forEach(function (p) { if (!dead.has(p.id)) L.weaponList(p.weapons).forEach(function (w) { var c = catalog.get(L.norm(w)); inPlay.push({ name: w, holder: p, difficulty: c && c.difficulty, owned: !!(c && c.owned) }); }); });
+        st.players.forEach(function (p) { if (!dead.has(p.id)) L.weaponList(p.weapons).forEach(function (w) { var c = catalog.get(L.norm(w)); inPlay.push({ name: w, holder: p, listed: !!c, difficulty: c && c.difficulty !== 'inconnue' ? c.difficulty : null, owned: !!(c && c.owned) }); }); });
         inPlay = inPlay.filter(function (w) { return !nq || L.norm(w.name).indexOf(nq) >= 0; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });
         var sec = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Currently in play'), h('small', { class: 'muted' }, ' ' + inPlay.length)), h('span', { class: 'muted small' }, t('From the weapons noted on living players\' sheets'))));
         if (!inPlay.length) sec.appendChild(h('p', { class: 'empty' }, nq ? t('No weapon in play matches this search.') : t('Note weapons on player sheets and they will show here with their holder.')));
@@ -190,9 +192,9 @@
           return h('div', { class: 'weapon-card weapon-' + (w.difficulty || 'unknown') },
             h('button', { type: 'button', class: 'weapon-open', onclick: function () { K.actions.openPlayer(w.holder.id); } },
               h('span', { class: 'weapon-name' }, w.name, w.owned ? h('span', { class: 'tag tag-owned' }, t('We have it')) : null),
-              h('span', { class: 'weapon-meta' }, h('span', { class: 'tag tag-' + (w.difficulty || 'none') }, w.difficulty ? (w.difficulty === 'difficile' ? t('Hard, 3 pts') : t('Easy, 1 pt')) : t('Not in catalogue')),
+              h('span', { class: 'weapon-meta' }, h('span', { class: 'tag tag-' + (w.difficulty || 'none') }, w.difficulty ? (w.difficulty === 'difficile' ? t('Hard, 3 pts') : t('Easy, 1 pt')) : w.listed ? t('Unknown difficulty') : t('Not in catalogue')),
                 h('span', { class: 'weapon-holder' }, ui.avatar(w.holder, 'sm'), h('span', {}, w.holder.name)))),
-            !w.difficulty && store.canEdit() ? h('button', { type: 'button', class: 'linkish small weapon-add', onclick: function () { edit(null, w.name); } }, K.icon('plus', 'ic-sm'), t('Add to the catalogue')) : null);
+            !w.listed && store.canEdit() ? h('button', { type: 'button', class: 'linkish small weapon-add', onclick: function () { edit(null, w.name); } }, K.icon('plus', 'ic-sm'), t('Add to the catalogue')) : null);
         })));
         body.appendChild(sec);
         var ownedCount = st.weapons.filter(function (w) { return w.owned; }).length;
@@ -201,6 +203,29 @@
             return h('button', { type: 'button', class: 'chip' + (stock === f[0] ? ' is-on' : ''), 'aria-pressed': String(stock === f[0]), onclick: function () { stock = f[0]; paint(); } }, f[1]);
           })),
           h('span', { class: 'muted small' }, t('{a} of {b} weapons gathered', { a: ownedCount, b: st.weapons.length }))));
+        /* Weapons of unknown difficulty: in the catalogue as such, or noted on a sheet and missing from it. Saying which
+           difficulty it is settles the kills made with it. */
+        var unknown = new Map();
+        st.weapons.forEach(function (w) { if (w.difficulty === 'inconnue') unknown.set(L.norm(w.name), { name: w.name, weapon: w, holders: [], kills: [] }); });
+        inPlay.forEach(function (w) { var k = L.norm(w.name); if (!w.listed && !unknown.has(k)) unknown.set(k, { name: w.name, weapon: null, holders: [], kills: [] }); if (unknown.has(k)) unknown.get(k).holders.push(w.holder); });
+        L.pendingKills(st).forEach(function (k) { var key = L.norm(k.weapon || ''); if (k.weapon && !unknown.has(key) && !catalog.has(key)) unknown.set(key, { name: k.weapon, weapon: null, holders: [], kills: [] }); if (unknown.has(key)) unknown.get(key).kills.push(k); });
+        var unknownList = Array.from(unknown.values()).filter(function (u) { return !nq || L.norm(u.name).indexOf(nq) >= 0; }).sort(byName);
+        var lost = L.pendingKills(st).filter(function (k) { return !k.weapon; });   // kills of unknown difficulty and no weapon name
+        if (unknownList.length || lost.length) {
+          var unk = h('section', { class: 'panel unknown-weapons' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Unknown difficulty'), h('small', { class: 'muted' }, ' ' + unknownList.length)),
+            h('span', { class: 'tag tag-none' }, t('1 or 3 points'))),
+            h('p', { class: 'muted small' }, t('Say whether it is easy or hard once you know: the kills made with it get their points.')));
+          unknownList.forEach(function (u) {
+            unk.appendChild(h('div', { class: 'row unknown-weapon' }, h('span', { class: 'row-main' }, h('button', { type: 'button', class: 'linkish row-title', onclick: function () { if (u.weapon) edit(u.weapon); else edit(null, u.name); } }, u.name),
+                h('span', { class: 'row-sub' }, [u.holders.length ? t('Held by {names}', { names: u.holders.map(function (p) { return p.name; }).join(', ') }) : null,
+                  u.kills.length ? K.n(u.kills.length, '{n} kill to settle', '{n} kills to settle') : null].filter(Boolean).join(' · ') || t('Nobody holds it now'))),
+              store.canEdit() ? h('div', { class: 'settle-btns' }, [['facile', t('Set easy')], ['difficile', t('Set hard')]].map(function (o) {
+                return h('button', { type: 'button', class: 'btn chip-' + o[0], onclick: function () { K.actions.setWeaponDifficulty(u.name, o[0]); } }, o[1]);
+              })) : null));
+          });
+          if (lost.length) unk.appendChild(h('p', { class: 'muted small' }, K.n(lost.length, '{n} kill of unknown difficulty has no weapon name: settle it from the kill.', '{n} kills of unknown difficulty have no weapon name: settle them from each kill.')));
+          body.appendChild(unk);
+        }
         var cols = h('div', { class: 'cols-2' }), held = new Set(inPlay.map(function (w) { return L.norm(w.name); }));
         [['facile', t('Easy'), t('1 point')], ['difficile', t('Hard'), t('3 points')]].forEach(function (d) {
           var items = st.weapons.filter(function (w) { return w.difficulty === d[0] && (!nq || L.norm(w.name).indexOf(nq) >= 0) && (!stock || !!w.owned === (stock === 'owned')); }).sort(byName);
@@ -265,14 +290,15 @@
         var cols = root.appendChild(h('div', { class: 'cols-shop' }));
         var items = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Bonuses')), admin ? h('button', { type: 'button', class: 'btn', onclick: function () { editItem(null); } }, K.icon('plus'), t('Add a bonus')) : null));
         (s.shop || []).forEach(function (it, i) {
-          var can = rivals.filter(function (p) { return (p.points || 0) >= it.price; }).sort(function (a, b) { return hunters.has(b.id) - hunters.has(a.id) || b.points - a.points; });
+          var most = function (p) { return L.pointsRange(store.state, p).max; };   // a kill with a weapon of unknown difficulty may count more
+          var can = rivals.filter(function (p) { return most(p) >= it.price; }).sort(function (a, b) { return hunters.has(b.id) - hunters.has(a.id) || most(b) - most(a); });
           items.appendChild(h('article', { class: 'shop-item' },
             h('div', { class: 'shop-head' }, h('h3', {}, it.name), h('span', { class: 'price' }, K.n(it.price, '{n} pt', '{n} pts')), admin ? h('button', { type: 'button', class: 'linkish', onclick: function () { editItem(i); } }, t('Edit')) : null),
             h('p', { class: 'muted small' }, (function () { var tm = L.bonusTiming(it); return (tm.start === 'next_day' ? t('From 00:10 the next day') : t('Immediately')) + ' · ' + (tm.hours ? K.n(tm.hours, '{n} hour', '{n} hours') : t('one-off')); })()),
             edit ? h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.recordBonus(it); } }, K.icon('plus'), t('Record a purchase')) : null,
             h('details', { class: 'desc' }, h('summary', {}, K.icon('chevron', 'ic-sm'), t('What it does')), h('p', { class: 'prose' }, it.description)),
             h('p', { class: 'small' }, can.length ? h('span', { class: 'muted' }, K.n(can.length, '{n} rival can afford it: ', '{n} rivals can afford it: ')) : h('span', { class: 'muted' }, t('No known rival has enough points.')),
-              can.slice(0, 8).map(function (p, j) { return [j ? ', ' : '', h('button', { type: 'button', class: 'linkish' + (hunters.has(p.id) ? ' threat' : ''), onclick: function () { K.actions.openPlayer(p.id); } }, p.name + ' (' + p.points + ')')]; }))));
+              can.slice(0, 8).map(function (p, j) { return [j ? ', ' : '', h('button', { type: 'button', class: 'linkish' + (hunters.has(p.id) ? ' threat' : ''), onclick: function () { K.actions.openPlayer(p.id); } }, p.name + ' (' + ui.pointsText(p) + ')')]; }))));
         });
         if (hunters.size) items.appendChild(h('p', { class: 'muted small' }, t('In red: players hunting a member of the alliance.')));
         cols.appendChild(items);
@@ -323,6 +349,7 @@
           if (!st.players.length) { body.appendChild(h('p', { class: 'empty' }, t('Classes are built from the player sheets (year, department, TD, TP, option, language group).'))); return; }
           var q = L.norm(view.q), years = {}, otherLanguages = {}, unknown = t('Not set');
           st.players.forEach(function (p) {
+            if (p.is_mystery) return;   // clues, not a real member of a class
             if (view.year && p.year !== view.year) return;
             if (view.alive && dead.has(p.id)) return;
             var y = p.year || t('Unknown year'), keys;

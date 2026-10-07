@@ -86,7 +86,7 @@
     var target = round && !dead ? L.resolveTarget(st, round.id, p.id) : null, hunter = round && !dead ? L.resolveHunter(st, round.id, p.id) : null;
     var targetPlayer = target && target.id && store.player(target.id);
     return h('section', { class: 'panel me' },
-      h('div', { class: 'me-head' }, ui.avatar(p), h('div', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name), h('span', { class: 'row-sub' }, dead ? t('Dead') : K.n(p.points || 0, '{n} pt', '{n} pts'))),
+      h('div', { class: 'me-head' }, ui.avatar(p), h('div', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name), h('span', { class: 'row-sub' }, dead ? t('Dead') : ui.pointsText(p))),
         h('div', { class: 'me-actions' },
           h('button', { type: 'button', class: 'btn', onclick: function () { open(p.id); } }, t('My sheet')),
           !dead && store.canEdit() ? h('button', { type: 'button', class: 'btn btn-danger', onclick: function () { K.actions.killDialog(p.id); } }, t('I am dead')) : null)),
@@ -98,6 +98,19 @@
           h('button', { type: 'button', class: 'linkish small', onclick: function () { K.actions.catchDialog(targetPlayer.id); } }, t('When to catch them'))) : null), ui.schedule(targetPlayer, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.'))) : null);
   }
 
+  /* The latest intel on living players, every sheet together (nothing when there is none). */
+  function intelPanel(st) {
+    var dead = L.deadSet(st), list = (st.intel || []).filter(function (x) { return !dead.has(x.player_id) && store.player(x.player_id); })
+      .sort(function (a, b) { return Date.parse(b.seen_at) - Date.parse(a.seen_at); }).slice(0, 6);
+    if (!list.length) return null;
+    return h('section', { class: 'panel intel-panel' }, h('h2', {}, t('Latest intel')),
+      list.map(function (x) {
+        var p = store.player(x.player_id);
+        return h('button', { type: 'button', class: 'row row-btn', onclick: function () { K.actions.openPlayer(p.id); } }, ui.avatar(p, 'sm'),
+          h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name), h('span', { class: 'row-sub' }, x.text),
+            h('span', { class: 'row-sub muted' }, [x.place, ui.ago(x.seen_at), x.author].filter(Boolean).join(' · '))));
+      }));
+  }
   /* What threatens the alliance right now (K.logic.dangerAlerts), most serious first; nothing when all is calm. */
   function alertsPanel(st) {
     var list = L.dangerAlerts(st);
@@ -106,7 +119,7 @@
     function when(b) { return K.logic.bonusStatus(b) === 'active' ? t('until {date}', { date: ui.whenShort(b.ends_at) }) : t('from {date}', { date: ui.whenShort(b.starts_at) }); }
     var ICON = { high: '!', warn: '!', info: 'i' }, groups = [];
     var cutthroats = (st.settings.shop || []).filter(function (i) { return /coupe/i.test(i.name); }).sort(function (a, b) { return (b.price || 0) - (a.price || 0); });
-    function pts(id) { var p = store.player(id); return (p && p.points) || 0; }
+    function pts(id) { var p = store.player(id); return p ? K.logic.pointsRange(st, p).max : 0; }   // at most: a kill with a weapon of unknown difficulty may count more
     function priced(i) { return t('a {bonus} ({price} pts)', { bonus: i.name, price: i.price || 0 }); }
     function afford(points) {   // "can afford a Super Coupe-Gorge (8 pts) or a Coupe-Gorge (6 pts)", or what is missing for the cheapest
       var can = cutthroats.filter(function (i) { return points >= (i.price || 0); });
@@ -123,11 +136,13 @@
     return h('section', { class: 'panel alerts', role: 'status' }, h('h2', {}, t('Alerts'), h('small', { class: 'muted' }, ' ' + groups.length)),
       groups.map(function (g) {
         var head = g.kind === 'immune' ? [t('The target of') + ' ', who(g.allyId), ', ', who(g.otherId), ', ' + t('is immune') + ' ', h('span', { class: 'muted' }, when(g.reasons[0].bonus))]
-          : [who(g.otherId), ' ', h('span', { class: 'muted' }, '(' + K.n(pts(g.otherId), '{n} pt', '{n} pts') + ')'), ' ' + t('hunts') + ' ', who(g.allyId)];
+          : [who(g.otherId), ' ', h('span', { class: 'muted' }, '(' + ui.pointsText(store.player(g.otherId) || {}) + ')'), ' ' + t('hunts') + ' ', who(g.allyId)];
         var lines = g.kind === 'immune' ? [] : g.reasons.filter(function (a) { return a.kind !== 'rich'; }).map(function (a) {
           return h('li', {}, a.kind === 'cutthroat' ? [t('has a {bonus}', { bonus: a.bonus.name }) + ' ', h('span', { class: 'muted' }, when(a.bonus))] : t('is marked dangerous'));
         });
-        if (g.kind === 'hunter' && cutthroats.length) lines.push(h('li', {}, afford(pts(g.otherId))));   // always: what their points can buy
+        var other = store.player(g.otherId);
+        if (g.kind === 'hunter' && other && other.is_mystery) lines.push(h('li', {}, h('span', { class: 'muted' }, t('Not identified yet: their points are unknown.'))));
+        else if (g.kind === 'hunter' && cutthroats.length) lines.push(h('li', {}, afford(pts(g.otherId))));   // always: what their points can buy
         return h('div', { class: 'alert alert-' + g.level }, h('span', { class: 'alert-icon', 'aria-hidden': 'true' }, ICON[g.level]),
           h('div', { class: 'alert-body' }, h('p', {}, head), lines.length ? h('ul', { class: 'alert-reasons' }, lines) : null));
       }));
@@ -204,6 +219,8 @@
         var official = Number(set.official_players) || 0, school = Number(set.school_total) || 0;
         var alerts = alertsPanel(st);
         if (alerts) root.appendChild(alerts);
+        var news = intelPanel(st);
+        if (news) root.appendChild(news);
         var mine = meBar(st, round);
         if (mine) root.appendChild(mine);
         root.appendChild(h('section', { class: 'panel hero' },
@@ -281,7 +298,7 @@
           visibleBoard.forEach(function (r) {
             if (r.admin) { var adminLine = boardRow(null, h('span', { class: 'leader-admin-mark', 'aria-hidden': 'true' }, K.icon('settings')), [t('Admin'), t('Administrative eliminations')], scoreOf(r.kills), showAdminEliminations); adminLine.classList.add('leaderboard-admin'); return lb.appendChild(adminLine); }
             var p = store.player(r.id); if (!p) return;
-            lb.appendChild(boardRow(r.rank, ui.avatar(p, 'sm'), [p.name, K.n(p.points || 0, '{n} pt', '{n} pts') + (dead.has(p.id) ? ' · ' + t('dead') : '')], scoreOf(r.kills), function () { K.actions.openPlayer(p.id); }));
+            lb.appendChild(boardRow(r.rank, ui.avatar(p, 'sm'), [p.name, ui.pointsText(p) + (dead.has(p.id) ? ' · ' + t('dead') : '')], scoreOf(r.kills), function () { K.actions.openPlayer(p.id); }));
           });
           var killers = board.filter(function (r) { return !r.admin; }).length;
           if (killers > 10) lb.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAllBoard = !showAllBoard; refresh(); } }, showAllBoard ? t('Show less') : t('Show all ({n})', { n: killers })));
@@ -291,7 +308,7 @@
           general.slice(0, showAllBoard ? general.length : 10).forEach(function (r) {
             var p = store.player(r.id);
             if (!p) return;
-            lb.appendChild(boardRow(r.alive ? null : r.rank, ui.avatar(p, 'sm'), [p.name, K.n(p.points || 0, '{n} pt', '{n} pts')],
+            lb.appendChild(boardRow(r.alive ? null : r.rank, ui.avatar(p, 'sm'), [p.name, ui.pointsText(p)],
               r.alive ? h('span', { class: 'tag tag-alive' }, t('Still in the game')) : null, function () { K.actions.openPlayer(p.id); }));
           });
           if (!general.length) lb.appendChild(h('p', { class: 'empty' }, t('No players yet')));

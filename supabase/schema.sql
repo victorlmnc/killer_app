@@ -122,6 +122,19 @@ create table if not exists public.kills (
 alter table public.kills add column if not exists killer_weapons text;
 alter table public.kills add column if not exists admin_reason text check (admin_reason is null or admin_reason in ('cheating', 'other'));
 
+-- Intel feed: dated, signed pieces of information on a player ("seen at the library with a cushion"), maybe a place.
+create table if not exists public.intel (
+  id         uuid primary key default gen_random_uuid(),
+  player_id  uuid not null references public.players(id) on delete cascade,
+  text       text not null default '',
+  place      text default '',
+  lat        double precision,
+  lng        double precision,
+  seen_at    timestamptz not null default now(),
+  author     text default '',
+  created_at timestamptz not null default now()
+);
+
 -- Shared flats: a name, an address (and the apartment building it is in, if any); its members' sheets follow it.
 create table if not exists public.homes (
   id         uuid primary key default gen_random_uuid(),
@@ -137,6 +150,8 @@ alter table public.players add column if not exists home_id uuid references publ
 -- the same for student residences (kind 'residence'); a player may note their apartment number
 alter table public.homes add column if not exists kind text not null default 'coloc' check (kind in ('coloc', 'residence'));
 alter table public.players add column if not exists apartment text default '';
+-- a "mystery" sheet: someone we only know a few things about (year, department, groups), merged into the real sheet once known
+alter table public.players add column if not exists is_mystery boolean not null default false;
 
 -- Each account can be linked to its own player sheet (quick actions: my target, my hunter, I am dead).
 alter table public.accounts add column if not exists player_id uuid references public.players(id) on delete set null;
@@ -150,6 +165,10 @@ create table if not exists public.weapons (
 );
 alter table public.weapons add column if not exists owned boolean not null default false;
 alter table public.weapons add column if not exists note text default '';
+-- a weapon whose difficulty nobody knows yet ('inconnue'); a kill made with one counts the easy points until it is known
+alter table public.weapons drop constraint if exists weapons_difficulty_check;
+alter table public.weapons add constraint weapons_difficulty_check check (difficulty in ('facile', 'difficile', 'inconnue'));
+alter table public.kills add column if not exists weapon_level text check (weapon_level is null or weapon_level in ('facile', 'difficile', 'inconnue'));
 
 -- Shop bonuses bought by players: what, when it takes effect and until when (ends_at null = one-off, e.g. a reveal).
 create table if not exists public.bonuses (
@@ -196,7 +215,7 @@ alter table public.events add column if not exists details jsonb;
 do $$
 declare t text;
 begin
-  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots', 'bonuses', 'homes'] loop
+  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots', 'bonuses', 'homes', 'intel'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "membres" on public.%I', t);
     execute format('drop policy if exists "read" on public.%I', t);
@@ -264,6 +283,7 @@ begin
     'spots',   coalesce((select jsonb_agg(to_jsonb(x)) from public.spots x), '[]'::jsonb),
     'bonuses', coalesce((select jsonb_agg(to_jsonb(x)) from public.bonuses x), '[]'::jsonb),
     'homes',   coalesce((select jsonb_agg(to_jsonb(x)) from public.homes x), '[]'::jsonb),
+    'intel',   coalesce((select jsonb_agg(to_jsonb(x)) from public.intel x), '[]'::jsonb),
     'settings', coalesce((select jsonb_object_agg(key, value) from public.settings), '{}'::jsonb))
   returning id into new_id;
   delete from public.game_backups where taken_at < now() - interval '14 days';
@@ -311,7 +331,7 @@ create policy "photos delete" on storage.objects for delete to authenticated usi
 do $$
 declare t text;
 begin
-  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'settings', 'events', 'spots', 'accounts', 'bonuses', 'homes'] loop
+  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'settings', 'events', 'spots', 'accounts', 'bonuses', 'homes', 'intel'] loop
     if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
       execute format('alter publication supabase_realtime add table public.%I', t);
     end if;

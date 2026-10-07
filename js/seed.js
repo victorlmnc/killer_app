@@ -239,6 +239,8 @@
     [[40, 41], [41, 24]].forEach(function (e) { L(r1, e[0], e[1]); });
     X(r1, 7, 20, 'Écocup', 2, 3); X(r1, 40, 41, 'Tronçonneuse', 5, 2); X(r1, null, 19, '', 0, 1);
 
+    // nobody knows yet whether the lighter is easy or hard: that kill counts 1 point for now (1 or 3)
+    kills.filter(function (k) { return k.weapon === 'Briquet'; })[0].weapon_level = 'inconnue';
     var now = Date.now();
     var k1 = kills.filter(function (k) { return k.victim_id === P[20].id; })[0]; k1.note = 'Outside the canteen at 12:40, he was alone. Video sent to the organiser.';
     links.filter(function (l) { return l.hunter_id === P[10].id; })[0].source = 'Seen on his phone during a lecture';
@@ -258,10 +260,17 @@
     var settings = JSON.parse(JSON.stringify(K.seed.settings));
     settings.game_name = 'Killer (demo)'; settings.official_players = 48; settings.school_total = 440; settings.depts = ['A', 'B'];
     settings.map_center = { lat: 47.0833, lng: 2.4 };
-    return { players: players, rounds: [r0, r1], links: links, kills: kills, events: events, settings: settings, homes: [port, tanneurs],
+    // a few pieces of intel: one seen two hours ago at the canteen shows on the map
+    var ago = function (h) { return new Date(now - h * 36e5).toISOString(); };
+    var intel = [
+      { id: uid(), player_id: P[22].id, text: 'Queuing at the canteen with two friends, black backpack.', place: 'Canteen', lat: 47.0809, lng: 2.4149, seen_at: ago(2), author: 'Arsène', created_at: ago(2) },
+      { id: uid(), player_id: P[12].id, text: 'Leaves the gym every Tuesday around 6 pm, alone.', place: 'Gym', lat: null, lng: null, seen_at: ago(26), author: 'Arsène', created_at: ago(26) },
+      { id: uid(), player_id: P[22].id, text: 'Said in the group chat they never go out after 10 pm.', place: '', lat: null, lng: null, seen_at: ago(50), author: 'Arsène', created_at: ago(50) }
+    ];
+    return { players: players, rounds: [r0, r1], links: links, kills: kills, events: events, settings: settings, homes: [port, tanneurs], intel: intel,
       spots: [{ id: uid(), name: 'Campus gate', note: 'Everybody walks through it between classes.', address: '', lat: 47.0822, lng: 2.4163 },
         { id: uid(), name: 'Canteen', note: 'Busy between 12:00 and 13:00.', address: '', lat: 47.0809, lng: 2.4149 }],
-      weapons: WEAPONS.map(function (w) { return { id: uid(), name: w[0], difficulty: w[1] }; }),
+      weapons: WEAPONS.map(function (w) { return { id: uid(), name: w[0], difficulty: w[1] }; }).concat([{ id: uid(), name: 'Briquet', difficulty: 'inconnue' }]),
       members: [{ email: 'demo@local', name: 'Demo', role: 'admin', tabs: null, avatar_path: null }] };
   };
 })();

@@ -27,6 +27,7 @@
     lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     download: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 20h16"/>',
     upload: '<path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 20h16"/>',
+    share: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/>',
     print: '<path d="M6 9V4h12v5"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M7 14h10v6H7z"/>'
   };
   K.icon = function (name, cls) {
