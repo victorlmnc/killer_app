@@ -250,6 +250,16 @@ with sync_playwright() as p:
     held = pg.locator('dialog[open] select[aria-label="Arme utilisée"]')
     expect(held.locator('option')).to_have_count(3); held.select_option('Lacet')
     expect(pg.locator('dialog[open] .wpick')).to_be_hidden()
+    diff = pg.locator('dialog[open] select:has(option[value="inconnue"])')
+    lv = pg.evaluate("K.store.state.weapons.find(w => w.name === 'Lacet').difficulty")
+    assert diff.input_value() == lv, 'the catalogue difficulty of the chosen weapon'
+    other = 'difficile' if lv != 'difficile' else 'facile'
+    diff.select_option(other)   # the menu shows the difficulty chosen for this kill, in its colour
+    expect(held.locator('option:checked')).to_have_text('Lacet (%s)' % other); expect(held).to_have_class('lvl-' + other)
+    held.select_option('__other'); pg.locator('dialog[open] .wpick input').fill('Machin inconnu'); pg.locator('dialog[open] .wpick input').press('Enter')
+    assert diff.input_value() == 'inconnue', 'a weapon the catalogue does not know: "don\'t know"'
+    diff.select_option('difficile'); expect(pg.locator('dialog[open] .wpick-tags .tag')).to_have_class('tag tag-weapon tag-difficile tag-sm')
+    pg.locator('dialog[open] .wpick-remove').click(); held.select_option('Lacet')
     pg.locator('dialog[open]').get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
     assert pg.evaluate("v => K.store.state.kills.find(k => k.victim_id === v).weapon", w['victim']) == 'Lacet'
 

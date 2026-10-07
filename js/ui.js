@@ -250,8 +250,8 @@
     var r = K.logic.pointsRange(K.store.state, p);
     return r.max > r.min ? t('{a} to {b} pts', { a: r.min, b: r.max }) : K.n(r.min, '{n} pt', '{n} pts');
   };
-  ui.weaponTag = function (name, small) {
-    var d = ui.weaponDifficulty(name), label = d === 'difficile' ? t('hard') : d === 'facile' ? t('easy') : t('unknown difficulty');
+  ui.weaponTag = function (name, small, level) {   // level: a difficulty to show instead of the catalogue's
+    var d = level !== undefined ? (level === 'facile' || level === 'difficile' ? level : null) : ui.weaponDifficulty(name), label = d === 'difficile' ? t('hard') : d === 'facile' ? t('easy') : t('unknown difficulty');
     return h('span', { class: 'tag tag-weapon tag-' + (d || 'none') + (small ? ' tag-sm' : ''), title: name + ' (' + label + ')' },
       K.icon('weapons', 'ic-sm'), name, small ? h('span', { class: 'sr-only' }, ' (' + label + ')') : h('span', { class: 'tag-weapon-level' }, label));
   };
@@ -268,15 +268,16 @@
     var list = h('ul', { class: 'wpick-list', role: 'listbox', id: id, hidden: true });
     function say(text) { msg.textContent = text; msg.hidden = !text; }
     function full() { return opts.max && names.length >= opts.max; }
+    function fullText() { return opts.max === 1 ? t('Remove it to pick another one') : t('{n} weapons at most', { n: opts.max }); }
     function changed() {
       drawTags();
-      input.disabled = full(); input.placeholder = full() ? t('{n} weapons at most', { n: opts.max }) : t('Add a weapon…');
+      input.disabled = full(); input.placeholder = full() ? fullText() : t('Add a weapon…');
       if (opts.onChange) opts.onChange();
     }
     function drawTags() {
       ui.clear(tags);
       names.forEach(function (n, i) {
-        tags.appendChild(h('span', { class: 'wpick-item' }, ui.weaponTag(n, true),
+        tags.appendChild(h('span', { class: 'wpick-item' }, ui.weaponTag(n, true, opts.levelOf ? opts.levelOf(n) : undefined),
           h('button', { type: 'button', class: 'wpick-remove', 'aria-label': t('Remove {w}', { w: n }), onclick: function () { names.splice(i, 1); say(''); changed(); input.focus(); } }, '×')));
       });
     }
@@ -322,9 +323,9 @@
       else if (e.key === 'Escape' && open) { e.preventDefault(); e.stopPropagation(); close(); }
       else if (e.key === 'Backspace' && !input.value && names.length) { names.pop(); say(''); changed(); }
     }
-    drawTags(); input.disabled = full(); input.placeholder = full() ? t('{n} weapons at most', { n: opts.max }) : t('Add a weapon…');
+    drawTags(); input.disabled = full(); input.placeholder = full() ? fullText() : t('Add a weapon…');
     return {
-      el: h('div', { class: 'wpick' }, tags, h('div', { class: 'wpick-search' }, input, list), msg), input: input,
+      el: h('div', { class: 'wpick' }, tags, h('div', { class: 'wpick-search' }, input, list), msg), input: input, redraw: drawTags,
       names: function () { return names.slice(); },
       get value() { var pending = input.value.trim() && resolve(input.value), all = names.slice(); if (pending && !all.some(function (n) { return L.norm(n) === L.norm(pending); })) all.push(pending); return all.join(', '); }
     };

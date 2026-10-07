@@ -646,6 +646,7 @@
   "Remove {w}": "Retirer {w}",
   "Remove access?": "Retirer l'accès ?",
   "Remove from alliance": "Retirer de l'alliance",
+  "Remove it to pick another one": "Retire-la pour en choisir une autre",
   "Remove link": "Retirer le lien",
   "Remove photo": "Retirer la photo",
   "Remove {y}": "Retirer {y}",

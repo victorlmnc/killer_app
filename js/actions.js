@@ -159,8 +159,8 @@
         /* the weapon: a menu of what the killer holds, and below a search in the catalogue (or a new weapon) for
            anything else, e.g. when their sheet is wrong. Killer unknown or without weapons: the search only. */
         var held = ui.select([], '', { 'aria-label': t('Weapon used'), onchange: function () { showPicker(); onWeapon(); } });
-        var picker = ui.weaponPicker('', { max: 1, onChange: onWeapon });
-        picker.input.addEventListener('input', onWeapon);   // a catalogue name typed in full sets the difficulty too
+        var picker = ui.weaponPicker('', { max: 1, onChange: onWeapon, levelOf: function () { return diff.value; } });   // the tag takes the colour of the chosen difficulty
+        picker.input.addEventListener('input', function () { if (catalog.get(L.norm(picker.value.trim()))) onWeapon(); });   // a catalogue name typed in full sets the difficulty too
         var heldField = ui.field(t('Weapon'), held), pickerField = h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Another weapon')), picker.el,
           h('span', { class: 'field-hint' }, t('Search the catalogue, or type a new weapon.')));
         var OTHER = '__other';
@@ -170,7 +170,19 @@
           pickerField.querySelector('.field-label').textContent = heldField.hidden ? t('Weapon') : t('Another weapon');
         }
         var sc = L.scoring(st);   // the scoring set in Settings
-        var diff = ui.select(ui.levelOptions(true), 'facile', { onchange: total });
+        var diff = ui.select(ui.levelOptions(true), 'facile', { onchange: function () { paintLevel(); total(); } });
+        function levelWord(d) { return d === 'difficile' ? t('hard') : d === 'facile' ? t('easy') : t('unknown difficulty'); }
+        /* the weapon shows the difficulty chosen below: its label and colour in the menu, its tag in the search */
+        function paintLevel() {
+          Array.prototype.forEach.call(held.options, function (o) {
+            if (o.value === OTHER) return;
+            var d = o.value === held.value ? diff.value : catalog.get(L.norm(o.value));
+            o.textContent = o.value + ' (' + levelWord(d) + ')';
+          });
+          held.classList.remove('lvl-facile', 'lvl-difficile', 'lvl-inconnue');
+          if (held.value !== OTHER) held.classList.add('lvl-' + diff.value);
+          picker.redraw();
+        }
         var bonus = ui.select(ui.bonusOptions(), '0', { onchange: total });
         var fb = h('input', { type: 'checkbox', checked: false, onchange: total });
         var mates = h('input', { type: 'number', min: '0', max: '20', value: '0', inputmode: 'numeric', oninput: total });
@@ -193,7 +205,7 @@
           noKiller.hidden = !!k;
           var mine = L.weaponList(k && k.weapons), keep = held.value;
           ui.clear(held);
-          mine.forEach(function (w) { var d = ui.weaponDifficulty(w); held.appendChild(h('option', { value: w }, w + (d ? ' (' + (d === 'difficile' ? t('hard') : t('easy')) + ')' : ''))); });
+          mine.forEach(function (w) { held.appendChild(h('option', { value: w }, w)); });   // labels: paintLevel
           held.appendChild(h('option', { value: OTHER }, t('Another weapon (catalogue or new)…')));
           held.value = mine.indexOf(keep) >= 0 || keep === OTHER ? keep : mine.length ? mine[0] : OTHER;
           heldField.hidden = !mine.length;
@@ -203,7 +215,8 @@
           ui.pickPlayer({ title: t('Who killed them?'), filter: function (p) { return p.id !== victimId && !act.isDead(p.id); }, extra: [{ label: t('Killer unknown for now'), value: null }] })
             .then(function (v) { if (v !== undefined) { killerId = v; refreshKiller(); } });
         }
-        function onWeapon() { var d = catalog.get(L.norm(weaponValue())); if (d) diff.value = d; total(); }
+        /* a weapon of the catalogue brings its difficulty; a weapon it does not know starts as "don't know" */
+        function onWeapon() { var w = weaponValue(), d = catalog.get(L.norm(w)); if (d) diff.value = d; else if (w) diff.value = 'inconnue'; paintLevel(); total(); }
         function total() {
           var n = L.killPoints({ difficulty: diff.value, bonus: bonus.value, firstBlood: fb.checked, mates: mates.value }, sc);
           sum.textContent = diff.value === 'inconnue' ? t('{a} or {b}', { a: n, b: n + L.levelGap(sc) }) + ' (' + t('settled once the difficulty is known') + ')' : String(n);
