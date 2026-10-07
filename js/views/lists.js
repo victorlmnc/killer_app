@@ -82,7 +82,7 @@
           list.appendChild(h('button', { type: 'button', class: 'row row-btn row-player' + (d ? ' is-dead' : ''), onclick: function () { K.actions.openPlayer(p.id); } },
             ui.avatar(p), h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name),
               h('span', { class: 'row-sub' }, d ? t('Dead') : tg ? t('Hunts {name}', { name: tg.name }) : t('Unknown target')),
-              p.weapons && !d ? h('span', { class: 'row-sub tags' }, L.weaponList(p.weapons).map(function (w) { return ui.weaponTag(w, true); })) : null,
+              p.weapons && !d ? h('span', { class: 'row-sub tags' }, ui.weaponsInOrder(p.weapons).map(function (w) { return ui.weaponTag(w, true); })) : null,
               d ? null : ui.bonusTags(p, true)),
             h('span', { class: 'row-side' }, h('span', { class: 'tags' }, p.is_mystery ? h('span', { class: 'tag tag-mystery' }, t('Mystery player')) : null, p.is_ally ? h('span', { class: 'tag tag-ally' }, t('Alliance')) : null, ui.statusTag(p, true), ui.yearTag(p)),
               h('span', { class: 'muted small' }, ui.pointsText(p) + (n ? ', ' + K.n(n, '{n} kill', '{n} kills') : '')))));

@@ -358,6 +358,12 @@ with sync_playwright() as p:
     got = pg.evaluate("a => [K.store.state.kills.find(k => k.id === a.kill).points, K.store.state.kills.find(k => k.id === a.kill).weapon_level, K.store.player(a.killer).points]", c)
     assert got == [c['kp'] - c['gap'], 'facile', c['pp'] - c['gap']], (got, c)
 
+    step('players list: the easy weapon first, then the hard one')
+    pid4 = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st), a = st.players.filter(x => !dead.has(x.id) && !x.is_mystery && !(x.weapons || '').trim()); const easy = st.weapons.find(w => w.difficulty === 'facile' && !K.logic.weaponHolders(st, w.name).length).name, hard = st.weapons.find(w => w.difficulty === 'difficile' && !K.logic.weaponHolders(st, w.name).length).name; a[0].weapons = hard + ', ' + easy; K.store.emit(); return a[0].id; })()")
+    pg.goto(URL + '#/players'); pg.locator('.filterbar .segmented button', has_text='Tous').click()
+    order = pg.evaluate("id => { const st = K.store.state, p = K.store.player(id); return [...document.querySelectorAll('.row-player')].find(r => r.textContent.includes(p.name)).querySelectorAll('.tag-weapon')[0].className; }", pid4)
+    assert 'tag-facile' in order, order
+
     step('deleting a reroll with kills: back exactly where the game was before it')
     snap = "(() => { const st = K.store.state, dead = [...K.logic.deadSet(st)].sort(); return JSON.stringify({ dead, round: K.logic.currentRound(st).name, players: st.players.map(p => [p.id, p.points || 0, K.logic.weaponList(p.weapons).join(', ')]) }); })()"
     before = pg.evaluate(snap)

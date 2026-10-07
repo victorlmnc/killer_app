@@ -250,6 +250,12 @@
     var r = K.logic.pointsRange(K.store.state, p);
     return r.max > r.min ? t('{a} to {b} pts', { a: r.min, b: r.max }) : K.n(r.min, '{n} pt', '{n} pts');
   };
+  /* The weapons of a sheet in a fixed order: the easy one, then the hard one, then those of unknown difficulty */
+  ui.weaponsInOrder = function (text) {
+    var rank = { facile: 0, difficile: 1 };
+    return K.logic.weaponList(text).map(function (w, i) { var d = ui.weaponDifficulty(w); return { w: w, r: d in rank ? rank[d] : 2, i: i }; })
+      .sort(function (a, b) { return a.r - b.r || a.i - b.i; }).map(function (x) { return x.w; });
+  };
   ui.weaponTag = function (name, small, level) {   // level: a difficulty to show instead of the catalogue's
     var d = level !== undefined ? (level === 'facile' || level === 'difficile' ? level : null) : ui.weaponDifficulty(name), label = d === 'difficile' ? t('hard') : d === 'facile' ? t('easy') : t('unknown difficulty');
     return h('span', { class: 'tag tag-weapon tag-' + (d || 'none') + (small ? ' tag-sm' : ''), title: name + ' (' + label + ')' },

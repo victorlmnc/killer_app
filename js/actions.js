@@ -796,7 +796,7 @@
         body.appendChild(h('div', { class: 'sched-block' }, h('span', { class: 'relation-label' }, t('Timetable')), ui.schedule(p)));
       }
 
-      var weapons = L.weaponList(p.weapons);
+      var weapons = ui.weaponsInOrder(p.weapons);   // easy, then hard
       if (weapons.length || edit) body.appendChild(h('div', { class: 'tags sheet-weapons' }, weapons.map(function (w) { return ui.weaponTag(w); }),
         edit ? h('button', { type: 'button', class: 'btn btn-sm sheet-weapons-edit', onclick: function () { act.editWeapons(p.id); } }, K.icon(weapons.length ? 'edit' : 'plus', 'ic-sm'), weapons.length ? t('Change the weapons') : t('Add a weapon')) : null));
       var past = L.pastWeapons(st, p.id);   // what they held before a reroll emptied the sheet
