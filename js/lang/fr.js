@@ -557,7 +557,7 @@
   "Paste rows copied from a spreadsheet (with the header row) or open a CSV file. Each column is then matched to a field; unmatched columns are ignored.": "Colle des lignes copiées depuis un tableur (avec la ligne d'en-têtes) ou ouvre un fichier CSV. Chaque colonne est ensuite associée à un champ ; les colonnes non associées sont ignorées.",
   "People in the school": "Effectif de l'école",
   "Photo": "Photo",
-  "Photo and text copied: some apps paste only one of them, \"Share…\" sends both.": "Photo et texte copiés : certaines apps n'en collent qu'un des deux, « Partager… » envoie les deux.",
+  "Photo (with \"Share…\")": "Photo (avec « Partager… »)",
   "Photo saved.": "Photo enregistrée.",
   "Photo upload": "Envoi de la photo",
   "Photos: {a} / {b}": "Photos : {a} / {b}",

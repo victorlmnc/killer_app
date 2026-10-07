@@ -958,25 +958,13 @@
   /* ------------------------------------------------------------ share a sheet */
   /* A sheet as a text, with its photo, to send to allies on WhatsApp, Messenger…: you choose what goes in,
      since once sent it leaves the app. */
-  function toPng(blob) {
-    return new Promise(function (ok, ko) {
-      var img = new Image(), url = URL.createObjectURL(blob);
-      img.onload = function () {
-        var c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
-        c.getContext('2d').drawImage(img, 0, 0); URL.revokeObjectURL(url);
-        c.toBlob(function (b) { if (b) ok(b); else ko(new Error('png')); }, 'image/png');
-      };
-      img.onerror = function () { URL.revokeObjectURL(url); ko(new Error('image')); };
-      img.src = url;
-    });
-  }
   act.shareSheet = function (playerId) {
     var p = store.player(playerId); if (!p) return;
     var st = store.state, roundId = act.currentRoundId(), dead = L.deadSet(st).has(p.id);
     var home = p.home_id && (st.homes || []).find(function (x) { return x.id === p.home_id; });
     var PARTS = [['class', t('Year and groups'), true], ['points', t('Points'), true], ['chain', t('Killer and target'), true], ['weapons', t('Weapons'), true],
-      ['timetable', t('Timetable now'), true], ['address', t('Address'), false], ['notes', t('Notes'), false], ['photo', t('Photo'), !!p.photo_path]];
-    var sched = null, photo = null, png = null;
+      ['timetable', t('Timetable now'), true], ['address', t('Address'), false], ['notes', t('Notes'), false], ['photo', t('Photo (with "Share…")'), !!p.photo_path]];
+    var sched = null, photo = null;
     ui.dialog({ title: t('Share {name}', { name: p.name }), render: function (body, api) {
       var boxes = {}, text = h('textarea', { rows: '9', class: 'share-text', 'aria-label': t('Text to send') });
       function on(id) { return boxes[id] && boxes[id].checked; }
@@ -1007,13 +995,8 @@
       var canShare = !!navigator.share;
       body.appendChild(h('div', { class: 'actions' },
         h('button', { type: 'button', class: 'btn', onclick: function () {
-          var value = text.value, withPhoto = on('photo') && png && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write;
-          // the photo and the text together (the app where it is pasted may keep only one of them), or the text alone
-          var copy = withPhoto ? navigator.clipboard.write([new window.ClipboardItem({ 'image/png': png, 'text/plain': new Blob([value], { type: 'text/plain' }) })])
-              .catch(function () { return navigator.clipboard.writeText(value).then(function () { withPhoto = false; }); })
-            : navigator.clipboard ? navigator.clipboard.writeText(value) : Promise.reject();
-          copy.then(function () { ui.toast(withPhoto ? t('Photo and text copied: some apps paste only one of them, "Share…" sends both.') : t('Copied: paste it in the conversation.')); },
-            function () { text.select(); ui.toast(t('Select the text and copy it.'), 'error'); });
+          // the text only: pasted, a photo would win over it in most apps ("Share…" sends both)
+          (navigator.clipboard ? navigator.clipboard.writeText(text.value) : Promise.reject()).then(function () { ui.toast(t('Copied: paste it in the conversation.')); }, function () { text.select(); ui.toast(t('Select the text and copy it.'), 'error'); });
         } }, t('Copy')),
         canShare ? h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
           var data = { title: p.name, text: text.value };
@@ -1026,7 +1009,6 @@
       var url = p.photo_path && store.photoUrl(p.photo_path);
       if (url && window.fetch && window.File) fetch(url).then(function (r) { return r.blob(); }).then(function (b) {
         photo = new File([b], L.norm(p.name).replace(/[^a-z0-9]+/g, '-') + '.' + ((b.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')), { type: b.type || 'image/jpeg' });
-        png = toPng(b);   // the clipboard only takes PNG images
       }).catch(function () {});
     } });
   };
