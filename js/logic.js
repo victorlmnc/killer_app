@@ -235,7 +235,7 @@
   function levelGap(sc) { return Math.max(0, sc.hard - sc.easy); }
   var LEVEL_GAP = levelGap(SCORING);
   function pendingKills(state, playerId) {
-    return (state.kills || []).filter(function (k) { return k.weapon_level === 'inconnue' && k.killer_id && (!playerId || k.killer_id === playerId); });
+    return (state.kills || []).filter(function (k) { return k.weapon_level === 'inconnue' && (playerId ? k.killer_id === playerId : !k.admin_reason); });   // all of them: the killer may be known later
   }
   function pointsRange(state, p) {
     var min = (p && p.points) || 0;
@@ -262,8 +262,8 @@
   function rescoreKills(state, sc) {
     var changes = [], kept = 0;
     (state.kills || []).forEach(function (k) {
-      if (k.admin_reason || !k.killer_id) return;
-      if (!hasParts(k)) { kept++; return; }
+      if (k.admin_reason) return;
+      if (!hasParts(k)) { if (k.killer_id) kept++; return; }
       var points = partsPoints(k, null, sc);
       if (points !== (k.points || 0)) changes.push({ kill: k, patch: { points: points }, killerId: k.killer_id, delta: points - (k.points || 0) });
     });

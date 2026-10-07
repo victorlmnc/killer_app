@@ -165,12 +165,12 @@
         var mates = h('input', { type: 'number', min: '0', max: '20', value: '0', inputmode: 'numeric', oninput: total });
         var when = h('input', { type: 'datetime-local', value: localIso(new Date()) });
         var note = h('textarea', { rows: '2', placeholder: t('Place, circumstances, who was there…') });
-        var sum = h('strong', {});
+        var sum = h('strong', {}), noKiller = h('p', { class: 'muted small' }, t('The killer gets these points once you say who it is (from the sheet of the victim).'));
         var scoring = h('div', { class: 'stack' },
           ui.field(t('Weapon'), weapon), options,
           h('div', { class: 'grid-2' }, ui.field(t('Difficulty'), diff), ui.field(t('Bonus'), bonus)),
           h('div', { class: 'grid-2' }, ui.field(t('Teammates (multi-kill)'), mates), h('label', { class: 'check' }, fb, t('First blood (+{n})', { n: sc.first_blood }))),
-          h('p', { class: 'muted' }, t('Points earned: '), sum));
+          h('p', { class: 'muted' }, t('Points earned: '), sum), noKiller);
         function refreshKiller() {
           ui.clear(killerBtn);
           var administrative = adminAllowed && adminKill.checked;
@@ -178,9 +178,12 @@
           killerBtn.appendChild(k ? h('span', { class: 'row-inline' }, ui.avatar(k, 'sm'), k.name) : document.createTextNode(t('Killer unknown for now')));
           killerField.hidden = administrative;
           adminReasonField.hidden = !administrative;
-          scoring.hidden = administrative || !k;
+          scoring.hidden = administrative;   // known killer or not: the weapon and how the kill was made are recorded
+          noKiller.hidden = !!k;
           ui.clear(options);
-          L.weaponList(k && k.weapons).forEach(function (w) { options.appendChild(h('option', { value: w })); });
+          // suggestions: the killer's weapons; killer unknown: every weapon in play and in the catalogue
+          var names = k ? L.weaponList(k.weapons) : st.players.filter(function (p) { return !act.isDead(p.id); }).reduce(function (a, p) { return a.concat(L.weaponList(p.weapons)); }, []).concat(st.weapons.map(function (w) { return w.name; }));
+          names.filter(function (w, i) { return names.map(L.norm).indexOf(L.norm(w)) === i; }).forEach(function (w) { options.appendChild(h('option', { value: w })); });
         }
         function pickKiller() {
           ui.pickPlayer({ title: t('Who killed them?'), filter: function (p) { return p.id !== victimId && !act.isDead(p.id); }, extra: [{ label: t('Killer unknown for now'), value: null }] })
@@ -218,9 +221,9 @@
     var adminReason = k.adminReason === 'cheating' || k.adminReason === 'other' ? k.adminReason : null;
     var killerId = adminReason ? null : k.killerId;
     var weapon = adminReason ? '' : k.weapon || '';
-    var sc = L.scoring(store.state), parts = !adminReason && killerId && k.parts ? k.parts : null;
+    var sc = L.scoring(store.state), parts = !adminReason && k.parts ? k.parts : null;   // kept even when the killer is unknown: they get the points later
     var points = adminReason ? 0 : k.points || 0;
-    var level = !adminReason && killerId && ['facile', 'difficile', 'inconnue'].indexOf(k.level) >= 0 ? k.level : null;
+    var level = !adminReason && (killerId || weapon || parts) && ['facile', 'difficile', 'inconnue'].indexOf(k.level) >= 0 ? k.level : null;
     var cat = weapon && store.state.weapons.find(function (x) { return L.norm(x.name) === L.norm(weapon); });
     if (level === 'inconnue' && cat && cat.difficulty !== 'inconnue') { level = cat.difficulty; if (level === 'difficile' && !parts) points += L.levelGap(sc); }   // the catalogue knows it
     if (parts) points = L.killPoints({ difficulty: level, bonus: parts.bonus, firstBlood: parts.firstBlood, mates: parts.mates }, sc);
@@ -451,9 +454,30 @@
     } });
   };
 
+  /* The killer of a kill is set or changed: the points of the kill move from the former killer to the new one, and
+     in the current loop the victim's weapons pass to the new killer (the former one gets theirs back). */
   act.editKill = function (kill) {
     ui.pickPlayer({ title: t('Who killed {name}?', { name: name(kill.victim_id) }), filter: function (p) { return p.id !== kill.victim_id; }, extra: [{ label: t('Unknown killer'), value: null }] })
-      .then(function (v) { if (v !== undefined) store.update('kills', kill.id, { killer_id: v, admin_reason: null }); });
+      .then(function (v) {
+        if (v === undefined || (v === kill.killer_id && !kill.admin_reason)) return;
+        var pts = kill.admin_reason ? 0 : kill.points || 0, victim = store.player(kill.victim_id), current = kill.round_id === act.currentRoundId();
+        var old = kill.killer_id && store.player(kill.killer_id), neu = v && store.player(v), patches = new Map(), killPatch = { killer_id: v, admin_reason: null };
+        function add(p, x) { patches.set(p.id, Object.assign(patches.get(p.id) || {}, x)); }
+        var same = function (a, b) { return L.weaponList(a).map(L.norm).sort().join() === L.weaponList(b).map(L.norm).sort().join(); };
+        if (old) {
+          if (pts) add(old, { points: Math.max(0, (old.points || 0) - pts) });
+          if (kill.killer_weapons != null && victim && same(old.weapons, victim.weapons)) add(old, { weapons: kill.killer_weapons });   // gets theirs back
+          killPatch.killer_weapons = null;
+        }
+        if (neu) {
+          if (pts) add(neu, { points: (neu.points || 0) + pts });
+          if (current && victim && L.weaponList(victim.weapons).length) { killPatch.killer_weapons = neu.weapons || ''; add(neu, { weapons: victim.weapons }); }
+        }
+        var jobs = [store.update('kills', kill.id, killPatch)];
+        patches.forEach(function (x, id) { jobs.push(store.update('players', id, x)); });
+        store.log(neu ? t('{a} is the killer of {b}', { a: neu.name, b: name(kill.victim_id) }) + (pts ? ' (' + K.n(pts, '{n} pt', '{n} pts') + ')' : '') : t('Killer of {name} unknown again', { name: name(kill.victim_id) }));
+        return Promise.all(jobs).then(function () { if (neu && pts) ui.toast(t('{name} gets the {n} points of this kill.', { name: neu.name, n: pts })); });
+      });
   };
   act.killAttribution = function (kill) {
     if (kill.admin_reason) return t('Administrative elimination: {reason}', { reason: t(kill.admin_reason === 'cheating' ? 'Cheating' : 'Other') });
@@ -498,7 +522,7 @@
   act.saveScoring = function (sc) {
     if (!store.isAdmin()) return Promise.resolve(false);
     var plan = L.rescoreKills(store.state, sc), gain = new Map();
-    plan.changes.forEach(function (c) { gain.set(c.killerId, (gain.get(c.killerId) || 0) + c.delta); });
+    plan.changes.forEach(function (c) { if (c.killerId) gain.set(c.killerId, (gain.get(c.killerId) || 0) + c.delta); });   // a kill without killer: its points wait for them
     var text = [plan.changes.length ? K.n(plan.changes.length, '{n} kill gets new points', '{n} kills get new points') + ', ' + K.n(gain.size, 'the points of {n} player change.', 'the points of {n} players change.') : t('No recorded kill changes points.')];
     if (plan.kept) text.push(K.n(plan.kept, '{n} kill recorded before the computed scoring keeps its points.', '{n} kills recorded before the computed scoring keep their points.'));
     return ui.confirm({ title: t('Apply the new scoring?'), text: text, action: t('Apply') }).then(function (ok) {

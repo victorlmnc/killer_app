@@ -239,6 +239,25 @@ with sync_playwright() as p:
     past = pg.locator('dialog[open] .past-weapons')
     expect(past).to_contain_text('Armes des boucles précédentes'); expect(past).to_contain_text(before['round'])
     pg.keyboard.press('Escape')
+
+    step('kill with an unknown killer: the weapon and the points are recorded; the killer gets them once named')
+    u = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), alive = st.players.filter(x => !dead.has(x.id) && !x.is_mystery);
+      const v = alive[0]; v.weapons = 'Gant'; const k = alive[1]; K.store.emit(); return { victim: v.id, victimName: v.name, killer: k.id, killerName: k.name, points: k.points || 0 }; }""")
+    pg.evaluate("id => K.actions.killDialog(id)", u['victim'])
+    dlg = pg.locator('dialog[open]').last
+    expect(dlg).to_contain_text("Killer inconnu pour l'instant")
+    dlg.locator('input[list="kill-weapons"]').fill('Parapluie')
+    dlg.locator('select:has(option[value="inconnue"])').select_option('difficile')
+    expect(dlg).to_contain_text('Le killer recevra ces points')
+    dlg.get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
+    kill = pg.evaluate("v => K.store.state.kills.find(k => k.victim_id === v)", u['victim'])
+    assert kill['killer_id'] is None and kill['weapon'] == 'Parapluie' and kill['weapon_level'] == 'difficile' and kill['points'] == 4, kill   # hard = 4 since the new scoring
+    pg.evaluate("id => K.actions.openPlayer(id)", u['victim'])
+    pg.locator('dialog[open]').get_by_role('button', name='Indiquer le killer').click()
+    pg.locator('dialog[open]').last.get_by_role('button', name=u['killerName']).first.click(); pg.wait_for_timeout(300)
+    got = pg.evaluate("a => [K.store.state.kills.find(k => k.victim_id === a.victim).killer_id, K.store.player(a.killer).points, K.store.player(a.killer).weapons]", u)
+    assert got == [u['killer'], u['points'] + 4, 'Gant'], got   # the points, and the victim's weapons in the current loop
+    pg.keyboard.press('Escape')
     assert errors == [], errors
     ctx.close()
 

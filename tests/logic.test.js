@@ -391,7 +391,7 @@ t('weapons of unknown difficulty: points range, settling the kills', () => {
   assert.equal(L.killPoints({ difficulty: 'inconnue', bonus: 1 }), 2, 'unknown: the easy points for now');
   assert.deepEqual(L.pointsRange(s, s.players[0]), { min: 4, max: 10 }, 'three kills of unknown difficulty: up to 2 more each');
   const hard = L.settleWeapon(s, 'BRIQUET', 'difficile');
-  assert.deepEqual(hard.map(x => [x.kill.id, x.patch.points, x.delta]), [['k1', 3, 2], ['k2', 8, 2]], 'same weapon whatever the spelling; a kill without killer is not pending');
+  assert.deepEqual(hard.map(x => [x.kill.id, x.patch.points, x.delta]), [['k1', 3, 2], ['k2', 8, 2], ['k4', 2, 0]], 'same weapon whatever the spelling; a kill without killer is settled too, nobody gets the points yet');
   assert.equal(L.settleWeapon(s, 'Briquet', 'facile').every(x => x.delta === 0 && x.patch.weapon_level === 'facile'), true);
   assert.deepEqual(L.settleWeapon(s, 'Briquet', 'inconnue'), [], 'still unknown: nothing to settle');
   const b = L.readBackup(JSON.stringify(L.makeBackup(s)), { uuid: () => '00000000-0000-4000-8000-' + String(Math.random()).slice(2, 14).padEnd(12, '0') });
