@@ -449,6 +449,16 @@ t('reroll: the weapons held are kept on the round that ends, by player', () => {
   assert.equal(r.data.rounds.find(x => x.name === 'Initial loop').held_weapons[a], 'Banane, Lacet', 'player ids remapped');
   assert.equal(r.data.rounds.find(x => x.name === 'Reroll 2').held_weapons, null);
 });
+t('a known weapon changes difficulty: the kills recorded with the other one are recomputed', () => {
+  const s = base();
+  s.kills = [{ id: 'k1', killer_id: 'a', victim_id: 'b', weapon: 'Chaise', weapon_level: 'difficile', bonus: 1, first_blood: false, mates: 0, points: 4 },
+    { id: 'k2', killer_id: 'c', victim_id: 'd', weapon: 'chaise', weapon_level: 'difficile', points: 3 },     // no parts: the gap
+    { id: 'k3', killer_id: 'a', victim_id: 'e', weapon: 'Chaise', points: 3 },                                // before levels were kept: left alone
+    { id: 'k4', killer_id: null, victim_id: 'f', weapon: 'Chaise', weapon_level: 'facile', bonus: 0, first_blood: false, mates: 0, points: 1 }];
+  assert.deepEqual(L.reclassWeapon(s, 'CHAISE', 'facile').map(x => [x.kill.id, x.patch.points, x.delta]), [['k1', 2, -2], ['k2', 1, -2]]);
+  assert.deepEqual(L.reclassWeapon(s, 'Chaise', 'difficile').map(x => [x.kill.id, x.patch.points, x.delta]), [['k4', 3, 0]], 'no killer yet: the kill only');
+  assert.deepEqual(L.reclassWeapon(s, 'Chaise', 'inconnue'), []);
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');

@@ -257,6 +257,18 @@
     var n = norm(name);
     return settleKills(pendingKills(state).filter(function (k) { return k.weapon && norm(k.weapon) === n; }), difficulty, scoring(state));
   }
+  /* A known weapon changes difficulty: the kills recorded with the other one -> [{ kill, patch, killerId, delta }].
+     Kills recorded before the difficulty was kept on them are left alone (we do not know how they were counted). */
+  function reclassWeapon(state, name, difficulty) {
+    if (difficulty !== 'facile' && difficulty !== 'difficile') return [];
+    var n = norm(name), sc = scoring(state), gap = levelGap(sc);
+    return (state.kills || []).filter(function (k) {
+      return !k.admin_reason && k.weapon && norm(k.weapon) === n && (k.weapon_level === 'facile' || k.weapon_level === 'difficile') && k.weapon_level !== difficulty;
+    }).map(function (k) {
+      var points = hasParts(k) ? partsPoints(k, difficulty, sc) : Math.max(0, (k.points || 0) + (difficulty === 'difficile' ? gap : -gap));
+      return { kill: k, patch: { weapon_level: difficulty, points: points }, killerId: k.killer_id, delta: k.killer_id ? points - (k.points || 0) : 0 };
+    });
+  }
   /* A new scoring: the kills whose points change -> { changes: [{ kill, patch, killerId, delta }], kept: kills recorded
      before (their parts are unknown, they keep their points) } */
   function rescoreKills(state, sc) {
@@ -979,7 +991,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, homeMembers: homeMembers, suggestedHomes: suggestedHomes, homeKind: homeKind, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, LEVEL_GAP: LEVEL_GAP, SCORING: SCORING, scoring: scoring, bonusChoices: bonusChoices, levelGap: levelGap, rescoreKills: rescoreKills, pendingKills: pendingKills, pointsRange: pointsRange, settleKills: settleKills, settleWeapon: settleWeapon, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, LEVEL_GAP: LEVEL_GAP, SCORING: SCORING, scoring: scoring, bonusChoices: bonusChoices, levelGap: levelGap, rescoreKills: rescoreKills, reclassWeapon: reclassWeapon, pendingKills: pendingKills, pointsRange: pointsRange, settleKills: settleKills, settleWeapon: settleWeapon, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, realPlayers: realPlayers, heldWeapons: heldWeapons, pastWeapons: pastWeapons, intelOf: intelOf, lastSightings: lastSightings, mysteryCandidates: mysteryCandidates, mysteryMerge: mysteryMerge, MYSTERY_CLUES: CLUES, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

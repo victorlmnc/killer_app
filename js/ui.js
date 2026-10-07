@@ -92,7 +92,7 @@
         render: function (body, api) {
           (Array.isArray(o.text) ? o.text : [o.text]).forEach(function (line) { body.appendChild(h('p', { class: 'prose' }, line)); });
           body.appendChild(h('div', { class: 'actions' },
-            h('button', { type: 'button', class: 'btn', onclick: function () { api.close(); } }, t('Cancel')),
+            h('button', { type: 'button', class: 'btn', onclick: function () { api.close(); } }, o.cancel || t('Cancel')),
             h('button', { type: 'button', class: 'btn ' + (o.danger ? 'btn-danger' : 'btn-primary'), onclick: function () { answered = true; resolve(true); api.close(); } }, o.action || t('Confirm'))));
         }
       });

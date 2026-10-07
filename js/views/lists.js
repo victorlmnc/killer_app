@@ -120,8 +120,9 @@
               var row = { name: name.value.trim(), difficulty: diff.value, owned: owned.checked, note: note.value.trim() }; if (!row.name) return name.focus();
               var twin = store.state.weapons.find(function (x) { return x !== w && L.norm(x.name) === L.norm(row.name); });
               if (twin) return ui.toast(t('"{w}" is already in the catalogue.', { w: twin.name }), 'error');
-              if (w) store.update('weapons', w.id, row).then(function () { if (row.difficulty !== w.difficulty) K.actions.settleWeapon(row.name, row.difficulty); });
-              else store.insert('weapons', row).then(function () { K.actions.settleWeapon(row.name, row.difficulty); });   // kills already made with it
+              var was = w && w.difficulty;   // read before the update: it changes the row in place
+              if (w) store.update('weapons', w.id, row).then(function () { if (row.difficulty !== was) K.actions.applyWeaponDifficulty(row.name, row.difficulty); });
+              else store.insert('weapons', row).then(function () { K.actions.applyWeaponDifficulty(row.name, row.difficulty); });   // kills already made with it
               api.close();
             } }, w ? t('Save') : t('Add the weapon'))));
         } });

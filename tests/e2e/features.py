@@ -258,6 +258,28 @@ with sync_playwright() as p:
     got = pg.evaluate("a => [K.store.state.kills.find(k => k.victim_id === a.victim).killer_id, K.store.player(a.killer).points, K.store.player(a.killer).weapons]", u)
     assert got == [u['killer'], u['points'] + 4, 'Gant'], got   # the points, and the victim's weapons in the current loop
     pg.keyboard.press('Escape')
+
+    step('a known weapon changes difficulty: its past kills are recomputed if asked, or only the next ones')
+    c = pg.evaluate("""() => { const st = K.store.state, k = st.kills.find(x => x.weapon === 'Chaise'), sc = K.logic.scoring(st);
+      return { kill: k.id, killer: k.killer_id, kp: k.points, pp: K.store.player(k.killer_id).points, gap: sc.hard - sc.easy }; }""")
+    pg.goto(URL + '#/weapons')
+    pg.locator('.weapon-cloud .chip', has_text='Chaise').first.click()
+    dlg = pg.locator('dialog[open]').last
+    dlg.locator('select').first.select_option('facile'); dlg.get_by_role('button', name='Enregistrer').click()
+    conf = pg.locator('dialog[open]').last
+    expect(conf).to_contain_text('Recalculer les kills faits avec Chaise'); expect(conf).to_contain_text('1 kill fait avec a été compté difficile')
+    conf.get_by_role('button', name='Seulement les prochains kills').click(); pg.wait_for_timeout(200)
+    assert pg.evaluate("id => K.store.state.kills.find(k => k.id === id).points", c['kill']) == c['kp'], 'only the next kills: unchanged'
+    pg.locator('.weapon-cloud .chip', has_text='Chaise').first.click()
+    dlg = pg.locator('dialog[open]').last
+    dlg.locator('select').first.select_option('difficile'); dlg.get_by_role('button', name='Enregistrer').click(); pg.wait_for_timeout(200)
+    expect(pg.locator('dialog[open]')).to_have_count(0)   # recorded as hard: nothing to recompute
+    pg.locator('.weapon-cloud .chip', has_text='Chaise').first.click()
+    dlg = pg.locator('dialog[open]').last
+    dlg.locator('select').first.select_option('facile'); dlg.get_by_role('button', name='Enregistrer').click()
+    pg.locator('dialog[open]').last.get_by_role('button', name='Recalculer').click(); pg.wait_for_timeout(300)
+    got = pg.evaluate("a => [K.store.state.kills.find(k => k.id === a.kill).points, K.store.state.kills.find(k => k.id === a.kill).weapon_level, K.store.player(a.killer).points]", c)
+    assert got == [c['kp'] - c['gap'], 'facile', c['pp'] - c['gap']], (got, c)
     assert errors == [], errors
     ctx.close()
 

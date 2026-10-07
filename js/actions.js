@@ -506,7 +506,23 @@
   act.setWeaponDifficulty = function (weapon, difficulty) {
     var key = L.norm(weapon), cat = store.state.weapons.find(function (x) { return L.norm(x.name) === key; });
     var first = cat ? (cat.difficulty !== difficulty ? store.update('weapons', cat.id, { difficulty: difficulty }) : Promise.resolve()) : store.insert('weapons', { name: weapon, difficulty: difficulty });
-    return first.then(function () { return act.settleWeapon(weapon, difficulty); });
+    return first.then(function () { return act.applyWeaponDifficulty(weapon, difficulty); });
+  };
+  /* After the catalogue: the kills made with the weapon while unknown get their points; those recorded with the other
+     difficulty are recomputed if the person agrees (otherwise only the next kills use the new one). */
+  act.applyWeaponDifficulty = function (weapon, difficulty) {
+    return act.settleWeapon(weapon, difficulty).then(function () {
+      var list = L.reclassWeapon(store.state, weapon, difficulty);
+      if (!list.length) return 0;
+      var killers = new Set(list.filter(function (x) { return x.delta; }).map(function (x) { return x.killerId; }));
+      var level = difficulty === 'difficile' ? t('hard') : t('easy'), old = difficulty === 'difficile' ? t('easy') : t('hard');
+      return ui.confirm({ title: t('Recompute the kills made with {w}?', { w: weapon }),
+        text: [K.n(list.length, '{n} kill made with it was recorded as {old}: it becomes {level}.', '{n} kills made with it were recorded as {old}: they become {level}.').replace('{old}', old).replace('{level}', level),
+          killers.size ? K.n(killers.size, 'The killer gains or loses the difference ({n} player).', 'Their killers gain or lose the difference ({n} players).') : t('No killer is known for them yet: nobody gains or loses points.')],
+        action: t('Recompute them'), cancel: t('Only the next kills') }).then(function (ok) {
+        return ok ? applySettle(list, t('{w} is {level}', { w: weapon, level: level })) : 0;
+      });
+    });
   };
   act.settleWeapon = function (weapon, difficulty) {
     var label = difficulty === 'difficile' ? t('hard') : t('easy');
