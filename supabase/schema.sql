@@ -91,6 +91,8 @@ create table if not exists public.rounds (
   position   integer not null,
   created_at timestamptz not null default now()
 );
+-- the weapons each player held when the round ended with a reroll ({ player id: "Banane, Lacet" }); a reroll empties the sheets
+alter table public.rounds add column if not exists held_weapons jsonb;
 
 -- One link = "hunter targets target" within a round. Each player has at most one target and one hunter per round.
 create table if not exists public.links (

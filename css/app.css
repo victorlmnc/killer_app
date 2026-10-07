@@ -582,6 +582,7 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 /* scoring in Settings: "from +1 to +3" */
 .range-pair { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; color: var(--muted); } .range-pair input { width: 5.5rem; }
 .kill-parts { display: block; margin-top: .15rem; }
+.past-weapons { display: grid; gap: .3rem; margin-top: .6rem; } .past-weapons p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; }
 /* intel feed */
 .intel { display: grid; gap: .55rem; margin-top: .9rem; }
 .intel-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }

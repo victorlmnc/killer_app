@@ -226,6 +226,19 @@ with sync_playwright() as p:
     expect(pg.locator('dialog[open] select:has(option[value="inconnue"])')).to_contain_text('Difficile (4 pts)')
     expect(pg.locator('dialog[open]')).to_contain_text('First blood (+6)')
     pg.keyboard.press('Escape')
+
+    step('reroll: every sheet loses its weapons, kept in the history of the loop that ends')
+    before = pg.evaluate("(() => { const st = K.store.state, cur = K.logic.currentRound(st), p = st.players.find(x => x.weapons && x.weapons.trim()); return { id: p.id, weapons: p.weapons, round: cur.name, holders: K.store.state.players.filter(x => x.weapons && x.weapons.trim()).length }; })()")
+    pg.evaluate("() => { K.actions.newRound(); }")
+    dlg = pg.locator('dialog[open]').last
+    expect(dlg).to_contain_text('Retirer les armes des %d joueurs' % before['holders'])
+    dlg.get_by_role('button', name='Créer le reroll').click(); pg.wait_for_timeout(300)
+    assert pg.evaluate("K.store.state.players.every(p => !(p.weapons || '').trim())"), 'every sheet is empty'
+    assert pg.evaluate("a => K.store.state.rounds.find(r => r.name === a.round).held_weapons[a.id]", before) == before['weapons']
+    pg.evaluate("id => K.actions.openPlayer(id)", before['id'])
+    past = pg.locator('dialog[open] .past-weapons')
+    expect(past).to_contain_text('Armes des boucles précédentes'); expect(past).to_contain_text(before['round'])
+    pg.keyboard.press('Escape')
     assert errors == [], errors
     ctx.close()
 

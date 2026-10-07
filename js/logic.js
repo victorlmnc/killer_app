@@ -497,7 +497,7 @@
   var BACKUP_FORMAT = 'killer-backup', NOW = {};
   var BACKUP_TABLES = {
     players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, status: '', home_id: '', apartment: '', is_mystery: false, photo_path: '', created_at: NOW },
-    rounds: { name: '', position: 0, created_at: NOW },
+    rounds: { name: '', position: 0, held_weapons: {}, created_at: NOW },
     links: { round_id: null, hunter_id: null, target_id: null, confidence: 'sur', source: '', created_at: NOW },
     kills: { round_id: '', killer_id: '', victim_id: null, weapon: '', weapon_level: '', bonus: 0, first_blood: false, mates: 0, points: 0, admin_reason: '', note: '', killer_weapons: null, happened_at: NOW },
     weapons: { name: '', difficulty: 'facile', owned: false, note: '' },
@@ -507,7 +507,7 @@
     intel: { player_id: null, text: '', place: '', lat: 0, lng: 0, seen_at: NOW, author: '', created_at: NOW },
     bonuses: { player_id: null, name: '', price: 0, bought_at: NOW, starts_at: NOW, ends_at: NOW, note: '', created_at: NOW }
   };
-  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1, ends_at: 1, home_id: 1, weapon_level: 1, bonus: 1, first_blood: 1, mates: 1 };   // empty -> null rather than the default
+  var NULLABLE = { lat: 1, lng: 1, photo_path: 1, round_id: 1, killer_id: 1, admin_reason: 1, details: 1, ends_at: 1, home_id: 1, weapon_level: 1, bonus: 1, first_blood: 1, mates: 1, held_weapons: 1 };   // empty -> null rather than the default
   var ENUMS = { address_type: ['normale', 'residence', 'coloc', 'immeuble'], confidence: ['sur', 'probable', 'rumeur'], difficulty: ['facile', 'difficile', 'inconnue'], weapon_level: ['facile', 'difficile', 'inconnue'], admin_reason: ['cheating', 'other'], status: ['', 'dangerous', 'priority'], kind: ['coloc', 'residence'] };
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -518,7 +518,7 @@
     if (def === NOW) { var d = new Date(v); return isNaN(d) ? now : d.toISOString(); }
     if (typeof def === 'number') { var n = Number(v); return isFinite(n) ? (key === 'lat' || key === 'lng' ? n : Math.round(n)) : (NULLABLE[key] ? null : def); }
     if (typeof def === 'boolean') return v === true || v === 'true';
-    if (key === 'details') return typeof v === 'object' ? v : null;
+    if (key === 'details' || key === 'held_weapons') return typeof v === 'object' && !Array.isArray(v) ? v : null;
     return String(v);
   }
   /* Parses and checks a backup file. Ids that are not UUIDs (demo game) get new ones so the backup also fits the
@@ -551,6 +551,11 @@
       .filter(function (l) { return l.round_id && l.hunter_id && l.target_id && l.hunter_id !== l.target_id; });
     var victims = new Set();
     data.players.forEach(function (p) { p.home_id = ref(p.home_id, 'homes'); });
+    data.rounds.forEach(function (r) {   // weapons held at a reroll: by player, ids remapped
+      if (!r.held_weapons) return;
+      var out = {}; Object.keys(r.held_weapons).forEach(function (id) { var to = ref(id, 'players'); if (to && r.held_weapons[id]) out[to] = String(r.held_weapons[id]); });
+      r.held_weapons = Object.keys(out).length ? out : null;
+    });
     data.bonuses = data.bonuses.map(function (b) { b.player_id = ref(b.player_id, 'players'); return b; }).filter(function (b) { return b.player_id; });
     data.intel = data.intel.map(function (x) { x.player_id = ref(x.player_id, 'players'); return x; }).filter(function (x) { return x.player_id && x.text.trim(); });
     data.kills = data.kills.map(function (k) { k.round_id = ref(k.round_id, 'rounds'); k.killer_id = ref(k.killer_id, 'players'); k.victim_id = ref(k.victim_id, 'players'); return k; })
@@ -576,6 +581,18 @@
      whose field ('td', 'tp', 'lang_group', 'option', or '' for everyone) contains that value. */
   var CAL_FIELDS = ['td', 'tp', 'lang_group', 'option'];
   /* Group names are compared word by word, in any order: "TD 1 MRI", "TD1 MRI" and "MRI TD1" are the same group. */
+  /* ---------- Weapons across rerolls ----------
+     A reroll mixes everything: every sheet is emptied, and what each player held is kept on the round that ends. */
+  function heldWeapons(state) {
+    var out = {};
+    state.players.forEach(function (p) { if (weaponList(p.weapons).length) out[p.id] = weaponList(p.weapons).join(', '); });
+    return out;
+  }
+  function pastWeapons(state, playerId) {
+    return sortedRounds(state).filter(function (r) { return r.held_weapons && r.held_weapons[playerId]; })
+      .map(function (r) { return { round: r, weapons: weaponList(r.held_weapons[playerId]) }; }).reverse();   // latest first
+  }
+
   /* ---------- Intel feed ----------
      The intel of a player, newest sighting first; and on the map, where each living player was last seen lately. */
   function intelOf(state, playerId) {
@@ -963,6 +980,6 @@
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
     planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, LEVEL_GAP: LEVEL_GAP, SCORING: SCORING, scoring: scoring, bonusChoices: bonusChoices, levelGap: levelGap, rescoreKills: rescoreKills, pendingKills: pendingKills, pointsRange: pointsRange, settleKills: settleKills, settleWeapon: settleWeapon, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
-    leaderboard: leaderboard, generalRanking: generalRanking, realPlayers: realPlayers, intelOf: intelOf, lastSightings: lastSightings, mysteryCandidates: mysteryCandidates, mysteryMerge: mysteryMerge, MYSTERY_CLUES: CLUES, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
+    leaderboard: leaderboard, generalRanking: generalRanking, realPlayers: realPlayers, heldWeapons: heldWeapons, pastWeapons: pastWeapons, intelOf: intelOf, lastSightings: lastSightings, mysteryCandidates: mysteryCandidates, mysteryMerge: mysteryMerge, MYSTERY_CLUES: CLUES, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

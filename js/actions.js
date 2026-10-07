@@ -593,12 +593,19 @@
       render: function (body, api) {
         if (n) body.appendChild(h('p', { class: 'prose' }, t('"{name}" is archived as it is and stays available. The new loop starts empty with the {n} players still alive.', { name: rounds[n - 1].name, n: L.stats(store.state).alive })));
         body.appendChild(ui.field(t('Round name'), input));
+        var held = L.heldWeapons(store.state), holders = Object.keys(held).length;
+        var clear = h('input', { type: 'checkbox', checked: true });
+        if (n && holders) body.appendChild(h('label', { class: 'check' }, clear, K.n(holders, 'Take the weapons off the {n} player who has some (everything is mixed); they stay in the history of the sheet.', 'Take the weapons off the {n} players who have some (everything is mixed); they stay in the history of each sheet.')));
         body.appendChild(h('div', { class: 'actions' },
           h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
           h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
             var label = input.value.trim() || t('Reroll {n}', { n: n });
+            if (n && holders && clear.checked) {   // the weapons of the ending round are kept on it, the sheets start empty
+              store.update('rounds', rounds[n - 1].id, { held_weapons: held });
+              Object.keys(held).forEach(function (id) { store.update('players', id, { weapons: '' }); });
+            }
             store.insert('rounds', { name: label, position: n ? rounds[n - 1].position + 1 : 0 });
-            store.log(t('New round: {name}', { name: label }));
+            store.log(t('New round: {name}', { name: label }) + (n && holders && clear.checked ? ' (' + K.n(holders, 'weapons taken off {n} player', 'weapons taken off {n} players') + ')' : ''));
             api.close(); ui.toast(t('Round "{name}" created.', { name: label }));
           } }, n === 0 ? t('Start') : t('Create the reroll'))));
       }
@@ -696,6 +703,9 @@
 
       var weapons = L.weaponList(p.weapons);
       if (weapons.length) body.appendChild(h('div', { class: 'tags' }, weapons.map(function (w) { return ui.weaponTag(w); })));
+      var past = L.pastWeapons(st, p.id);   // what they held before a reroll emptied the sheet
+      if (past.length) body.appendChild(h('div', { class: 'past-weapons' }, h('span', { class: 'relation-label' }, t('Weapons in previous loops')),
+        past.map(function (x) { return h('p', { class: 'small' }, h('span', { class: 'muted' }, x.round.name + ' : '), h('span', { class: 'tags' }, x.weapons.map(function (w) { return ui.weaponTag(w, true); }))); })));
       if (p.address) body.appendChild(h('p', { class: 'prose' }, h('span', { class: 'muted' }, t('Address: ')), p.address,
         L.addressType(p.address_type) !== 'normale' ? ' (' + t(L.ADDRESS_TYPES.find(function (x) { return x.id === L.addressType(p.address_type); }).label).toLowerCase() + ')' : '',
         L.hasCoords(p) ? [' ', h('a', { class: 'linkish', href: '#/map?player=' + p.id, onclick: function () { api.close(); } }, t('Show on map'))] : null));

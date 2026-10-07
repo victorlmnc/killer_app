@@ -438,6 +438,17 @@ t('scoring from Settings: points of a kill, bonus choices, a new scoring recompu
   assert.deepEqual(L.pointsRange(s, { id: 'a', points: 10 }), { min: 10, max: 13 }, 'the gap follows the scoring (5 - 2)');
   assert.deepEqual(L.settleWeapon(Object.assign(s, { kills: [Object.assign({ weapon: 'Lacet' }, s.kills[1])] }), 'lacet', 'difficile').map(x => [x.patch.points, x.delta]), [[9, 3]], 'settled with its parts: hard 5 + first blood 4');
 });
+t('reroll: the weapons held are kept on the round that ends, by player', () => {
+  const s = base();
+  s.players[0].weapons = 'Banane, Lacet'; s.players[1].weapons = ' ';
+  assert.deepEqual(L.heldWeapons(s), { a: 'Banane, Lacet' }, 'only the players who hold something');
+  s.rounds = [{ id: 'r0', name: 'Initial loop', position: 0, held_weapons: { a: 'Banane, Lacet' } }, { id: 'r1', name: 'Reroll 1', position: 1, held_weapons: { a: 'Cravate' } }, { id: 'r2', name: 'Reroll 2', position: 2 }];
+  assert.deepEqual(L.pastWeapons(s, 'a').map(x => x.round.name + ': ' + x.weapons.join('+')), ['Reroll 1: Cravate', 'Initial loop: Banane+Lacet'], 'latest first');
+  const r = L.readBackup(JSON.stringify(L.makeBackup(s)), { uuid: () => '00000000-0000-4000-8000-' + String(Math.random()).slice(2, 14).padEnd(12, '0') });
+  const a = r.data.players.find(p => p.name === 'A').id;
+  assert.equal(r.data.rounds.find(x => x.name === 'Initial loop').held_weapons[a], 'Banane, Lacet', 'player ids remapped');
+  assert.equal(r.data.rounds.find(x => x.name === 'Reroll 2').held_weapons, null);
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');
