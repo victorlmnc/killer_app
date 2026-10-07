@@ -489,6 +489,12 @@
         }
         var jobs = [store.update('kills', kill.id, killPatch)];
         patches.forEach(function (x, id) { jobs.push(store.update('players', id, x)); });
+        // the chain: the kill proves the new killer was hunting the victim, so they take over the victim's target;
+        // the former killer's link to the victim goes
+        var roundId = kill.round_id || act.currentRoundId();
+        if (old && roundId) store.state.links.filter(function (l) { return l.round_id === roundId && l.hunter_id === old.id && l.target_id === kill.victim_id; }).forEach(function (l) { jobs.push(store.remove('links', l.id)); });
+        if (neu && roundId && !store.state.links.some(function (l) { return l.round_id === roundId && l.hunter_id === neu.id && l.target_id === kill.victim_id; }))
+          jobs.push(Promise.all(jobs).then(function () { return act.setTarget(neu.id, kill.victim_id, { roundId: roundId, confidence: 'sur', source: t('kill'), silent: true }); }));
         store.log(neu ? t('{a} is the killer of {b}', { a: neu.name, b: name(kill.victim_id) }) + (pts ? ' (' + K.n(pts, '{n} pt', '{n} pts') + ')' : '') : t('Killer of {name} unknown again', { name: name(kill.victim_id) }));
         return Promise.all(jobs).then(function () { if (neu && pts) ui.toast(t('{name} gets the {n} points of this kill.', { name: neu.name, n: pts })); });
       });

@@ -273,6 +273,17 @@ with sync_playwright() as p:
     assert got == [u['killer'], u['points'] + 4, 'Gant'], got   # the points, and the victim's weapons in the current loop
     pg.keyboard.press('Escape')
 
+    step('killer named after the kill: they take over the target of the dead player')
+    s = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), r = K.logic.currentRound(st);
+      const free = st.players.filter(x => !dead.has(x.id) && !x.is_mystery && !K.logic.resolveHunter(st, r.id, x.id).id && !K.logic.resolveTarget(st, r.id, x.id).id);
+      const v = free[0], tg = free[1], k = free[2];
+      return K.actions.setTarget(v.id, tg.id, { roundId: r.id, noConfirm: true, silent: true }).then(() => K.actions.recordKill({ victimId: v.id, killerId: null })).then(() => ({ v: v.id, t: tg.id, k: k.id, kname: k.name, r: r.id })); }""")
+    pg.evaluate("id => K.actions.openPlayer(id)", s['v'])
+    pg.locator('dialog[open]').get_by_role('button', name='Indiquer le killer').click()
+    pg.locator('dialog[open]').last.get_by_role('button', name=s['kname']).first.click(); pg.wait_for_timeout(400)
+    assert pg.evaluate("a => K.logic.resolveTarget(K.store.state, a.r, a.k).id === a.t && K.logic.resolveHunter(K.store.state, a.r, a.t).id === a.k", s)
+    pg.keyboard.press('Escape')
+
     step('a known weapon changes difficulty: its past kills are recomputed if asked, or only the next ones')
     c = pg.evaluate("""() => { const st = K.store.state, k = st.kills.find(x => x.weapon === 'Chaise'), sc = K.logic.scoring(st);
       return { kill: k.id, killer: k.killer_id, kp: k.points, pp: K.store.player(k.killer_id).points, gap: sc.hard - sc.easy }; }""")
