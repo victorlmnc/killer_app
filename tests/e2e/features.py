@@ -263,6 +263,38 @@ with sync_playwright() as p:
     pg.locator('dialog[open]').get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
     assert pg.evaluate("v => K.store.state.kills.find(k => k.victim_id === v).weapon", w['victim']) == 'Lacet'
 
+    step('sheet: quick button to change or add a weapon (one easy, one hard at most)')
+    q = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st), p = st.players.find(x => !dead.has(x.id) && !x.is_mystery && !(x.weapons || '').trim()); return { id: p.id, name: p.name }; })()")
+    pg.evaluate("id => K.actions.openPlayer(id)", q['id'])
+    pg.locator('dialog[open]').get_by_role('button', name='Ajouter une arme').click()
+    dlg = pg.locator('dialog[open]').last
+    expect(dlg.locator('h2')).to_have_text('Armes de ' + q['name'])
+    dlg.locator('.wpick input').fill('Banane'); dlg.locator('.wpick input').press('Enter')
+    dlg.locator('.wpick input').fill('Objet inédit'); pg.wait_for_timeout(100); dlg.locator('.wpick-option.is-new').click()
+    expect(dlg.locator('.weapon-level')).to_have_count(2)
+    dlg.get_by_role('button', name='Enregistrer').click(); pg.wait_for_timeout(300)
+    assert pg.evaluate("id => K.store.player(id).weapons", q['id']) == 'Banane, Objet inédit'
+    assert pg.evaluate("K.store.state.weapons.find(w => w.name === 'Objet inédit').difficulty") == 'inconnue', 'a new weapon joins the catalogue as "don\'t know"'
+    expect(pg.locator('dialog[open] .sheet-weapons')).to_contain_text('Objet inédit')
+    expect(pg.locator('dialog[open] .sheet-weapons').get_by_role('button', name='Modifier les armes')).to_be_visible()
+    pg.keyboard.press('Escape')
+
+    step('kill: another difficulty than the catalogue\'s for a known weapon switches it, and its other kills on request')
+    bn = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), r = K.logic.currentRound(st), alive = st.players.filter(x => !dead.has(x.id) && !x.is_mystery);
+      const old = st.kills.find(k => k.weapon === 'Banane'), cat = st.weapons.find(w => w.name === 'Banane'), sc = K.logic.scoring(st);
+      const killer = alive[4], victim = alive[5]; killer.weapons = 'Banane'; K.store.emit();
+      return K.actions.setTarget(killer.id, victim.id, { roundId: r.id, noConfirm: true, silent: true }).then(() => ({ victim: victim.id, old: old.id, oldPts: old.points, oldKiller: old.killer_id, oldKillerPts: K.store.player(old.killer_id).points, level: cat.difficulty, gap: sc.hard - sc.easy })); }""")
+    to = 'difficile' if bn['level'] == 'facile' else 'facile'
+    pg.evaluate("id => K.actions.killDialog(id)", bn['victim'])
+    pg.locator('dialog[open] select:has(option[value="inconnue"])').select_option(to)
+    pg.locator('dialog[open]').get_by_role('button', name='Enregistrer le kill').click()
+    conf = pg.locator('dialog[open]').last
+    expect(conf).to_contain_text('Recalculer les kills faits avec Banane')
+    conf.get_by_role('button', name='Recalculer').click(); pg.wait_for_timeout(300)
+    sign = 1 if to == 'difficile' else -1
+    got = pg.evaluate("a => [K.store.state.weapons.find(w => w.name === 'Banane').difficulty, K.store.state.kills.find(k => k.id === a.old).points, K.store.player(a.oldKiller).points]", bn)
+    assert got == [to, bn['oldPts'] + sign * bn['gap'], bn['oldKillerPts'] + sign * bn['gap']], (got, bn)
+
     step('kill with an unknown killer: the weapon and the points are recorded; the killer gets them once named')
     u = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), alive = st.players.filter(x => !dead.has(x.id) && !x.is_mystery);
       const v = alive[0]; v.weapons = 'Gant'; const k = alive[1]; K.store.emit(); return { victim: v.id, victimName: v.name, killer: k.id, killerName: k.name, points: k.points || 0 }; }""")

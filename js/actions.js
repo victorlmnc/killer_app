@@ -273,9 +273,10 @@
         var text = adminReason ? t('Administrative elimination of {name}: {reason}', { name: victim.name, reason: t(adminReason === 'cheating' ? 'Cheating' : 'Other') })
           : killer ? t('{a} eliminated {b}', { a: killer.name, b: victim.name }) + (weapon ? ' (' + weapon + ')' : '') : t('{name} is dead', { name: victim.name });
         store.log(text, { type: 'kill', kill_id: killId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, killer: killer ? killer.name : '', victim: victim.name, weapon: weapon, weapon_level: level, points: points, note: k.note || '' });
-        // the weapon goes to the catalogue; a difficulty learnt from this kill settles the other kills made with it
+        // the weapon goes to the catalogue; a difficulty chosen here that differs from the catalogue's becomes the
+        // catalogue's: the kills made with it while unknown are settled, the others recomputed if the person agrees
         if (weapon && level && !cat) jobs.push(store.insert('weapons', { name: weapon, difficulty: level }));
-        else if (cat && cat.difficulty === 'inconnue' && level && level !== 'inconnue') jobs.push(Promise.all(jobs).then(function () { return act.setWeaponDifficulty(weapon, level); }));
+        else if (cat && level && level !== 'inconnue' && level !== cat.difficulty) jobs.push(Promise.all(jobs).then(function () { return act.setWeaponDifficulty(weapon, level); }));
         return Promise.all(jobs);
       }).then(function () {
         var next = killerId ? L.resolveTarget(store.state, roundId, killerId) : null;
@@ -796,7 +797,8 @@
       }
 
       var weapons = L.weaponList(p.weapons);
-      if (weapons.length) body.appendChild(h('div', { class: 'tags' }, weapons.map(function (w) { return ui.weaponTag(w); })));
+      if (weapons.length || edit) body.appendChild(h('div', { class: 'tags sheet-weapons' }, weapons.map(function (w) { return ui.weaponTag(w); }),
+        edit ? h('button', { type: 'button', class: 'btn btn-sm sheet-weapons-edit', onclick: function () { act.editWeapons(p.id); } }, K.icon(weapons.length ? 'edit' : 'plus', 'ic-sm'), weapons.length ? t('Change the weapons') : t('Add a weapon')) : null));
       var past = L.pastWeapons(st, p.id);   // what they held before a reroll emptied the sheet
       if (past.length) body.appendChild(h('div', { class: 'past-weapons' }, h('span', { class: 'relation-label' }, t('Weapons in previous loops')),
         past.map(function (x) { return h('p', { class: 'small' }, h('span', { class: 'muted' }, x.round.name + ' : '), h('span', { class: 'tags' }, x.weapons.map(function (w) { return ui.weaponTag(w, true); }))); })));
@@ -837,6 +839,82 @@
     }
   };
 
+  /* The weapons of a sheet: the picker (catalogue first) and the difficulty of each one. It belongs to the catalogue:
+     a weapon already there can be switched easy/hard (for everyone), an unknown one added or left as "don't know".
+     A player holds at most one easy and one hard weapon. Used by the sheet form and the quick weapons dialog. */
+  function weaponEditor(text) {
+    var levels = {}, levelsBox = h('div', { class: 'weapon-levels' });
+    function levelOf(w) { var k = L.norm(w); return k in levels ? levels[k].value : ui.weaponDifficulty(w) || ''; }
+    function holderOf(level, names, except) { return level ? names.find(function (n) { return L.norm(n) !== L.norm(except || '') && levelOf(n) === level; }) : null; }
+    function weaponRule(name, names) {   // why this weapon cannot be added, or null
+      if (names.length >= 2) return t('Two weapons at most: one easy and one hard.');
+      var d = ui.weaponDifficulty(name), other = holderOf(d, names);
+      return other ? t(d === 'difficile' ? 'Already a hard weapon: {w}' : 'Already an easy weapon: {w}', { w: other }) : null;
+    }
+    function levelsError(names) {
+      if (names.length > 2) return t('Two weapons at most: one easy and one hard.');
+      var e = names.filter(function (n) { return levelOf(n) === 'facile'; }).length, d = names.filter(function (n) { return levelOf(n) === 'difficile'; }).length;
+      return e > 1 ? t('Only one easy weapon per player.') : d > 1 ? t('Only one hard weapon per player.') : null;
+    }
+    function drawLevels(focusLabel) {
+      ui.clear(levelsBox);
+      var names = picker.names();
+      if (!names.length) return;
+      levelsBox.appendChild(h('span', { class: 'field-label' }, t('Difficulty of each weapon')));
+      names.forEach(function (w) {
+        var key = L.norm(w), known = ui.weaponDifficulty(w);
+        if (!(key in levels)) levels[key] = { value: known || '' };
+        var opts = ui.levelOptions(false).map(function (o) {
+          var other = holderOf(o.value, names, w);   // a difficulty already taken by the other weapon cannot be picked
+          return other ? { value: o.value, label: o.label + ' — ' + t('taken by {w}', { w: other }), disabled: levels[key].value !== o.value } : o;
+        });
+        if (!known) opts.push({ value: '', label: t("Don't know") });
+        var label = t('Difficulty of {w}', { w: w });
+        levelsBox.appendChild(h('div', { class: 'weapon-level' }, h('span', { class: 'tag tag-weapon tag-' + (levels[key].value || 'none') }, K.icon('weapons', 'ic-sm'), w),
+          ui.select(opts, levels[key].value, { 'aria-label': label, onchange: function (e) { levels[key].value = e.target.value; drawLevels(label); } })));
+      });
+      var err = levelsError(names);
+      if (err) levelsBox.appendChild(h('p', { class: 'field-hint danger', role: 'alert' }, err));
+      if (names.some(function (w) { return ui.weaponDifficulty(w); })) levelsBox.appendChild(h('span', { class: 'field-hint' }, t('Weapons already in the catalogue: changing their difficulty changes it for everyone.')));
+      if (focusLabel) Array.prototype.forEach.call(levelsBox.querySelectorAll('select'), function (el) { if (el.getAttribute('aria-label') === focusLabel) el.focus(); });
+    }
+    function saveLevels(names) {
+      var done = {};
+      names.forEach(function (w) {
+        var key = L.norm(w), lv = levels[key]; if (!lv || done[key]) return; done[key] = true;
+        var cat = store.state.weapons.find(function (x) { return L.norm(x.name) === key; });
+        if (cat && lv.value && lv.value !== cat.difficulty) act.setWeaponDifficulty(cat.name, lv.value);
+        else if (!cat) store.insert('weapons', { name: w, difficulty: lv.value || 'inconnue' });   // "don't know": in the catalogue all the same
+      });
+    }
+    var picker = ui.weaponPicker(text || '', { onChange: function () { drawLevels(); }, check: weaponRule, max: 2 });
+    drawLevels();
+    return { picker: picker, levelsBox: levelsBox, draw: drawLevels, error: levelsError, save: saveLevels };
+  }
+
+  /* Quick weapons dialog from a sheet: change or add a weapon without opening the whole form */
+  act.editWeapons = function (playerId) {
+    var p = store.player(playerId); if (!p || !store.canEdit()) return;
+    ui.dialog({ title: t('Weapons of {name}', { name: p.name }), render: function (body, api) {
+      var we = weaponEditor(p.weapons || '');
+      body.appendChild(h('div', { class: 'stack' },
+        h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('Weapons in hand')), we.picker.el, h('span', { class: 'field-hint' }, t('Pick from the catalogue; a new weapon is added only if it is not there.'))),
+        we.levelsBox));
+      body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
+        h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+          var names = L.weaponList(we.picker.value), err = we.error(names);
+          if (err) return ui.toast(err, 'error');
+          api.close(); we.save(names);
+          var text = names.join(', ');
+          if (L.weaponList(p.weapons).join(', ') !== text) {
+            store.update('players', p.id, { weapons: text });
+            store.log(t('Weapons of {name}: {w}', { name: p.name, w: text || t('none') }));
+          }
+          ui.toast(t('Weapons saved.'));
+        } }, t('Save'))));
+      setTimeout(function () { if (!we.picker.input.disabled) we.picker.input.focus(); }, 50);
+    } });
+  };
   act.editPlayer = function (playerId) {
     if (!store.canEdit()) return;
     var p = playerId ? store.player(playerId) : {}, s = store.state.settings;
@@ -844,53 +922,7 @@
       title: playerId ? t('Edit sheet') : t('Add a player'),
       render: function (body, api) {
         var typeTouched = false;
-        /* Difficulty of each weapon typed in the sheet. It belongs to the catalogue: a weapon already there can be
-           switched easy/hard (for everyone), an unknown one can be added or left as "don't know". */
-        /* A player holds at most one easy and one hard weapon. */
-        var levels = {}, levelsBox = h('div', { class: 'weapon-levels' });
-        function levelOf(w) { var k = L.norm(w); return k in levels ? levels[k].value : ui.weaponDifficulty(w) || ''; }
-        function holderOf(level, names, except) { return level ? names.find(function (n) { return L.norm(n) !== L.norm(except || '') && levelOf(n) === level; }) : null; }
-        function weaponRule(name, names) {   // why this weapon cannot be added, or null
-          if (names.length >= 2) return t('Two weapons at most: one easy and one hard.');
-          var d = ui.weaponDifficulty(name), other = holderOf(d, names);
-          return other ? t(d === 'difficile' ? 'Already a hard weapon: {w}' : 'Already an easy weapon: {w}', { w: other }) : null;
-        }
-        function levelsError(names) {
-          if (names.length > 2) return t('Two weapons at most: one easy and one hard.');
-          var e = names.filter(function (n) { return levelOf(n) === 'facile'; }).length, d = names.filter(function (n) { return levelOf(n) === 'difficile'; }).length;
-          return e > 1 ? t('Only one easy weapon per player.') : d > 1 ? t('Only one hard weapon per player.') : null;
-        }
-        function drawLevels(focusLabel) {
-          ui.clear(levelsBox);
-          var names = f.weapons.names();
-          if (!names.length) return;
-          levelsBox.appendChild(h('span', { class: 'field-label' }, t('Difficulty of each weapon')));
-          names.forEach(function (w) {
-            var key = L.norm(w), known = ui.weaponDifficulty(w);
-            if (!(key in levels)) levels[key] = { value: known || '' };
-            var opts = ui.levelOptions(false).map(function (o) {
-              var other = holderOf(o.value, names, w);   // a difficulty already taken by the other weapon cannot be picked
-              return other ? { value: o.value, label: o.label + ' — ' + t('taken by {w}', { w: other }), disabled: levels[key].value !== o.value } : o;
-            });
-            if (!known) opts.push({ value: '', label: t("Don't know") });
-            var label = t('Difficulty of {w}', { w: w });
-            levelsBox.appendChild(h('div', { class: 'weapon-level' }, h('span', { class: 'tag tag-weapon tag-' + (levels[key].value || 'none') }, K.icon('weapons', 'ic-sm'), w),
-              ui.select(opts, levels[key].value, { 'aria-label': label, onchange: function (e) { levels[key].value = e.target.value; drawLevels(label); } })));
-          });
-          var err = levelsError(names);
-          if (err) levelsBox.appendChild(h('p', { class: 'field-hint danger', role: 'alert' }, err));
-          if (names.some(function (w) { return ui.weaponDifficulty(w); })) levelsBox.appendChild(h('span', { class: 'field-hint' }, t('Weapons already in the catalogue: changing their difficulty changes it for everyone.')));
-          if (focusLabel) Array.prototype.forEach.call(levelsBox.querySelectorAll('select'), function (el) { if (el.getAttribute('aria-label') === focusLabel) el.focus(); });
-        }
-        function saveLevels(names) {
-          var done = {};
-          names.forEach(function (w) {
-            var key = L.norm(w), lv = levels[key]; if (!lv || done[key]) return; done[key] = true;
-            var cat = store.state.weapons.find(function (x) { return L.norm(x.name) === key; });
-            if (cat && lv.value && lv.value !== cat.difficulty) act.setWeaponDifficulty(cat.name, lv.value);
-            else if (!cat) store.insert('weapons', { name: w, difficulty: lv.value || 'inconnue' });   // "don't know": in the catalogue all the same
-          });
-        }
+        var we = weaponEditor(p.weapons || ''), levelsBox = we.levelsBox, levelsError = we.error, saveLevels = we.save, drawLevels = we.draw;
         /* a shared flat or a residence to pick, following the housing type */
         function homeSelect(kind) {
           var list = (store.state.homes || []).filter(function (x) { return L.homeKind(x) === kind; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });
@@ -908,7 +940,7 @@
           dept: ui.select([{ value: '', label: '—' }].concat(s.depts || []), p.dept || ''),
           td: h('input', { type: 'text', value: p.td || '', placeholder: 'TD1' }), tp: h('input', { type: 'text', value: p.tp || '', placeholder: 'TP1' }),
           option: h('input', { type: 'text', value: p.option || '' }), lang_group: h('input', { type: 'text', value: p.lang_group || '', placeholder: 'G2' }),
-          weapons: ui.weaponPicker(p.weapons || '', { onChange: function () { drawLevels(); }, check: weaponRule, max: 2 }),
+          weapons: we.picker,
           points: h('input', { type: 'number', min: '0', inputmode: 'numeric', value: String(p.points || 0) }),
           is_ally: h('input', { type: 'checkbox', checked: !!p.is_ally }),
           status: ui.select([{ value: '', label: t('None') }].concat(ui.STATUSES.map(function (x) { return { value: x.id, label: t(x.label) }; })), p.status || ''),

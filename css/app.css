@@ -584,6 +584,7 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .kill-parts { display: block; margin-top: .15rem; }
 select.lvl-facile { color: var(--alive); } select.lvl-difficile { color: var(--brass); } select.lvl-inconnue { color: var(--muted); }
 select.lvl-facile option, select.lvl-difficile option, select.lvl-inconnue option { color: var(--ink); }
+.sheet-weapons { align-items: center; } .sheet-weapons-edit { min-height: 30px; padding: .2rem .7rem; font-size: .84rem; }
 .past-weapons { display: grid; gap: .3rem; margin-top: .6rem; } .past-weapons p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; }
 /* intel feed */
 .intel { display: grid; gap: .55rem; margin-top: .9rem; }
