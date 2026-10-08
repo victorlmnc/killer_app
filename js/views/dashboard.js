@@ -246,18 +246,20 @@
         if (news) root.appendChild(news);
         var mine = meBar(st, round);
         if (mine) root.appendChild(mine);
-        root.appendChild(h('section', { class: 'panel hero' },
-          h('div', { class: 'hero-ring' }, round ? ring(st, round) : null,
+        var obs = store.isObserver();   // an observer gets the figures only: no ring, no blocks below
+        root.appendChild(h('section', { class: 'panel hero' + (obs ? ' hero-solo' : '') },
+          obs ? null : h('div', { class: 'hero-ring' }, round ? ring(st, round) : null,
             h('div', { class: 'hero-center' }, h('span', { class: 'hero-figure' }, ui.pct(stats.coverage)), h('span', { class: 'hero-caption' }, t('of the loop known')))),
           h('div', { class: 'hero-side' },
             h('h2', {}, round ? round.name : t('No round')),
-            h('p', { class: 'prose' }, t('{a} known targets among {b} living players. Every gap in the ring is a contract still to find.', { a: stats.knownTargets, b: stats.alive })),
+            h('p', { class: 'prose' }, t(obs ? '{a} known targets among {b} living players.' : '{a} known targets among {b} living players. Every gap in the ring is a contract still to find.', { a: stats.knownTargets, b: stats.alive })),
             h('dl', { class: 'figures' },
               h('div', {}, h('dt', {}, t('Alive')), h('dd', {}, stats.alive, h('small', {}, ' ' + ui.pct(stats.total ? stats.alive / stats.total : 0)))),
               h('div', {}, h('dt', {}, t('Dead')), h('dd', {}, stats.dead)),
               h('div', {}, h('dt', {}, t('In the database')), h('dd', {}, stats.total, official ? h('small', {}, ' / ' + official + ' ' + t('registered')) : null)),
               school ? h('div', {}, h('dt', {}, t('Participation')), h('dd', {}, ui.pct((official || stats.total) / school), h('small', {}, ' ' + t('of the school')))) : null),
-            h('a', { class: 'btn btn-primary', href: '#/chain' }, t('Open the chain')))));
+            store.allowedTabs(['chain']).length ? h('a', { class: 'btn btn-primary', href: '#/chain' }, t('Open the chain')) : null)));
+        if (obs) return;
 
         var slides = [], grid = { appendChild: function (el) { slides.push({ title: el.querySelector('h2').textContent, el: el }); } };
         var allies = st.players.filter(function (p) { return p.is_ally; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });

@@ -11,6 +11,7 @@
   "{a} already hunts {b}, the mystery sheet hunts {c}.": "{a} chasse déjà {b}, la fiche mystère chasse {c}.",
   "{a} is already hunted by {b}, the mystery sheet is hunted by {c}.": "{a} est déjà chassé(e) par {b}, la fiche mystère est chassée par {c}.",
   "{a} is the killer of {b}": "{a} est le killer de {b}",
+  "{a} known targets among {b} living players.": "{a} cibles connues sur {b} joueurs vivants.",
   "{a} of {b} players have a timetable": "{a} joueurs sur {b} ont un emploi du temps",
   "{a} of {b} weapons gathered": "{a} armes récupérées sur {b}",
   "{a} or {b}": "{a} ou {b}",

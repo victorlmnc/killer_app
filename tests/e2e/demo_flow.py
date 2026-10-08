@@ -149,7 +149,7 @@ with sync_playwright() as p:
     pg.goto(URL + '#/settings'); expect(pg.locator('h1')).to_have_text('Paramètres')
     pg.evaluate("K.store.role = 'member'; K.store.emit(); location.hash = '#/settings'"); pg.wait_for_timeout(200)
     assert pg.locator('.nav-item', has_text='Paramètres').count() == 0 and pg.locator('h1').inner_text() != 'Paramètres'
-    pg.evaluate("K.store.state.members[0].role = 'observer'; K.store.state.members[0].tabs = ['dashboard', 'chain']; K.store.role = 'observer'; K.store.emit(); location.hash = '#/players'"); pg.wait_for_timeout(200)
+    pg.evaluate("K.store.state.players[3].status = 'dangerous'; K.store.state.members[0].role = 'observer'; K.store.state.members[0].tabs = ['dashboard', 'chain']; K.store.role = 'observer'; K.store.emit(); location.hash = '#/players'"); pg.wait_for_timeout(200)
     assert pg.locator('.nav-item').count() == 2 and pg.locator('h1').inner_text() == 'Dashboard'
     pg.evaluate("location.hash = '#/chain'"); pg.wait_for_timeout(200)
     assert pg.locator('.grip').count() == 0 and pg.get_by_role('button', name='Nouveau reroll').count() == 0
@@ -159,10 +159,19 @@ with sync_playwright() as p:
     assert pg.get_by_role('button', name='Exporter').count() == 0, 'no export'
     pg.locator('.row-player').first.click(); pg.wait_for_timeout(150); assert pg.locator('dialog[open]').count() == 0, 'no sheet'
     assert pg.locator('.whoami').is_disabled(); pg.evaluate("K.actions.profileDialog()"); pg.wait_for_timeout(100); assert pg.locator('dialog[open]').count() == 0, 'no profile'
+    # every player looks the same to an observer: no alliance, no special status
+    pg.locator('.filterbar .segmented button', has_text='Tous').click(); pg.wait_for_timeout(100)
+    assert pg.locator('.row-player').count() > 5 and pg.locator('.row-player .tag-ally, .row-player .tag-status').count() == 0, 'no alliance or status tags'
+    assert pg.locator('.chips button', has_text='Alliance').count() == 0 and pg.locator('.chips button', has_text='Statut').count() == 0, 'no alliance or status filter'
     pg.evaluate("location.hash = '#/dashboard'"); pg.wait_for_timeout(200); assert pg.locator('.intel-panel').count() == 0, 'no intel'
+    # the dashboard: the figures, no ring, no blocks below, no alerts about the alliance
+    assert pg.locator('.hero-side').count() == 1 and pg.locator('.hero-ring, .ring').count() == 0 and pg.locator('.carousel').count() == 0
+    assert pg.get_by_role('link', name='Ouvrir la chaîne').count() == 0, 'no link to a tab the observer cannot open'
     pg.evaluate("K.store.state.members[0].tabs = []; K.store.emit()"); pg.wait_for_timeout(200)
     expect(pg.locator('.view')).to_contain_text('Aucun onglet'); assert pg.locator('.nav-item').count() == 0
     pg.evaluate("K.store.state.members[0].role = 'admin'; K.store.state.members[0].tabs = null; K.store.role = 'admin'; K.store.emit(); location.hash = '#/dashboard'"); pg.wait_for_timeout(200)
+    assert pg.evaluate("K.store.state.players.some(p => p.is_ally) && K.store.state.players.some(p => p.status)"), 'alliance and statuses back for the admin'
+    assert pg.locator('.carousel').count() == 1 and pg.locator('.ring').count() == 1
 
     step('settings: accounts with roles, clear log, erase game')
     pg.goto(URL + '#/settings'); pg.wait_for_timeout(200)

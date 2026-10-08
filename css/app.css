@@ -247,6 +247,7 @@ select:disabled { opacity: .6; }
 /* -------------------------------------------------------------- dashboard */
 .hero { grid-template-columns: minmax(220px, 320px) minmax(0, 1fr); gap: clamp(1rem, 4vw, 3rem); align-items: center; padding: clamp(1.1rem, 3vw, 2.2rem); }
 .hero-ring { position: relative; }
+.hero.hero-solo { grid-template-columns: minmax(0, 1fr); }
 .ring { width: 100%; height: auto; display: block; overflow: visible; }
 .ring-track { fill: none; stroke: rgba(255, 255, 255, .3); stroke-width: 1; stroke-dasharray: 2 5; }
 .ring-link { fill: none; stroke: var(--thread); stroke-width: 3; stroke-linecap: round; }

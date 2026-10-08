@@ -149,9 +149,13 @@ with sync_playwright() as p:
     print('· sign out')
     pg.evaluate('K.store.auth.signOut()'); expect(pg.locator('.auth-card')).to_be_visible()
     print('· observer: read-only, only allowed tabs')
-    pg.evaluate("window.__role = 'observer'; window.__db.accounts.push({email:'obs@test.fr', name:'', role:'observer', tabs:['dashboard','chain'], avatar_path:null})")
+    pg.evaluate("window.__db.players.push({id:'p9', name:'ALLIÉ Test', points:0, is_ally:true, status:'priority'}); window.__role = 'observer'; window.__db.accounts.push({email:'obs@test.fr', name:'', role:'observer', tabs:['dashboard','chain'], avatar_path:null})")
     pg.locator('input[type=email]').fill('obs@test.fr'); pg.locator('input[type=password]').fill('bonmotdepasse'); pg.get_by_role('button', name='Se connecter').click()
     pg.wait_for_selector('.shell'); assert pg.locator('.nav-item').count() == 2
+    # every player looks the same: the loaded sheets carry no alliance and no status; the dashboard has no ring, no blocks
+    assert pg.evaluate("window.__db.players.some(p => p.is_ally && p.status)"), 'the database still has them'
+    assert pg.evaluate("K.store.state.players.length > 0 && !K.store.state.players.some(p => p.is_ally || p.status)")
+    assert pg.locator('.ring').count() == 0 and pg.locator('.carousel').count() == 0 and pg.locator('.hero-side').count() == 1
     before = len(pg.evaluate('window.__calls')); pg.evaluate("K.store.insert('players', {name: 'X'})"); pg.wait_for_timeout(100)
     assert not [c for c in pg.evaluate('window.__calls')[before:] if c[0] == 'insert'], 'observer must not write'
     pg.evaluate('K.store.auth.signOut()'); expect(pg.locator('.auth-card')).to_be_visible()

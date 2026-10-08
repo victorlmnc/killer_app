@@ -5,7 +5,7 @@
   // [route, icon, label (translated at render time)]
   var NAV = K.NAV = [['dashboard', 'dashboard', 'Dashboard'], ['chain', 'chain', 'Chain'], ['players', 'players', 'Players'], ['map', 'map', 'Map'],
     ['weapons', 'weapons', 'Weapons'], ['shop', 'shop', 'Shop'], ['classes', 'classes', 'Classes'], ['settings', 'settings', 'Settings']];
-  var refreshView = null, shell = null;
+  var refreshView = null, shell = null, noTabs = false;   // noTabs: the 'no tab open to you' message is on screen
 
   function logo(size) {
     var el = h('span', { class: 'logo', 'aria-hidden': 'true', style: { width: size + 'px', height: size + 'px' } });
@@ -87,6 +87,7 @@
     var st = store.state, s = K.logic.stats(st), round = K.logic.currentRound(st), allowed = tabs();
     if (allowed.indexOf(current()) < 0 && allowed.length) { location.hash = '#/' + allowed[0]; return; }   // tabs or role changed under our feet
     if (!allowed.length && refreshView) { route(); return; }   // no tab left: route() shows why, then draws this again
+    if (allowed.length && noTabs) { route(); return; }   // tabs given (back): the page opens without a reload
     shell.game.textContent = st.settings.game_name || '';
     shell.offlineBar.hidden = !store.offline;
     if (store.offline) ui.clear(shell.offlineBar).appendChild(h('span', {}, t('Offline: data from {when}, read-only.', { when: ui.when(new Date(store.offline.at).toISOString()) }), ' ',
@@ -120,12 +121,12 @@
     var name = current(), allowed = tabs();
     if (!allowed.length) {   // an observer for whom no tab is ticked: nothing to show
       if (refreshView && refreshView.destroy) refreshView.destroy();
-      refreshView = null;   // also stops chrome() from coming back here
+      refreshView = null; noTabs = true;   // also stops chrome() from coming back here
       ui.clear(shell.main).appendChild(h('p', { class: 'empty' }, t('No tab is open to your account yet. Ask the administrator.')));
       shell.title.textContent = ''; chrome(); return;
     }
     if (!K.views[name] || allowed.indexOf(name) < 0) { name = allowed[0]; if (location.hash !== '#/' + name) { location.hash = '#/' + name; return; } }
-    var view = K.views[name];
+    var view = K.views[name]; noTabs = false;
     shell.title.textContent = view.title;
     document.title = APP_NAME;
     if (refreshView && refreshView.destroy) refreshView.destroy();

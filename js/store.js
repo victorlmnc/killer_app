@@ -17,8 +17,23 @@
     ROLES: ROLES,
     on: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
     version: 0,   // goes up at every change (for caches)
-    emit: function () { store.version++; listeners.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } }); }
+    emit: function () { maskForObserver(); store.version++; listeners.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } }); }
   };
+
+  /* An observer sees every player the same way: no alliance, no special status. The sheets are swapped for copies
+     without them while the role is observer (every view follows), and given back when the role changes. */
+  var rawPlayers = null, maskedPlayers = null;
+  function maskForObserver() {
+    var obs = store.role === 'observer', st = store.state;
+    if (!st || !st.players) return;
+    if (obs && st.players !== maskedPlayers) {
+      rawPlayers = st.players;
+      maskedPlayers = st.players = rawPlayers.map(function (p) { return p.is_ally || p.status ? Object.assign({}, p, { is_ally: false, status: null }) : p; });
+    } else if (!obs && maskedPlayers) {
+      if (st.players === maskedPlayers) st.players = rawPlayers;
+      rawPlayers = maskedPlayers = null;
+    }
+  }
 
   /* ----- permissions ----- */
   store.isAdmin = function () { return store.role === 'admin' && !store.offline; };
@@ -74,7 +89,7 @@
     load: function (table) {
       var q = sb.from(table).select('*');
       if (table === 'events') q = q.order('created_at', { ascending: false }).limit(80);
-      return q.then(check).then(function (rows) { store.state[table] = rows || []; }, function (err) {
+      return q.then(check).then(function (rows) { store.state[table] = rows || []; if (table === 'players') maskForObserver(); }, function (err) {
         // a table added by a newer version while supabase/schema.sql has not been run again: empty, the rest works
         if (/does not exist|schema cache|42P01|PGRST20[45]/i.test((err && (err.code + ' ' + err.message)) || '')) { console.warn('Table missing, run supabase/schema.sql again:', table); store.state[table] = []; return; }
         throw err;
@@ -535,7 +550,7 @@
     if (!c || !c.state || (email && c.email !== String(email).toLowerCase())) return false;
     TABLES.concat(['members']).forEach(function (t) { store.state[t] = c.state[t] || []; });
     store.state.settings = withDefaults(c.state.settings);
-    store.user = store.user || { email: c.email }; store.role = c.role; store.offline = { at: c.at };
+    store.user = store.user || { email: c.email }; store.role = c.role; store.offline = { at: c.at }; maskForObserver();
     handlers.onReady();
     return true;
   }

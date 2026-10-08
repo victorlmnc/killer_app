@@ -11,7 +11,8 @@
       /* Filters: who (all / alive / dead), one extra filter that combines with it, year, department, sort */
       var DEFAULT = { q: '', state: 'alive', extra: '', year: '', dept: '', sort: 'name' }, view = Object.assign({}, DEFAULT);
       var STATES = [['all', t('All')], ['alive', t('Alive')], ['dead', t('Dead')]];
-      var EXTRAS = [['allies', t('Alliance')], ['notarget', t('Unknown target')], ['weapons', t('Known weapons')], ['noaddress', t('Unknown address')], ['flagged', t('Special status')], ['timetable', t('With a timetable')]];
+      var EXTRAS = [['allies', t('Alliance')], ['notarget', t('Unknown target')], ['weapons', t('Known weapons')], ['noaddress', t('Unknown address')], ['flagged', t('Special status')], ['timetable', t('With a timetable')]]
+        .filter(function (x) { return !store.isObserver() || (x[0] !== 'allies' && x[0] !== 'flagged'); });   // an observer sees no alliance and no status
       var search = h('input', { type: 'search', placeholder: t('Search a name, a note, an address'), 'aria-label': t('Search a player'), oninput: function (e) { view.q = e.target.value; paint(); } });
       var filters = h('div', { class: 'filterbar' }), count = h('span', { class: 'muted small' }), list = h('div', { class: 'list' });
       root.appendChild(h('div', { class: 'toolbar toolbar-search' }, search,
