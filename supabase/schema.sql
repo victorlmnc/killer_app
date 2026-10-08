@@ -311,7 +311,8 @@ drop policy if exists "admin" on public.accounts;
 drop policy if exists "own row" on public.accounts;
 create policy "read"    on public.accounts for select to authenticated using (public.is_member());
 create policy "admin"   on public.accounts for all to authenticated using (public.is_admin()) with check (public.is_admin());
-create policy "own row" on public.accounts for update to authenticated using (lower(email) = lower(auth.email())) with check (lower(email) = lower(auth.email()));
+-- a member edits their own name, avatar and linked sheet; an observer only reads
+create policy "own row" on public.accounts for update to authenticated using (lower(email) = lower(auth.email()) and public.can_edit()) with check (lower(email) = lower(auth.email()) and public.can_edit());
 
 -- A non-admin may only change their own name and avatar.
 create or replace function public.protect_account() returns trigger language plpgsql set search_path = public as $$
@@ -429,9 +430,9 @@ drop policy if exists "photos write"  on storage.objects;
 drop policy if exists "photos update" on storage.objects;
 drop policy if exists "photos delete" on storage.objects;
 create policy "photos read"   on storage.objects for select to authenticated using (bucket_id = 'photos' and public.is_member());
-create policy "photos write"  on storage.objects for insert to authenticated with check (bucket_id = 'photos' and (public.can_edit() or name like 'avatars/' || auth.uid()::text || '.%'));
-create policy "photos update" on storage.objects for update to authenticated using (bucket_id = 'photos' and (public.can_edit() or name like 'avatars/' || auth.uid()::text || '.%'));
-create policy "photos delete" on storage.objects for delete to authenticated using (bucket_id = 'photos' and (public.can_edit() or name like 'avatars/' || auth.uid()::text || '.%'));
+create policy "photos write"  on storage.objects for insert to authenticated with check (bucket_id = 'photos' and public.can_edit());   -- observers upload nothing, not even an avatar
+create policy "photos update" on storage.objects for update to authenticated using (bucket_id = 'photos' and public.can_edit());
+create policy "photos delete" on storage.objects for delete to authenticated using (bucket_id = 'photos' and public.can_edit());
 
 -- ---------------------------------------------------------------------------
 -- Realtime: everyone sees teammates' changes without reloading.

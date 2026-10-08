@@ -64,6 +64,12 @@ await as('observer', async () => {
   assert.equal(await count(`with d as (delete from public.links returning 1) select count(*) n from d`), 0);
   assert.equal(await count(`with u as (update public.players set points = 99 returning 1) select count(*) n from u`), 0);
   ok('observer reads, writes nothing');
+  assert.equal(await count(`with u as (update public.accounts set name = 'Fake', player_id = 'bbbbbbbb-0000-4000-8000-000000000001' where email = 'obs@test.fr' returning 1) select count(*) n from u`), 0);
+  ok('observer cannot change their own account (name, linked sheet)');
+  assert.ok(await fails(`insert into storage.objects (bucket_id, name) values ('photos', 'avatars/${U.observer}.jpg')`)); ok('observer cannot upload an avatar');
+});
+await as('member', async () => {
+  await q(`insert into storage.objects (bucket_id, name) values ('photos', 'avatars/${U.member}.jpg')`); ok('member uploads their avatar');
 });
 
 // SEC-02: what a member cannot do any more

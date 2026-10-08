@@ -314,6 +314,7 @@
 
   /* ---------------------------------------------------------- my profile */
   act.profileDialog = function () {
+    if (store.isObserver()) return;
     var me = store.me();
     /* Link this account to its player sheet (or unlink it). */
     function mySheetButton() {

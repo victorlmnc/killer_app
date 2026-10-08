@@ -183,10 +183,13 @@
               ui.confirm({ title: t('Remove access?'), text: t('{email} will no longer be able to read or change anything.', { email: m.email }), action: t('Remove'), danger: true }).then(function (ok) { if (ok) store.removeMember(m.email); });
             } }, t('Remove'))));
           if (m.role === 'observer') {
-            var tabs = m.tabs || [];
+            var tabs = m.tabs || [], order = K.NAV.map(function (n) { return n[0]; });
             row.appendChild(h('div', { class: 'tab-picks' }, h('span', { class: 'muted small' }, t('Tabs this observer can open:')), K.NAV.filter(function (n) { return n[0] !== 'settings'; }).map(function (n) {
               return h('label', { class: 'check check-sm' }, h('input', { type: 'checkbox', checked: tabs.indexOf(n[0]) >= 0, onchange: function (e) {
-                var next = tabs.filter(function (x) { return x !== n[0]; }); if (e.target.checked) next.push(n[0]);
+                // from what is saved now: the page is not redrawn between two clicks
+                var saved = (store.state.members.find(function (x) { return x.email === m.email; }) || m).tabs || [];
+                var next = saved.filter(function (x) { return x !== n[0]; }); if (e.target.checked) next.push(n[0]);
+                next.sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); });
                 store.updateMember(m.email, { tabs: next });
               } }), t(n[2]));
             })));

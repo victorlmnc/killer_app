@@ -17,7 +17,7 @@
       root.appendChild(h('div', { class: 'toolbar toolbar-search' }, search,
         h('div', { class: 'toolbar-actions' },
           store.canEdit() ? h('button', { type: 'button', class: 'btn', onclick: K.actions.importDialog }, K.icon('upload'), t('Import')) : null,
-          h('button', { type: 'button', class: 'btn', onclick: exportMenu }, K.icon('download'), t('Export')),
+          store.isObserver() ? null : h('button', { type: 'button', class: 'btn', onclick: exportMenu }, K.icon('download'), t('Export')),
           store.canEdit() ? h('button', { type: 'button', class: 'btn btn-primary', onclick: function () { K.actions.editPlayer(null); } }, K.icon('plus'), t('Add a player')) : null)));
       root.appendChild(filters); root.appendChild(list);
 

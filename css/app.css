@@ -609,6 +609,9 @@ select.lvl-facile option, select.lvl-difficile option, select.lvl-inconnue optio
 .intel-panel .row-sub { white-space: normal; overflow-wrap: anywhere; }
 .pin-seen { width: 26px; height: 26px; border-width: 2px; background: #e3a33b; color: #1d1405; box-shadow: 0 0 0 3px var(--year, #8A93A0), 0 1px 5px rgba(0, 0, 0, .55); } .pin-seen svg { width: 15px; height: 15px; }
 .tag-seen { color: #f3c674; background: color-mix(in srgb, #e3a33b 18%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, #e3a33b 45%, transparent); justify-self: start; }
+/* observers: lists without sheets, no profile */
+.is-observer .row-player, .is-observer .ring-dot, .is-observer .board-row { cursor: default; }
+.whoami:disabled, .me-top:disabled { cursor: default; opacity: 1; }
 .share-parts { display: flex; flex-wrap: wrap; gap: .3rem 1.1rem; margin: .4rem 0 .8rem; }
 .share-text { font-size: .92rem; line-height: 1.45; }
 .map-pop-actions { display: flex; gap: .5rem; } .map-pop-actions > .btn { flex: 1 1 0; justify-content: center; margin-top: .25rem; min-height: 32px; padding: .3rem .75rem; font-size: .85rem; }   /* side by side */

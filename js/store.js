@@ -22,6 +22,7 @@
 
   /* ----- permissions ----- */
   store.isAdmin = function () { return store.role === 'admin' && !store.offline; };
+  store.isObserver = function () { return store.role === 'observer'; };   // reads the allowed tabs only: no sheet, no intel, no export, no profile
   store.canEdit = function () { return (store.role === 'admin' || store.role === 'member') && !store.offline; };   // offline copy: read-only
   store.me = function () {
     var email = String((store.user && store.user.email) || '').toLowerCase();
@@ -271,7 +272,7 @@
   };
   store.updateMember = function (email, patch) {
     var mine = store.me() && store.me().email === email;
-    if (!store.isAdmin() && !mine) return denied();
+    if (!store.isAdmin() && (!mine || store.isObserver())) return denied();
     if (!store.isAdmin()) patch = { name: patch.name, avatar_path: patch.avatar_path, player_id: patch.player_id }; // only the admin touches roles and tabs
     Object.keys(patch).forEach(function (k) { if (patch[k] === undefined) delete patch[k]; });
     var m = store.state.members.find(function (x) { return x.email === email; });

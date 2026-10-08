@@ -514,6 +514,7 @@
   "No recorded kill changes points.": "Aucun kill enregistré ne change de points.",
   "No residence yet: create one and choose who lives there; their sheets follow its address.": "Aucune résidence pour l'instant : crées-en une et choisis qui y habite ; leurs fiches prennent son adresse.",
   "No shared flat yet: create one and choose who lives there; their sheets follow its address.": "Pas encore de coloc : crées-en une et choisis qui y habite ; leurs fiches suivent son adresse.",
+  "No tab is open to your account yet. Ask the administrator.": "Aucun onglet n'est encore ouvert à ton compte. Demande à l'administrateur.",
   "No timetable applies to this player yet.": "Aucun emploi du temps ne s'applique encore à ce joueur.",
   "No upcoming class in this timetable.": "Aucun cours à venir dans cet emploi du temps.",
   "No weapon of our targets matches this search.": "Aucune arme de nos cibles ne correspond à cette recherche.",

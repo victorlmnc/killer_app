@@ -152,12 +152,28 @@ with sync_playwright() as p:
     pg.evaluate("location.hash = '#/chain'"); pg.wait_for_timeout(200)
     assert pg.locator('.grip').count() == 0 and pg.get_by_role('button', name='Nouveau reroll').count() == 0
     n = pg.evaluate('K.store.state.links.length'); pg.evaluate("K.store.remove('links', K.store.state.links[0].id)"); expect(pg.locator('.toast-error').last).to_contain_text('lecture seule'); assert pg.evaluate('K.store.state.links.length') == n
-    pg.evaluate("K.store.state.members[0].role = 'admin'; K.store.role = 'admin'; K.store.emit()")
+    # an observer opens no sheet, has no profile, sees no intel and no export
+    pg.evaluate("K.store.state.members[0].tabs = ['dashboard', 'players']; K.store.emit(); location.hash = '#/players'"); pg.wait_for_timeout(200)
+    assert pg.get_by_role('button', name='Exporter').count() == 0, 'no export'
+    pg.locator('.row-player').first.click(); pg.wait_for_timeout(150); assert pg.locator('dialog[open]').count() == 0, 'no sheet'
+    assert pg.locator('.whoami').is_disabled(); pg.evaluate("K.actions.profileDialog()"); pg.wait_for_timeout(100); assert pg.locator('dialog[open]').count() == 0, 'no profile'
+    pg.evaluate("location.hash = '#/dashboard'"); pg.wait_for_timeout(200); assert pg.locator('.intel-panel').count() == 0, 'no intel'
+    pg.evaluate("K.store.state.members[0].tabs = []; K.store.emit()"); pg.wait_for_timeout(200)
+    expect(pg.locator('.view')).to_contain_text('Aucun onglet'); assert pg.locator('.nav-item').count() == 0
+    pg.evaluate("K.store.state.members[0].role = 'admin'; K.store.state.members[0].tabs = null; K.store.role = 'admin'; K.store.emit(); location.hash = '#/dashboard'"); pg.wait_for_timeout(200)
 
     step('settings: accounts with roles, clear log, erase game')
     pg.goto(URL + '#/settings'); pg.wait_for_timeout(200)
     pg.get_by_placeholder('name@example.org').fill('obs@example.org'); pg.locator('select[aria-label="Rôle"]').last.select_option('observer'); pg.get_by_role('button', name='Autoriser').click(); pg.wait_for_timeout(150)
     m = [x for x in state()['members'] if x['email'] == 'obs@example.org'][0]; assert m['role'] == 'observer' and m['tabs']
+    # the tabs ticked are the tabs saved, click after click (the page is not redrawn in between)
+    row = pg.locator('.member', has_text='obs@example.org')
+    for lab in ['Chaîne', 'Map', 'Armes', 'Dashboard', 'Shop']:
+        row.locator('label.check', has_text=lab).locator('input').click(); pg.wait_for_timeout(50)
+        saved = [x for x in state()['members'] if x['email'] == 'obs@example.org'][0]['tabs']
+        ticked = pg.evaluate("[...document.querySelectorAll('.member')].find(r => r.textContent.includes('obs@example.org')).querySelectorAll('.tab-picks input:checked').length")
+        assert len(saved) == ticked, (lab, saved, ticked)
+    assert saved == ['players', 'map', 'weapons', 'shop'], saved
     pg.get_by_role('button', name='Vider le journal').click(); pg.locator('dialog[open]').get_by_role('button', name='Vider le journal').click(); pg.wait_for_timeout(150)
     assert pg.evaluate('K.store.state.events.length') == 0
     pg.get_by_role('button', name='Effacer la partie').click(); pg.locator('dialog').get_by_role('button', name='Effacer la partie').click(); pg.wait_for_timeout(200)

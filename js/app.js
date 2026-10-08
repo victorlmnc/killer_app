@@ -85,7 +85,8 @@
   function chrome() {
     if (!shell) return;
     var st = store.state, s = K.logic.stats(st), round = K.logic.currentRound(st), allowed = tabs();
-    if (allowed.indexOf(current()) < 0 && allowed.length) { location.hash = '#/' + allowed[0]; return; }   // role changed under our feet
+    if (allowed.indexOf(current()) < 0 && allowed.length) { location.hash = '#/' + allowed[0]; return; }   // tabs or role changed under our feet
+    if (!allowed.length && refreshView) { route(); return; }   // no tab left: route() shows why, then draws this again
     shell.game.textContent = st.settings.game_name || '';
     shell.offlineBar.hidden = !store.offline;
     if (store.offline) ui.clear(shell.offlineBar).appendChild(h('span', {}, t('Offline: data from {when}, read-only.', { when: ui.when(new Date(store.offline.at).toISOString()) }), ' ',
@@ -97,6 +98,8 @@
     });
     ui.clear(shell.status);
     [[round ? round.name : t('No round'), t('Round')], [s.alive + ' / ' + s.total, t('Alive')], [ui.pct(s.coverage), t('Chain known')]].forEach(function (f) { shell.status.appendChild(h('div', {}, h('dt', {}, f[1]), h('dd', {}, f[0]))); });
+    document.body.classList.toggle('is-observer', store.isObserver());
+    shell.whoami.disabled = shell.meTop.disabled = store.isObserver();   // an observer has no profile to open
     ui.clear(shell.whoami);
     var me = store.me(), name = store.displayName();
     shell.whoami.appendChild(ui.avatar({ name: name, avatar_path: me && me.avatar_path }, 'sm'));
@@ -115,7 +118,13 @@
   function route() {
     if (!shell) return;
     var name = current(), allowed = tabs();
-    if (!K.views[name] || allowed.indexOf(name) < 0) { name = allowed[0] || 'dashboard'; if (location.hash !== '#/' + name) { location.hash = '#/' + name; return; } }
+    if (!allowed.length) {   // an observer for whom no tab is ticked: nothing to show
+      if (refreshView && refreshView.destroy) refreshView.destroy();
+      refreshView = null;   // also stops chrome() from coming back here
+      ui.clear(shell.main).appendChild(h('p', { class: 'empty' }, t('No tab is open to your account yet. Ask the administrator.')));
+      shell.title.textContent = ''; chrome(); return;
+    }
+    if (!K.views[name] || allowed.indexOf(name) < 0) { name = allowed[0]; if (location.hash !== '#/' + name) { location.hash = '#/' + name; return; } }
     var view = K.views[name];
     shell.title.textContent = view.title;
     document.title = APP_NAME;

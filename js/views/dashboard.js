@@ -89,7 +89,7 @@
     if (!p) {
       if (!me || !store.canEdit()) return null;
       return h('p', { class: 'me-hint muted small' }, t('Link your account to your player sheet to see your target and act quickly.'), ' ',
-        h('button', { type: 'button', class: 'linkish', onclick: K.actions.profileDialog }, t('Choose my sheet')));
+        store.isObserver() ? null : h('button', { type: 'button', class: 'linkish', onclick: K.actions.profileDialog }, t('Choose my sheet')));
     }
     var dead = L.deadSet(st).has(p.id), open = K.actions.openPlayer;
     function who(label, res) {
@@ -242,7 +242,7 @@
         var official = Number(set.official_players) || 0, school = Number(set.school_total) || 0;
         var alerts = alertsPanel(st);
         if (alerts) root.appendChild(alerts);
-        var news = intelPanel(st);
+        var news = store.isObserver() ? null : intelPanel(st);   // intel is for the alliance
         if (news) root.appendChild(news);
         var mine = meBar(st, round);
         if (mine) root.appendChild(mine);

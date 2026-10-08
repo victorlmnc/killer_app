@@ -90,7 +90,7 @@
         /* a player: the name with the sheet button on its right, then the address (or apartment) under it */
         function item(p, withAddress, apt) {
           return h('div', { class: 'map-pop-item map-pop-person' }, h('strong', { class: dead.has(p.id) ? 'is-dead' : '' }, p.name),
-            h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Open sheet')),
+            store.isObserver() ? null : h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Open sheet')),
             withAddress && p.address ? h('span', { class: 'map-pop-address' }, p.address) : null,
             apt && p.apartment ? h('span', { class: 'map-pop-address' }, t('Apt. {n}', { n: p.apartment })) : null);
         }
@@ -245,7 +245,7 @@
         var allSpots = store.state.spots.filter(L.hasCoords).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); });
         var spots = isHidden('spots') ? [] : allSpots;
         var shownIds = new Set(s.players.map(function (p) { return p.id; }));   // the filters and the search apply to sightings too
-        var allSights = L.lastSightings(store.state, Date.now() - SEEN_DAYS * 864e5).filter(function (x) { return shownIds.has(x.player_id) || x.id === focusSeen; });
+        var allSights = store.isObserver() ? [] : L.lastSightings(store.state, Date.now() - SEEN_DAYS * 864e5).filter(function (x) { return shownIds.has(x.player_id) || x.id === focusSeen; });
         if (focusSeen && !allSights.some(function (x) { return x.id === focusSeen; })) { var fx = (store.state.intel || []).find(function (x) { return x.id === focusSeen; }); if (fx && L.hasCoords(fx)) allSights.push(fx); }   // an older one, asked for
         var sights = isHidden('seen') ? allSights.filter(function (x) { return x.id === focusSeen; }) : allSights; sightsCount = allSights.length;
         var visibleIds = new Set(); places.forEach(function (pl) { pl.players.forEach(function (p) { visibleIds.add(p.id); }); });
@@ -278,7 +278,7 @@
             h('button', { type: 'button', class: 'row row-btn map-player', 'aria-label': t('Show {name} on the map', { name: p.name }), onclick: function () { goTo(p.id, p.lat, p.lng); } },
               ui.avatar(p, 'sm'), h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, p.name), h('span', { class: 'row-sub' }, p.address)),
               h('span', { class: 'row-tags' }, ui.statusTag(p, true), ty !== 'normale' ? h('span', { class: 'tag' }, t(L.ADDRESS_TYPES.find(function (x) { return x.id === ty; }).label)) : null, ui.yearTag(p))),
-            h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Sheet'))));
+            store.isObserver() ? null : h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.openPlayer(p.id); } }, t('Sheet'))));
         });
 
         /* Shared flats and student residences: named, with who lives there; the ones detected from sheets marked

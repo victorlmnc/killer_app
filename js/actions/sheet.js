@@ -39,6 +39,7 @@
 
   /* ------------------------------------------------------- player sheet */
   act.openPlayer = function (playerId, ctx) {
+    if (store.isObserver()) return;   // observers see the lists, not the sheets
     ctx = ctx || {};
     var off = null, intelAll = false, buysOpen = false;
     var dlg = ui.dialog({ title: '', onClose: function () { if (off) off(); }, render: function (body, api) { draw(body, api); } });
