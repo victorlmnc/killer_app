@@ -22,8 +22,8 @@ def step(s): print('·', s)
 
 with sync_playwright() as p:
     b = p.chromium.launch(); errors = []
-    ctx = context(b, viewport={'width': 1100, 'height': 900})
-    ctx.route('https://edt.example/**', lambda r: r.fulfill(body=ICS, content_type='text/calendar', headers={'Access-Control-Allow-Origin': '*'}))
+    ctx = context(b, viewport={'width': 1100, 'height': 900}, bypass_csp=True)   # wait_for_function evaluates strings, which the app's policy forbids (demo_flow runs under it)
+    ctx.route('https://edt.insa-cvl.fr/test/**', lambda r: r.fulfill(body=ICS, content_type='text/calendar', headers={'Access-Control-Allow-Origin': '*'}))
     pg = ctx.new_page(); collect_errors(pg, errors); pg.add_init_script("localStorage.setItem('killer.lang', 'fr')")
     pg.goto(URL); pg.wait_for_selector('.hero')
 
@@ -35,7 +35,7 @@ with sync_playwright() as p:
       K.store.update('players', ally.id, { year: '3', td: 'TD2' });
       K.store.updateMember('demo@local', { player_id: ally.id });
       return { ally: ally.id, target: target.id, targetName: target.name }; }""")
-    pg.goto(URL + '#/settings'); pg.get_by_label('Lien iCal à ajouter').fill('https://edt.example/3.ics'); pg.get_by_role('button', name='Ajouter', exact=True).click()
+    pg.goto(URL + '#/settings'); pg.get_by_label('Lien iCal à ajouter').fill('https://edt.insa-cvl.fr/test/3.ics'); pg.get_by_role('button', name='Ajouter', exact=True).click()
     pg.wait_for_function("K.store.state.settings.calendars && K.store.state.settings.calendars.length === 1")
     layer = pg.evaluate("K.store.state.settings.calendars[0]")
     assert (layer['year'], layer['field'], layer['value']) == ('3', 'td', 'TD1'), layer
@@ -192,7 +192,7 @@ with sync_playwright() as p:
     pg.goto(URL + '#/dashboard'); expect(pg.locator('.intel-panel')).to_contain_text('Vu au self avec un parapluie')
 
     step('shared flat: created from the map, its flatmates follow its address; it stays alive while one of them is')
-    ctx.route('**/leaflet.min.*', lambda r: r.abort())                                # no map tiles needed: the lists work without
+    ctx.route('**/vendor/leaflet-*/leaflet.*', lambda r: r.abort())                                # no map tiles needed: the lists work without
     ctx.route('**/data.geopf.fr/**', lambda r: r.fulfill(json={ 'features': [{ 'geometry': { 'coordinates': [2.401, 47.081] }, 'properties': { 'score': 0.9, 'label': '8 rue des Lilas' } }] }))
     mates = pg.evaluate("K.store.state.players.filter(p => !p.home_id && !K.logic.deadSet(K.store.state).has(p.id)).slice(0, 2).map(p => p.name)")
     pg.goto(URL + '#/map')
@@ -395,7 +395,7 @@ with sync_playwright() as p:
         storage: { from: function () { return { createSignedUrls: function () { return Promise.resolve({ data: [], error: null }); } }; } },
         channel: function () { var ch = { on: function () { return ch; }, subscribe: function () { return ch; } }; return ch; } };
     } };"""
-    ctx = context(b, viewport={'width': 1100, 'height': 800})
+    ctx = context(b, viewport={'width': 1100, 'height': 800}, bypass_csp=True)
     ctx.route('**/js/config.js', lambda r: r.fulfill(body="window.KILLER_CONFIG = { supabaseUrl: 'https://xyz.supabase.co', supabaseAnonKey: 'anon' };", content_type='text/javascript'))
     ctx.add_init_script(FAKE)
     pg = ctx.new_page(); errors = []; collect_errors(pg, errors); pg.add_init_script("localStorage.setItem('killer.lang', 'fr')")

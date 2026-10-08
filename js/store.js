@@ -506,7 +506,8 @@
     var cfg = window.KILLER_CONFIG || {};
     if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) { store.mode = 'local'; return local.init().then(handlers.onReady); }
     store.mode = 'supabase';
-    var ready = window.supabase ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
+    // the database library is kept in the repository at a fixed version (vendor/), not fetched from a CDN
+    var ready = window.supabase ? Promise.resolve() : loadScript('vendor/supabase-js-2.117.3/supabase.js');
     ready = ready.catch(function (err) { if (offlineStart(null, handlers)) return 'offline'; throw err; });   // no network, no library
     return ready.then(function (state) {
       if (state === 'offline') return;

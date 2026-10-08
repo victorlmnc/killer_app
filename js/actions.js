@@ -1413,7 +1413,7 @@
     var style = hh('style', {}, ['body{font:11pt/1.4 -apple-system,Segoe UI,Roboto,sans-serif;margin:24px;color:#111}h1{font-size:20pt;margin:0 0 4px}h2{font-size:13pt;margin:22px 0 8px;border-bottom:1px solid #999;padding-bottom:3px}table{border-collapse:collapse;width:100%;font-size:9.5pt}th,td{border:1px solid #bbb;padding:3px 5px;text-align:left;vertical-align:top}th{background:#eee}tr.dead td{color:#777}.muted{color:#666}.frag{margin:4px 0}@media print{button{display:none}}']);
     d.head.appendChild(style);
     var body = d.body;
-    body.appendChild(hh('button', { onclick: 'window.print()' }, [t('Print / Save as PDF')]));
+    body.appendChild(hh('button', {}, [t('Print / Save as PDF')])).addEventListener('click', function () { w.print(); });   // no inline handler: the security policy forbids them
     body.appendChild(hh('h1', {}, [st.settings.game_name || 'Killer']));
     body.appendChild(hh('p', { class: 'muted' }, [ui.when(new Date().toISOString()) + ' · ' + (round ? round.name : t('No round')) + ' · ' + t('{a} alive / {b} players · {c} of the loop known', { a: s.alive, b: s.total, c: ui.pct(s.coverage) })]));
     if (round) {

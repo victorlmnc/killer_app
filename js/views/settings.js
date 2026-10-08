@@ -31,7 +31,7 @@
           h('div', { class: 'row row-wrap' }, city, h('button', { type: 'button', class: 'btn', onclick: function () {
             K.geo.geocode(city.value).then(function (hit) { if (!hit) return ui.toast(t('Town not found.'), 'error'); store.setSetting('map_center', { lat: hit.lat, lng: hit.lng }); ui.toast(t('Map centred on {name}.', { name: hit.label })); });
           } }, t('Centre on a town'))),
-          text('geocoder_url', t('Geocoder URL'), 'url', t('Leave empty for the French public geocoder. Any service returning GeoJSON features with a "score" works.'))));
+          text('geocoder_url', t('Geocoder URL'), 'url', t('Leave empty for the French public geocoder. Any service returning GeoJSON features with a "score" works, once its address is also allowed in index.html (Content-Security-Policy, connect-src).'))));
 
         /* Rounds */
         var rounds = L.sortedRounds(st), rs = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Rounds and rerolls')), h('button', { type: 'button', class: 'btn', onclick: K.actions.newRound }, rounds.length ? t('New reroll') : t('Start the loop'))));

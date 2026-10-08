@@ -3,7 +3,7 @@
    up at once; the cache is only a fallback. Game data never goes through it: the database, photos and the
    timetable relay are not cached here (the app keeps its own read-only copy of the data). */
 var CACHE = 'qg-killer-v2';
-var SHARED = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];   // the library and fonts, not data
+var SHARED = ['fonts.googleapis.com', 'fonts.gstatic.com'];   // the fonts, not data (the libraries are in vendor/, same origin)
 
 self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (e) {

@@ -7,7 +7,7 @@
   'use strict';
   var K = (window.K = window.K || {});
   var DEFAULT_GEOCODER = 'https://data.geopf.fr/geocodage/search';
-  var LEAFLET = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
+  var LEAFLET = 'vendor/leaflet-1.9.4/';   // in the repository at a fixed version, not fetched from a CDN
   var MIN_SCORE = 0.45;
   var geo = K.geo = {};
 
@@ -79,9 +79,9 @@
     if (leaflet) return leaflet;
     leaflet = new Promise(function (resolve, reject) {
       var fail = function () { leaflet = null; reject(new Error('map unavailable')); };
-      var css = document.createElement('link'); css.rel = 'stylesheet'; css.href = LEAFLET + 'leaflet.min.css'; css.onerror = fail;
+      var css = document.createElement('link'); css.rel = 'stylesheet'; css.href = LEAFLET + 'leaflet.css'; css.onerror = fail;
       css.onload = function () {
-        var js = document.createElement('script'); js.src = LEAFLET + 'leaflet.min.js'; js.onerror = fail;
+        var js = document.createElement('script'); js.src = LEAFLET + 'leaflet.js'; js.onerror = fail;
         js.onload = function () { if (window.L && window.L.map) resolve(window.L); else fail(); };
         document.head.appendChild(js);
       };

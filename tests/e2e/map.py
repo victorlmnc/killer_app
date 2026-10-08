@@ -33,9 +33,9 @@ def geocoder(route):
     route.fulfill(body=json.dumps(body), content_type='application/json', headers={'access-control-allow-origin': '*'})
 
 with sync_playwright() as p:
-    b = p.chromium.launch(); ctx = context(b, viewport={'width': 390, 'height': 844}, has_touch=True)
+    b = p.chromium.launch(); ctx = context(b, viewport={'width': 390, 'height': 844}, has_touch=True, bypass_csp=True)   # wait_for_function evaluates strings, which the app's policy forbids
     ctx.route('**/data.geopf.fr/**', geocoder)
-    ctx.route('**/leaflet.min.css', lambda r: r.fulfill(body='', content_type='text/css'))
+    ctx.route('**/vendor/leaflet-*/leaflet.css', lambda r: r.fulfill(body='', content_type='text/css'))
     BUS = "window.KILLER_BUS = {source:'AggloBus test', generated:'2026-09-21', lines:[{id:'R1',name:'1',long:'Gare - Campus',color:'#0055A4',paths:[[[47.09,2.39],[47.08,2.41]]],stops:[{n:'Gare',lat:47.09,lng:2.39},{n:'Campus',lat:47.08,lng:2.41}]},{id:'R2',name:'2',long:'',color:'javascript:alert(1)',paths:[[[47.07,2.4],[47.06,2.41]]],stops:[{n:'Lac',lat:47.06,lng:2.41}]}]};"
     ctx.route('**/data/bus.js', lambda r: r.fulfill(body=BUS, content_type='text/javascript'))
     ctx.add_init_script(STUB)

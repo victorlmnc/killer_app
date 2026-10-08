@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="strict-origin">
+<!-- Only this site's own scripts run (libraries are in vendor/). Data goes only to the database, the French public
+     geocoder and the school's timetable server; images come from here, the database and the map tiles. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://tile.openstreetmap.org; connect-src 'self' data: blob: https://*.supabase.co wss://*.supabase.co https://data.geopf.fr https://edt.insa-cvl.fr; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="theme-color" content="#000000">
 <title>QG Killer</title>
 <meta name="apple-mobile-web-app-title" content="QG Killer">
