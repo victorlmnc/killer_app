@@ -477,10 +477,11 @@
       } });
     });
   }
-  act.mergeMystery = function (mysteryId, realId) {
-    var m = store.player(mysteryId), r = store.player(realId); if (!m || !r || !store.canEdit()) return Promise.resolve();
+  /* opts.open === false: the real sheet is not opened afterwards. Resolves to true once merged. */
+  act.mergeMystery = function (mysteryId, realId, opts) {
+    var m = store.player(mysteryId), r = store.player(realId); if (!m || !r || !store.canEdit()) return Promise.resolve(false);
     return mergeChoice(m, r).then(function (prefer) {
-      if (!prefer) return;
+      if (!prefer) return false;
       var plan = L.mysteryMerge(store.state, m, r, prefer), jobs = [];
       // the links in one transaction: moved, duplicates and contradicted ones removed (nothing half done on a conflict)
       var moved = plan.links.map(function (x) { return Object.assign({}, store.state.links.find(function (l) { return l.id === x.id; }), x.patch); });
@@ -492,9 +493,23 @@
       return Promise.all(jobs).then(function () { return store.remove('players', m.id); }).then(function () {
         store.log(t('{m} identified: it is {name}', { m: m.name, name: r.name }));
         ui.toast(t('Merged into the sheet of {name}.', { name: r.name }));
-        act.openPlayer(r.id);   // the mystery sheet, if open, closes itself now that it is gone
+        if (!opts || opts.open !== false) act.openPlayer(r.id);   // the mystery sheet, if open, closes itself now that it is gone
+        return true;
       });
     });
+  };
+
+  /* A death is always announced with a name: a mystery sheet cannot die as such. Who was it? (the players matching
+     its clues first), then its sheet is merged into theirs. Resolves to the real player's id, or null. */
+  act.identifyMystery = function (mysteryId) {
+    var m = store.player(mysteryId); if (!m || !store.canEdit()) return Promise.resolve(null);
+    var likely = new Set(L.mysteryCandidates(store.state, m, act.currentRoundId()).map(function (p) { return p.id; }));
+    return ui.pickPlayer({ title: t('{m} is dead: who was it?', { m: m.name }), filter: function (p) { return !p.is_mystery && p.id !== m.id && !act.isDead(p.id); },
+      prefer: function (p) { return likely.has(p.id); }, otherLabel: t('Players not matching the clues') })
+      .then(function (id) {
+        if (!id) return null;
+        return act.mergeMystery(m.id, id, { open: false }).then(function (ok) { return ok ? id : null; });
+      });
   };
 
   /* ------------------------------------------------------------ share a sheet */

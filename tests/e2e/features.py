@@ -228,6 +228,25 @@ with sync_playwright() as p:
         pg.evaluate("id => K.store.remove('players', id)", d)
         assert pg.evaluate("id => K.store.state.intel.some(x => x.player_id === id) || K.store.state.bonuses.some(b => b.player_id === id)", d) is False
 
+    step('death of a mystery player: who it was is asked first, then the kill is recorded on the real sheet')
+    md = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), r = K.logic.currentRound(st);
+      const free = st.players.filter(x => !dead.has(x.id) && !x.is_mystery && x.year && !K.logic.resolveHunter(st, r.id, x.id).id && !K.logic.resolveTarget(st, r.id, x.id).id);
+      const hunter = free[0], real = free.find(x => x.id !== hunter.id && x.year !== hunter.year) || free[1];
+      return K.store.insert('players', { name: 'Cible inconnue test', is_mystery: true, points: 0, year: real.year }).then(m =>
+        K.store.replaceLinks([], [{ round_id: r.id, hunter_id: hunter.id, target_id: m.id, confidence: 'sur' }]).then(() => ({ m: m.id, real: real.id, realName: real.name, hunter: hunter.id }))); }""")
+    pg.evaluate("id => K.actions.openPlayer(id)", md['m'])
+    pg.locator('dialog[open]').get_by_role('button', name='Il/elle est mort(e)').click()
+    pick = pg.locator('dialog[open]').last; expect(pick.locator('h2')).to_contain_text('qui était-ce')
+    pick.locator('input[type=search]').fill(md['realName']); pick.locator('.pick-list .row-btn', has_text=md['realName']).first.click()
+    pg.locator('dialog[open]').last.get_by_role('button', name='Fusionner').click()
+    kd = pg.locator('dialog[open]').last; expect(kd.locator('h2')).to_contain_text(md['realName'])   # the kill form, on the real player
+    expect(kd.locator('.btn-block').first).to_contain_text(pg.evaluate("id => K.store.player(id).name", md['hunter']))   # their hunter, moved from the mystery sheet
+    kd.get_by_role('button', name='Enregistrer le kill').click(); pg.wait_for_timeout(300)
+    got = pg.evaluate("a => [!!K.store.player(a.m), K.actions.isDead(a.real), (K.store.state.kills.find(k => k.victim_id === a.real) || {}).killer_id]", md)
+    assert got == [False, True, md['hunter']], (got, md)
+    assert pg.evaluate("a => K.actions.recordKill({ victimId: a, killerId: null }).then(r => r)", pg.evaluate("K.store.insert('players', { name: 'M2', is_mystery: true }).then(m => m.id)")) is False, 'never recorded on a mystery sheet'
+    pg.keyboard.press('Escape')
+
     step('intel feed: an info with a place on the map, on the sheet and on the dashboard')
     pid3 = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st); return st.players.find(x => !dead.has(x.id) && !K.logic.intelOf(st, x.id).length).id; })()")
     pg.evaluate("id => K.actions.openPlayer(id)", pid3)

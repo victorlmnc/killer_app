@@ -11,6 +11,8 @@
   /* ------------------------------------------------------------- kills */
   act.killDialog = function (victimId) {
     if (!store.canEdit()) return;
+    var mystery = store.player(victimId);
+    if (mystery && mystery.is_mystery) return act.identifyMystery(victimId).then(function (realId) { if (realId) act.killDialog(realId); });   // who it was, first
     var st = store.state, roundId = act.currentRoundId();
     var guess = roundId ? L.resolveHunter(st, roundId, victimId).id : null;
     var killerId = guess, victim = store.player(victimId);
@@ -119,6 +121,8 @@
     var cat = weapon && store.state.weapons.find(function (x) { return L.norm(x.name) === L.norm(weapon); });
     if (level === 'inconnue' && cat && cat.difficulty !== 'inconnue') { level = cat.difficulty; if (level === 'difficile' && !parts) points += L.levelGap(sc); }   // the catalogue knows it
     if (parts) points = L.killPoints({ difficulty: level, bonus: parts.bonus, firstBlood: parts.firstBlood, mates: parts.mates }, sc);
+    var who = store.player(k.victimId);
+    if (who && who.is_mystery) { ui.toast(t('Say who the mystery player was before recording their death.'), 'error'); return Promise.resolve(false); }
     if (act.isDead(k.victimId)) { ui.toast(t('{name} is already dead: a teammate recorded it.', { name: name(k.victimId) }), 'error'); return Promise.resolve(false); }
     return ensureRound().then(function (roundId) {
       var pre = Promise.resolve(true);
