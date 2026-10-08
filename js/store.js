@@ -42,7 +42,7 @@
 
   function withDefaults(settings) {
     var out = JSON.parse(JSON.stringify(K.seed.settings));
-    Object.keys(settings || {}).forEach(function (k) { out[k] = settings[k]; });
+    Object.keys(settings || {}).forEach(function (k) { if (k !== '__proto__' && k !== 'constructor' && k !== 'prototype') out[k] = settings[k]; });
     return out;
   }
 
@@ -132,6 +132,7 @@
   store.insert = function (table, row) {
     if (!store.canEdit()) return denied();
     row = Object.assign({ id: uuid() }, row);
+    if (store.mode !== 'supabase' && row.created_at == null) row.created_at = new Date().toISOString();   // the database sets it itself
     if (table === 'events') store.state.events.unshift(row); else store.state[table].push(row);
     store.emit();
     return guard(backend().insert(table, row), null, function () { dropIds(table, [row.id]); }).then(function () { return row; });
@@ -174,13 +175,16 @@
   };
   store.remove = function (table, id) {
     if (!store.canEdit()) return denied();
-    var touched = [table].concat(table === 'players' || table === 'rounds' ? ['links', 'kills'] : []), before = {};
+    var touched = [table].concat(table === 'players' ? ['links', 'kills', 'intel', 'bonuses', 'members'] : table === 'rounds' ? ['links', 'kills'] : []), before = {};
     touched.forEach(function (t) { before[t] = JSON.parse(JSON.stringify(store.state[t])); });   // the cascades below change rows in place
     store.state[table] = store.state[table].filter(function (r) { return r.id !== id; });
     if (table === 'players') { // mirror the SQL foreign-key cascades
       store.state.links = store.state.links.filter(function (l) { return l.hunter_id !== id && l.target_id !== id; });
       store.state.kills = store.state.kills.filter(function (k) { return k.victim_id !== id; });
       store.state.kills.forEach(function (k) { if (k.killer_id === id) k.killer_id = null; });
+      store.state.intel = store.state.intel.filter(function (x) { return x.player_id !== id; });
+      store.state.bonuses = store.state.bonuses.filter(function (b) { return b.player_id !== id; });
+      store.state.members.forEach(function (m) { if (m.player_id === id) m.player_id = null; });
     }
     if (table === 'rounds') {
       store.state.links = store.state.links.filter(function (l) { return l.round_id !== id; });

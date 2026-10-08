@@ -177,6 +177,26 @@ with sync_playwright() as p:
     expect(pg.locator('dialog[open] h2').last).to_have_text(my['realName'])
     pg.keyboard.press('Escape'); pg.keyboard.press('Escape')
 
+    step('mystery merge that contradicts what we knew: the person chooses, nothing half done')
+    c = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), r = K.logic.currentRound(st);
+      const free = st.players.filter(x => !dead.has(x.id) && !x.is_mystery && !K.logic.resolveHunter(st, r.id, x.id).id && !K.logic.resolveTarget(st, r.id, x.id).id);
+      const x = free[0], real = free[1], y = free[2];
+      return K.store.insert('players', { name: 'Mystère test', is_mystery: true, points: 0 }).then(m =>
+        K.store.replaceLinks([], [{ round_id: r.id, hunter_id: m.id, target_id: x.id, confidence: 'sur' }, { round_id: r.id, hunter_id: real.id, target_id: y.id, confidence: 'sur' }])
+          .then(() => ({ m: m.id, real: real.id, realName: real.name, x: x.id, y: y.id, r: r.id }))); }""")
+    pg.evaluate("a => { K.actions.mergeMystery(a.m, a.real); }", c)
+    dlg = pg.locator('dialog[open]').last
+    expect(dlg).to_contain_text("Mais ça contredit ce qu'on savait")
+    dlg.get_by_role('button', name="Garder ce qu'on savait sur " + c['realName']).click(); pg.wait_for_timeout(400)
+    got = pg.evaluate("a => [K.logic.resolveTarget(K.store.state, a.r, a.real).id, !!K.store.player(a.m), K.store.state.links.filter(l => l.hunter_id === a.real && l.round_id === a.r).length]", c)
+    assert got == [c['y'], False, 1], (got, c)   # still hunts y, one target only, the mystery sheet is gone
+    pg.keyboard.press('Escape')
+    # demo mode mirrors every cascade: deleting a sheet removes its intel and purchases too
+    d = pg.evaluate("(() => { const x = K.store.state.intel[0]; return x && x.player_id; })()")
+    if d:
+        pg.evaluate("id => K.store.remove('players', id)", d)
+        assert pg.evaluate("id => K.store.state.intel.some(x => x.player_id === id) || K.store.state.bonuses.some(b => b.player_id === id)", d) is False
+
     step('intel feed: an info with a place on the map, on the sheet and on the dashboard')
     pid3 = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st); return st.players.find(x => !dead.has(x.id) && !K.logic.intelOf(st, x.id).length).id; })()")
     pg.evaluate("id => K.actions.openPlayer(id)", pid3)

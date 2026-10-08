@@ -500,13 +500,17 @@
   function parseImport(text) { var t = parseTable(text), m = guessMapping(t), r = mapRows(t, m); return { rows: r.rows, skipped: r.skipped, columns: m.filter(Boolean) }; }
 
   /* ---------- Export ---------- */
-  function csvCell(v) { v = v == null ? '' : String(v); return /[";\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  function csvCell(v) {
+    v = v == null ? '' : String(v);
+    if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;   // a spreadsheet would run it as a formula (=HYPERLINK…): kept as text
+    return /[";\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
   function toCsv(header, rows) { return [header].concat(rows).map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n'); }
 
   /* ---------- Full-game backup ----------
      Every table with every column, so a backup restores into an empty database (or the demo) as is.
      Defaults give the type; null = required reference; NOW = the import time when the backup has no date. */
   var BACKUP_FORMAT = 'killer-backup', NOW = {};
+  var SETTINGS_KEYS = ['game_name', 'school_total', 'official_players', 'years', 'depts', 'map_center', 'geocoder_url', 'links', 'shop', 'scoring', 'calendars'];
   var BACKUP_TABLES = {
     players: { name: '', year: '', dept: '', td: '', tp: '', option: '', lang_group: '', address: '', address_type: 'normale', lat: 0, lng: 0, notes: '', weapons: '', points: 0, is_ally: false, status: '', home_id: '', apartment: '', is_mystery: false, photo_path: '', created_at: NOW },
     rounds: { name: '', position: 0, held_weapons: {}, created_at: NOW },
@@ -576,7 +580,8 @@
       if (!e.details) return;
       Object.keys(e.details).forEach(function (k) { if (/_id$/.test(k) && e.details[k] != null && ids.has(String(e.details[k]))) e.details[k] = ids.get(String(e.details[k])); });
     });
-    data.settings = raw.settings && typeof raw.settings === 'object' && !Array.isArray(raw.settings) ? raw.settings : {};
+    data.settings = {};   // only the settings the app knows, nothing else from the file
+    if (raw.settings && typeof raw.settings === 'object' && !Array.isArray(raw.settings)) SETTINGS_KEYS.forEach(function (k) { if (Object.prototype.hasOwnProperty.call(raw.settings, k)) data.settings[k] = raw.settings[k]; });
     return { data: data, meta: { name: raw.game_name || data.settings.game_name || '', exported_at: raw.exported_at || null, photos: data.players.filter(function (p) { return p.photo_path && p.photo_path.indexOf('data:') === 0; }).length } };
   }
   function makeBackup(state, exportedAt) {
@@ -616,8 +621,11 @@
       p.points = Math.max(0, p.points - (k.points || 0));
       if (k.killer_weapons != null) p.weapons = k.killer_weapons;   // what they held before that kill
     });
-    var restoreHeld = !!(prev && prev.held_weapons);
-    if (restoreHeld) state.players.forEach(function (p) { get(p.id).weapons = prev.held_weapons[p.id] || ''; });   // as at the reroll
+    var restoreHeld = !!(prev && prev.held_weapons), since = rounds[i] && Date.parse(rounds[i].created_at);
+    if (restoreHeld) state.players.forEach(function (p) {   // as at the reroll; a sheet created during it keeps its weapons
+      var created = Date.parse(p.created_at), existed = prev.held_weapons[p.id] != null || !isFinite(since) || !isFinite(created) || created < since;
+      if (existed) get(p.id).weapons = prev.held_weapons[p.id] || '';
+    });
     var patches = [];
     now.forEach(function (v, id) {
       var p = state.players.find(function (x) { return x.id === id; }), patch = {};
@@ -679,14 +687,24 @@
   }
   /* What changes when a mystery sheet turns out to be `real`: every reference moves to the real sheet (a link that
      would repeat one it already has, or point at itself, goes), and the clues fill what the real sheet leaves empty. */
-  function mysteryMerge(state, mystery, real) {
-    var m = mystery.id, r = real.id, out = { links: [], drop: [], kills: [], bonuses: [], intel: [], player: {} };
+  /* prefer: when a moved link would give the real sheet a second target or a second hunter in a round (each player has
+     one of each), 'mystery' keeps the mystery sheet's link and removes the other one, 'real' keeps what was known
+     about the real sheet. out.conflicts lists those cases, out.replace the existing links removed. */
+  function mysteryMerge(state, mystery, real, prefer) {
+    var m = mystery.id, r = real.id, out = { links: [], drop: [], replace: [], conflicts: [], kills: [], bonuses: [], intel: [], player: {} };
     var key = function (round, a, b) { return round + '|' + a + '|' + b; }, seen = new Set();
-    state.links.forEach(function (l) { if (l.hunter_id !== m && l.target_id !== m) seen.add(key(l.round_id, l.hunter_id, l.target_id)); });
+    var others = state.links.filter(function (l) { return l.hunter_id !== m && l.target_id !== m; });
+    others.forEach(function (l) { seen.add(key(l.round_id, l.hunter_id, l.target_id)); });
     state.links.forEach(function (l) {
       if (l.hunter_id !== m && l.target_id !== m) return;
       var hu = l.hunter_id === m ? r : l.hunter_id, tg = l.target_id === m ? r : l.target_id, k = key(l.round_id, hu, tg);
       if (hu === tg || seen.has(k)) { out.drop.push(l.id); return; }
+      var clash = others.filter(function (o) { return o.round_id === l.round_id && (o.hunter_id === hu || o.target_id === tg) && out.replace.indexOf(o.id) < 0; });
+      if (clash.length) {
+        clash.forEach(function (o) { out.conflicts.push({ link: l, existing: o, hunter: o.hunter_id === hu }); });
+        if (prefer === 'real') { out.drop.push(l.id); return; }
+        clash.forEach(function (o) { out.replace.push(o.id); });
+      }
       seen.add(k); out.links.push({ id: l.id, patch: { hunter_id: hu, target_id: tg } });
     });
     var realDead = state.kills.some(function (k) { return k.victim_id === r; });
@@ -887,7 +905,16 @@
   function bonusWindow(item, boughtAt) {
     var tm = bonusTiming(item), bought = new Date(boughtAt || Date.now()), starts = bought;
     if (tm.start === 'next_day') { var p = parisParts(bought); starts = parisDate(p.y, p.m, p.d + 1, 0, 10); }
-    return { starts: starts, ends: tm.hours ? new Date(+starts + tm.hours * 3600e3) : null };
+    return { starts: starts, ends: tm.hours ? addParisHours(starts, tm.hours) : null };
+  }
+  /* A moment plus some hours, the whole days counted on Paris clocks: "24 h from 00:10" ends at 00:10 the next day
+     even when the clocks change that night (otherwise it would end at 23:10 or 01:10). */
+  function addParisHours(start, hours) {
+    start = new Date(start);
+    var days = Math.floor(hours / 24), rest = hours - days * 24;
+    if (!days) return new Date(+start + hours * 3600e3);
+    var p = parisParts(start), ss = Math.floor((+start % 6e4) / 1000);
+    return new Date(+parisDate(p.y, p.m, p.d + days, p.hh, p.mi, ss) + rest * 3600e3);
   }
   /* 'upcoming', 'active', 'over' (a one-off is over as soon as it is used) */
   function bonusStatus(b, now) {
@@ -1023,7 +1050,7 @@
     hasCoords: hasCoords, hasAddress: hasAddress, places: places, homeMembers: homeMembers, suggestedHomes: suggestedHomes, homeKind: homeKind, ADDRESS_TYPES: ADDRESS_TYPES, addressType: addressType, guessAddressType: guessAddressType,
     norm: norm, weakest: weakest, sortedRounds: sortedRounds, currentRound: currentRound, deadSet: deadSet,
     linkMaps: linkMaps, resolveTarget: resolveTarget, resolveHunter: resolveHunter, fragments: fragments,
-    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, LEVEL_GAP: LEVEL_GAP, SCORING: SCORING, scoring: scoring, bonusChoices: bonusChoices, levelGap: levelGap, rescoreKills: rescoreKills, reclassWeapon: reclassWeapon, pendingKills: pendingKills, pointsRange: pointsRange, settleKills: settleKills, settleWeapon: settleWeapon, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
+    planSetTarget: planSetTarget, planMove: planMove, FIELDS: FIELDS, parseTable: parseTable, guessMapping: guessMapping, mapRows: mapRows, toCsv: toCsv, readBackup: readBackup, makeBackup: makeBackup, bonusTiming: bonusTiming, bonusWindow: bonusWindow, addParisHours: addParisHours, bonusStatus: bonusStatus, currentBonuses: currentBonuses, dangerAlerts: dangerAlerts, killWindows: killWindows, building: building, TIME_ZONE: TIME_ZONE, parisParts: parisParts, parisDate: parisDate, parisDay: parisDay, calendarMatches: calendarMatches, calendarsFor: calendarsFor, calendarScope: calendarScope, groupKey: groupKey, calendarLabel: calendarLabel, icsCalendarName: icsCalendarName, mergeEvents: mergeEvents, eventForPlayer: eventForPlayer, classKind: classKind, isPromotionView: isPromotionView, CAL_FIELDS: CAL_FIELDS, parseIcs: parseIcs, scheduleAt: scheduleAt, killPoints: killPoints, LEVEL_GAP: LEVEL_GAP, SCORING: SCORING, scoring: scoring, bonusChoices: bonusChoices, levelGap: levelGap, rescoreKills: rescoreKills, reclassWeapon: reclassWeapon, pendingKills: pendingKills, pointsRange: pointsRange, settleKills: settleKills, settleWeapon: settleWeapon, weaponList: weaponList, matchWeapons: matchWeapons, renameWeapon: renameWeapon, rankLabel: rankLabel,
     leaderboard: leaderboard, generalRanking: generalRanking, realPlayers: realPlayers, heldWeapons: heldWeapons, pastWeapons: pastWeapons, weaponHolders: weaponHolders, undoRoundPlan: undoRoundPlan, intelOf: intelOf, lastSightings: lastSightings, mysteryCandidates: mysteryCandidates, mysteryMerge: mysteryMerge, MYSTERY_CLUES: CLUES, stats: stats, classesTree: classesTree, languageGroups: languageGroups, languageGroupBuckets: languageGroupBuckets, parseImport: parseImport
   };
 });

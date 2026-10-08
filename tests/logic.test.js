@@ -485,6 +485,34 @@ t('a weapon is in play once per loop: who holds it already', () => {
   assert.deepEqual(L.weaponHolders(s, 'Banane', 'a'), [], 'the player being edited does not count');
   assert.deepEqual(L.weaponHolders(s, 'Gant'), []);
 });
+t('audit lot 6: clocks changing, merge conflicts, reroll undo, CSV formulas, backup settings', () => {
+  const f = d => { const p = L.parisParts(d); return p.d + '/' + (p.m + 1) + ' ' + p.hh + ':' + String(p.mi).padStart(2, '0'); };
+  // BUG-02: 24 h from 00:10 ends at 00:10, even on the night the clocks change (winter and summer)
+  let w = L.bonusWindow({ start: 'next_day', hours: 24 }, new Date('2026-10-24T15:00:00Z'));
+  assert.deepEqual([f(w.starts), f(w.ends)], ['25/10 0:10', '26/10 0:10']);
+  w = L.bonusWindow({ start: 'next_day', hours: 48 }, new Date('2026-03-27T15:00:00Z'));
+  assert.deepEqual([f(w.starts), f(w.ends)], ['28/3 0:10', '30/3 0:10']);
+  assert.equal(f(L.addParisHours(new Date('2026-10-24T22:10:00Z'), 26)), '26/10 2:10', 'a day on the clock, then 2 real hours');
+  assert.equal(+L.addParisHours(new Date('2026-10-24T22:10:00Z'), 3), +new Date('2026-10-25T01:10:00Z'), 'under a day: real hours');
+  // BUG-01: the real sheet already hunts someone; the mystery sheet hunts someone else
+  const s = base(); s.players.push({ id: 'm', name: 'M', is_mystery: true });
+  s.links = [link('r0', 'm', 'c'), link('r0', 'b', 'd'), link('r0', 'e', 'm')];
+  let plan = L.mysteryMerge(s, s.players[6], s.players[1], 'mystery');
+  assert.equal(plan.conflicts.length, 1); assert.ok(plan.conflicts[0].hunter);
+  assert.deepEqual([plan.links.map(x => x.patch.hunter_id + '>' + x.patch.target_id), plan.replace.length, plan.drop.length], [['b>c', 'e>b'], 1, 0], 'mystery kept: b hunts c, b->d removed');
+  plan = L.mysteryMerge(s, s.players[6], s.players[1], 'real');
+  assert.deepEqual([plan.links.map(x => x.patch.hunter_id + '>' + x.patch.target_id), plan.replace.length, plan.drop.length], [['e>b'], 0, 1], 'what we knew kept: m->c dropped');
+  // BUG-05: a sheet created during the reroll keeps its weapons when the reroll is deleted
+  const r = { players: [{ id: 'a', name: 'A', weapons: 'Seau', created_at: '2026-10-01T00:00:00Z' }, { id: 'n', name: 'N', weapons: 'Lacet', created_at: '2026-10-05T00:00:00Z' }],
+    rounds: [{ id: 'r0', position: 0, held_weapons: { a: 'Banane' } }, { id: 'r1', position: 1, created_at: '2026-10-03T00:00:00Z' }], kills: [], links: [] };
+  assert.deepEqual(L.undoRoundPlan(r, 'r1').patches, [{ id: 'a', patch: { weapons: 'Banane' } }]);
+  // SEC-09: formulas exported as text
+  assert.equal(L.toCsv(['x'], [['=1+1'], ['+33'], ['-2'], ['@A1'], ['ok']]), ['x', "'=1+1", "'+33", "'-2", "'@A1", 'ok'].join('\r\n'));
+  // SEC-08: only the known settings come from a backup file
+  const raw = JSON.parse('{"format":"killer-backup","players":[],"settings":{"game_name":"G","geocoder_url":"https://x.example","__proto__":{"polluted":1},"evil":2}}');
+  const st = L.readBackup(raw).data.settings;
+  assert.deepEqual(Object.keys(st).sort(), ['game_name', 'geocoder_url']); assert.equal({}.polluted, undefined);
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');

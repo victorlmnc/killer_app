@@ -458,7 +458,7 @@
             var p = chosen && store.player(chosen); if (!p) return ui.toast(t('Choose the player.'), 'error');
             var s = starts.value ? parisInput(starts.value) : new Date(), hrs = Math.max(0, parseFloat(hours.value) || 0);
             var row = { player_id: p.id, name: item.name, price: item.price || 0, bought_at: (bought.value ? parisInput(bought.value) : new Date()).toISOString(),
-              starts_at: s.toISOString(), ends_at: hrs ? new Date(+s + hrs * 3600e3).toISOString() : null, note: note.value.trim() };
+              starts_at: s.toISOString(), ends_at: hrs ? L.addParisHours(s, hrs).toISOString() : null, note: note.value.trim() };   // whole days on Paris clocks
             var jobs = [store.insert('bonuses', row).then(function () { if (pay.checked && item.price) return store.addPoints(p.id, -item.price); })];
             store.log(t('{name} bought {bonus}', { name: p.name, bonus: item.name }) + (row.ends_at ? ' (' + ui.whenShort(row.starts_at) + ' → ' + ui.whenShort(row.ends_at) + ')' : ''), { type: 'bonus', player_id: p.id, bonus: item.name, starts_at: row.starts_at, ends_at: row.ends_at, note: row.note });
             Promise.all(jobs).then(function () { api.close(); ui.toast(t('Purchase recorded.')); });
@@ -1118,13 +1118,35 @@
       cands.length > shown.length ? h('p', { class: 'muted small' }, t('…and {n} more: add clues to narrow it down.', { n: cands.length - shown.length })) : null,
       edit ? h('button', { type: 'button', class: 'linkish small', onclick: function () { ui.pickPlayer({ title: t('Who is it?'), filter: function (x) { return !x.is_mystery && x.id !== p.id; } }).then(function (id) { if (id) act.mergeMystery(p.id, id); }); } }, t('Someone else…')) : null);
   }
+  /* Before merging: when the real sheet already has a target or a hunter that the mystery sheet's links contradict,
+     the person says which to keep. Resolves to 'mystery', 'real' or null (cancelled). */
+  function mergeChoice(m, r) {
+    var plan = L.mysteryMerge(store.state, m, r, 'mystery'), intro = t('What we know about "{m}" (links, kills, bonuses, intel, clues) moves to the sheet of {name}, then the mystery sheet is deleted.', { m: m.name, name: r.name });
+    if (!plan.conflicts.length) return ui.confirm({ title: t('It is {name}?', { name: r.name }), text: intro, action: t('Merge') }).then(function (ok) { return ok ? 'mystery' : null; });
+    return new Promise(function (resolve) {
+      var answer = null;
+      ui.dialog({ title: t('It is {name}?', { name: r.name }), onClose: function () { resolve(answer); }, render: function (body, api) {
+        body.appendChild(h('p', { class: 'prose' }, intro));
+        body.appendChild(h('p', { class: 'prose' }, h('strong', {}, t('But it contradicts what we knew:'))));
+        body.appendChild(h('ul', { class: 'prose' }, plan.conflicts.map(function (c) {
+          return h('li', {}, c.hunter ? t('{a} already hunts {b}, the mystery sheet hunts {c}.', { a: r.name, b: name(c.existing.target_id), c: name(c.link.target_id) })
+            : t('{a} is already hunted by {b}, the mystery sheet is hunted by {c}.', { a: r.name, b: name(c.existing.hunter_id), c: name(c.link.hunter_id) }));
+        })));
+        function pick(v) { return function () { answer = v; api.close(); }; }
+        body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
+          h('button', { type: 'button', class: 'btn', onclick: pick('real') }, t('Keep what we knew about {name}', { name: r.name })),
+          h('button', { type: 'button', class: 'btn btn-primary', onclick: pick('mystery') }, t("Keep the mystery sheet's links"))));
+      } });
+    });
+  }
   act.mergeMystery = function (mysteryId, realId) {
     var m = store.player(mysteryId), r = store.player(realId); if (!m || !r || !store.canEdit()) return Promise.resolve();
-    return ui.confirm({ title: t('It is {name}?', { name: r.name }), text: t('What we know about "{m}" (links, kills, bonuses, intel, clues) moves to the sheet of {name}, then the mystery sheet is deleted.', { m: m.name, name: r.name }), action: t('Merge') }).then(function (ok) {
-      if (!ok) return;
-      var plan = L.mysteryMerge(store.state, m, r), jobs = [];
-      plan.links.forEach(function (x) { jobs.push(store.update('links', x.id, x.patch)); });
-      plan.drop.forEach(function (id) { jobs.push(store.remove('links', id)); });
+    return mergeChoice(m, r).then(function (prefer) {
+      if (!prefer) return;
+      var plan = L.mysteryMerge(store.state, m, r, prefer), jobs = [];
+      // the links in one transaction: moved, duplicates and contradicted ones removed (nothing half done on a conflict)
+      var moved = plan.links.map(function (x) { return Object.assign({}, store.state.links.find(function (l) { return l.id === x.id; }), x.patch); });
+      jobs.push(store.replaceLinks(plan.drop.concat(plan.replace, plan.links.map(function (x) { return x.id; })), moved));
       plan.kills.forEach(function (x) { jobs.push(store.update('kills', x.id, x.patch)); });
       plan.bonuses.forEach(function (x) { jobs.push(store.update('bonuses', x.id, x.patch)); });
       plan.intel.forEach(function (x) { jobs.push(store.update('intel', x.id, x.patch)); });
@@ -1317,6 +1339,9 @@
             summary.appendChild(h('p', { class: 'prose' }, h('strong', {}, res.meta.name || t('Unnamed game')), res.meta.exported_at ? ' · ' + t('saved {when}', { when: ui.when(res.meta.exported_at) }) : ''));
             summary.appendChild(h('p', { class: 'prose muted' }, t('{p} players ({ph} photos), {r} rounds, {l} links, {k} kills, {e} log entries, {w} weapons, {s} spots.',
               { p: d.players.length, ph: res.meta.photos, r: d.rounds.length, l: d.links.length, k: d.kills.length, e: d.events.length, w: d.weapons.length, s: d.spots.length })));
+            var geo = String(d.settings.geocoder_url || '').trim();   // a file from elsewhere could send the addresses to its own server
+            if (geo && geo !== String(store.state.settings.geocoder_url || '').trim()) summary.appendChild(h('p', { class: 'prose danger' },
+              t('With the settings, this file also changes the geocoder to {url}: the addresses of the sheets would be sent there.', { url: geo })));
           };
           r.readAsText(f);
         } });
