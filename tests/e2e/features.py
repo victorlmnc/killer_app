@@ -99,6 +99,13 @@ with sync_playwright() as p:
     got = pg.evaluate("a => [K.store.state.bonuses.find(b => b.id === a.b).player_id, K.store.player(a.p).points]", {'b': b2['id'], 'p': buyer['id']})
     assert got == [buyer['id'], 2], got   # 10 - 8
     pg.goto(URL + '#/dashboard'); expect(pg.locator('.alerts')).not_to_contain_text("Quelqu'un d'inconnu a un Super Coupe-Gorge")
+    pg.evaluate("id => K.actions.openPlayer(id)", buyer['id'])   # their sheet lists every purchase and what it cost
+    n, spent = pg.evaluate("id => { const l = K.store.state.bonuses.filter(b => b.player_id === id); return [l.length, l.reduce((s, b) => s + (b.price || 0), 0)]; }", buyer['id'])
+    buys = pg.locator('dialog[open] .sheet-buys'); expect(buys.locator('summary')).to_contain_text("%d achat%s · %d pts d'achats" % (n, 's' if n > 1 else '', spent))
+    buys.locator('summary').click(); expect(buys).to_contain_text('Super Coupe-Gorge')
+    pg.evaluate("id => K.store.update('players', id, { notes: 'redraw' })", buyer['id']); pg.wait_for_timeout(100)
+    assert pg.locator('dialog[open] .sheet-buys').get_attribute('open') is not None, 'stays open when the sheet redraws'
+    pg.keyboard.press('Escape')
 
     step('pre-shot: the weapons of our targets, with what we already have')
     pg.evaluate("() => { const w = K.store.state.weapons.find(x => K.logic.norm(x.name) === 'banane'); if (w) K.store.update('weapons', w.id, { owned: true, note: 'dans le frigo' }); }")

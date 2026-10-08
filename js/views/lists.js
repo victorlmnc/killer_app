@@ -272,6 +272,7 @@
             } }, t('Save'))));
         } });
       }
+      var pastOpen = false, pastAll = false;   // the history stays open (and complete) across redraws
       function refresh() {
         var st = store.state, s = st.settings, dead = L.deadSet(st), round = L.currentRound(st), admin = store.isAdmin();
         var hunters = new Set();
@@ -293,7 +294,9 @@
           h('span', { class: 'muted small' }, t('Record a purchase from the bonus below.'))));
         if (!cur.length) active.appendChild(h('p', { class: 'empty' }, t('No bonus in effect or to come.')));
         cur.forEach(function (b) { active.appendChild(bonusRow(b)); });
-        if (past.length) active.appendChild(h('details', { class: 'bonus-history' }, h('summary', {}, K.icon('chevron', 'ic-sm'), t('History ({n})', { n: past.length })), past.slice(0, 40).map(bonusRow)));
+        if (past.length) active.appendChild(h('details', { class: 'bonus-history', open: pastOpen, ontoggle: function (e) { pastOpen = e.target.open; } },
+          h('summary', {}, K.icon('chevron', 'ic-sm'), t('History ({n})', { n: past.length })), past.slice(0, pastAll ? past.length : 40).map(bonusRow),
+          past.length > 40 ? h('button', { type: 'button', class: 'linkish small', onclick: function () { pastAll = !pastAll; refresh(); } }, pastAll ? t('Show less') : t('Show all ({n})', { n: past.length })) : null));
         root.appendChild(active);
         var cols = root.appendChild(h('div', { class: 'cols-shop' }));
         var items = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Bonuses')), admin ? h('button', { type: 'button', class: 'btn', onclick: function () { editItem(null); } }, K.icon('plus'), t('Add a bonus')) : null));

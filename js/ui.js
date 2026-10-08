@@ -417,7 +417,7 @@
     var st = K.logic.bonusStatus(b), now = new Date(), s = new Date(b.starts_at), e = b.ends_at && new Date(b.ends_at);
     var label = st === 'active' ? (sameDay(e, now) ? t('until {time}', { time: hm(e) }) : t('until {date}', { date: ui.whenShort(e) }))
       : st === 'upcoming' ? (sameDay(s, now) ? t('at {time}', { time: hm(s) }) : sameDay(s, dayStart(now, 1)) ? t('tomorrow at {time}', { time: hm(s) }) : t('from {date}', { date: ui.whenShort(s) }))
-      : t('used');
+      : b.ends_at ? t('ended') : t('used');   // a bonus with a duration ends; a one-off one is used
     return h('span', { class: 'tag tag-bonus tag-bonus-' + st + (small ? ' tag-sm' : ''), title: b.name + ' · ' + label }, b.name, h('span', { class: 'tag-bonus-when' }, ' · ' + label));
   };
   /* Bonuses of a player still to come or in effect (nothing when there are none). */

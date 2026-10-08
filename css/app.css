@@ -529,7 +529,10 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .bonus-tags { margin-top: .2rem; } .bonus-line { display: block; margin-block: .15rem; } .sheet-bonuses { display: grid; gap: .3rem; }
 .bonus-row { border-top: 1px solid var(--line); padding-block: .45rem; } .bonus-row:first-of-type { border-top: 0; }
 .linkish-row { appearance: none; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; padding: 0; }
-.bonus-history summary { cursor: pointer; color: var(--muted); font-size: .88rem; padding-block: .3rem; }
+.bonus-history summary { cursor: pointer; color: var(--muted); font-size: .88rem; padding-block: .3rem; list-style: none; display: inline-flex; align-items: center; gap: .35rem; }
+.bonus-history summary::-webkit-details-marker { display: none; }   /* our own chevron only, not the browser's triangle too */
+.bonus-history summary .ic { transition: transform .15s; } .bonus-history[open] summary .ic { transform: rotate(180deg); }
+.sheet-buys { margin-top: .6rem; } .buy-row { gap: .5rem; } .buy-row .row-main { display: grid; gap: .15rem; }
 /* dashboard alerts */
 .alerts { gap: .5rem; } .alert { margin: 0; display: flex; gap: .6rem; align-items: flex-start; padding: .55rem .7rem; border-radius: var(--radius-sm); background: var(--surface-2); line-height: 1.4; }
 .alert-body { display: grid; gap: .2rem; min-width: 0; } .alert-body p { margin: 0; } .alert-reasons { margin: 0; padding-left: 1.1rem; display: grid; gap: .1rem; font-size: .9rem; }

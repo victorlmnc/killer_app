@@ -40,7 +40,7 @@
   /* ------------------------------------------------------- player sheet */
   act.openPlayer = function (playerId, ctx) {
     ctx = ctx || {};
-    var off = null, intelAll = false;
+    var off = null, intelAll = false, buysOpen = false;
     var dlg = ui.dialog({ title: '', onClose: function () { if (off) off(); }, render: function (body, api) { draw(body, api); } });
     off = store.on(function () { if (dlg.el.open) draw(dlg.body, dlg); });
 
@@ -124,6 +124,18 @@
       if (p.is_mystery) body.appendChild(mysteryBox(p, roundId, edit, api));
       var bonusTags = ui.bonusTags(p);
       if (bonusTags) body.appendChild(h('div', { class: 'sheet-bonuses' }, h('span', { class: 'relation-label' }, t('Bonuses')), bonusTags));
+      /* every purchase of the player, finished ones too, and what they cost: helps guess what they have left */
+      var buys = (st.bonuses || []).filter(function (b) { return b.player_id === p.id; }).sort(function (a, b) { return Date.parse(b.bought_at) - Date.parse(a.bought_at); });
+      if (buys.length) {
+        var spent = buys.reduce(function (n, b) { return n + (b.price || 0); }, 0);
+        body.appendChild(h('details', { class: 'bonus-history sheet-buys', open: buysOpen, ontoggle: function (e) { buysOpen = e.target.open; } },
+          h('summary', {}, K.icon('chevron', 'ic-sm'), K.n(buys.length, '{n} purchase', '{n} purchases') + ' · ' + t('{n} pts in purchases', { n: spent })),
+          buys.map(function (b) {
+            return h('div', { class: 'row buy-row' }, h('span', { class: 'row-main' }, h('span', {}, ui.bonusTag(b, true)),
+              h('span', { class: 'row-sub' }, [t('bought {date}', { date: ui.whenShort(b.bought_at) }), K.n(b.price || 0, '{n} pt', '{n} pts'), b.note].filter(Boolean).join(' · '))),
+              edit ? h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('Remove this purchase'), onclick: function () { act.removeBonus(b); } }, K.icon('close')) : null);
+          })));
+      }
       if (dead && kill) {
         body.appendChild(h('button', { type: 'button', class: 'death', title: act.killSummary(kill), onclick: function () { act.killDetails(kill.id); } }, h('span', { class: 'stamp', 'aria-hidden': 'true' }, t('Eliminated')),
           h('span', {}, act.killAttribution(kill) + (kill.weapon ? ' ' + t('with "{w}"', { w: kill.weapon }) : '') + ', ' + ui.ago(kill.happened_at) + '.')));
