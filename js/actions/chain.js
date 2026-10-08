@@ -134,21 +134,19 @@
     ui.dialog({
       title: n === 0 ? t('Start the loop') : t('New reroll'),
       render: function (body, api) {
-        if (n) body.appendChild(h('p', { class: 'prose' }, t('"{name}" is archived as it is and stays available. The new loop starts empty with the {n} players still alive.', { name: rounds[n - 1].name, n: L.stats(store.state).alive })));
+        if (n) body.appendChild(h('p', { class: 'prose' }, t('"{name}" is archived as it is and stays available. The new loop starts empty with the {n} players still alive, without weapons: everything is mixed (each sheet keeps the weapons in its history).', { name: rounds[n - 1].name, n: L.stats(store.state).alive })));
         body.appendChild(ui.field(t('Round name'), input));
         var held = L.heldWeapons(store.state), holders = Object.keys(held).length;
-        var clear = h('input', { type: 'checkbox', checked: true });
-        if (n && holders) body.appendChild(h('label', { class: 'check' }, clear, K.n(holders, 'Take the weapons off the {n} player who has some (everything is mixed); they stay in the history of the sheet.', 'Take the weapons off the {n} players who have some (everything is mixed); they stay in the history of each sheet.')));
         body.appendChild(h('div', { class: 'actions' },
           h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
           h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
             var label = input.value.trim() || t('Reroll {n}', { n: n });
-            if (n && holders && clear.checked) {   // the weapons of the ending round are kept on it, the sheets start empty
+            if (n && holders) {   // a reroll mixes everything: the weapons of the ending round are kept on it, the sheets start empty
               store.update('rounds', rounds[n - 1].id, { held_weapons: held });
               Object.keys(held).forEach(function (id) { store.update('players', id, { weapons: '' }); });
             }
             store.insert('rounds', { name: label, position: n ? rounds[n - 1].position + 1 : 0 });
-            store.log(t('New round: {name}', { name: label }) + (n && holders && clear.checked ? ' (' + K.n(holders, 'weapons taken off {n} player', 'weapons taken off {n} players') + ')' : ''));
+            store.log(t('New round: {name}', { name: label }));
             api.close(); ui.toast(t('Round "{name}" created.', { name: label }));
           } }, n === 0 ? t('Start') : t('Create the reroll'))));
       }

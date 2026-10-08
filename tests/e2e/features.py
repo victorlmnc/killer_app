@@ -304,9 +304,10 @@ with sync_playwright() as p:
     before = pg.evaluate("(() => { const st = K.store.state, cur = K.logic.currentRound(st), p = st.players.find(x => x.weapons && x.weapons.trim()); return { id: p.id, weapons: p.weapons, round: cur.name, holders: K.store.state.players.filter(x => x.weapons && x.weapons.trim()).length }; })()")
     pg.evaluate("() => { K.actions.newRound(); }")
     dlg = pg.locator('dialog[open]').last
-    expect(dlg).to_contain_text('Retirer les armes des %d joueurs' % before['holders'])
+    expect(dlg).to_contain_text('sans armes'); expect(dlg.locator('input[type=checkbox]')).to_have_count(0)   # always: no question asked
     dlg.get_by_role('button', name='Créer le reroll').click(); pg.wait_for_timeout(300)
     assert pg.evaluate("K.store.state.players.every(p => !(p.weapons || '').trim())"), 'every sheet is empty'
+    assert pg.evaluate("K.store.state.events[0].text") == 'Nouvelle boucle : ' + pg.evaluate("K.logic.currentRound(K.store.state).name"), 'the log says the new round, nothing more'
     assert pg.evaluate("a => K.store.state.rounds.find(r => r.name === a.round).held_weapons[a.id]", before) == before['weapons']
     pg.evaluate("id => K.actions.openPlayer(id)", before['id'])
     past = pg.locator('dialog[open] .past-weapons')
