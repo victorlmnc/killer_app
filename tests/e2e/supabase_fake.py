@@ -39,7 +39,11 @@ window.supabase = { createClient: function (url, key) {
         session = { user: { id: 'u1', email: c.email } }; setTimeout(function () { authCb('SIGNED_IN', session); }, 0);
         return Promise.resolve({ data: { session: session }, error: null });
       },
-      signOut: function () { session = null; setTimeout(function () { authCb('SIGNED_OUT', null); }, 0); return Promise.resolve({ error: null }); }
+      signOut: function (o) {   // without a network, only a local sign-out works (as with the real library)
+        window.__calls.push(['signOut', (o && o.scope) || 'global']);
+        if (window.__down && !(o && o.scope === 'local')) return Promise.resolve({ error: { message: 'Failed to fetch' } });
+        session = null; setTimeout(function () { authCb('SIGNED_OUT', null); }, 0); return Promise.resolve({ error: null });
+      }
     },
     rpc: function (name, args) {
       window.__calls.push(['rpc', name, args || null]);
@@ -141,6 +145,29 @@ with sync_playwright() as p:
     before = len(pg.evaluate('window.__calls')); pg.evaluate("K.store.insert('players', {name: 'X'})"); pg.wait_for_timeout(100)
     assert not [c for c in pg.evaluate('window.__calls')[before:] if c[0] == 'insert'], 'observer must not write'
     pg.evaluate('K.store.auth.signOut()'); expect(pg.locator('.auth-card')).to_be_visible()
+    print('· removed from the team while signed in: locked out at the next check, no copy left on the device')
+    pg.evaluate("window.__role = 'member'")
+    pg.locator('input[type=email]').fill('moi@test.fr'); pg.locator('input[type=password]').fill('bonmotdepasse'); pg.get_by_role('button', name='Se connecter').click()
+    pg.wait_for_selector('.shell'); pg.wait_for_timeout(2300)   # the offline copy is written after 2 s
+    assert pg.evaluate("!!localStorage.getItem('killer.cache.v1')")
+    pg.evaluate("window.__role = 'observer'; K.store.recheckRole()"); pg.wait_for_timeout(200)
+    assert pg.evaluate("[K.store.role, K.store.canEdit()]") == ['observer', False], 'a changed role applies at once'
+    pg.evaluate("window.__role = null; document.dispatchEvent(new Event('visibilitychange'))"); pg.wait_for_timeout(300)
+    expect(pg.locator('.auth-card')).to_contain_text("n'est pas sur la liste")
+    assert pg.evaluate("[localStorage.getItem('killer.cache.v1'), K.store.state.players.length]") == [None, 0]
+    pg.get_by_role('button', name='Se déconnecter').click(); expect(pg.locator('.auth-card')).to_contain_text('Espace privé')
+    print('· signing out without a network: the copy is wiped, it does not come back')
+    pg.evaluate("window.__role = 'member'")
+    pg.locator('input[type=email]').fill('moi@test.fr'); pg.locator('input[type=password]').fill('bonmotdepasse'); pg.get_by_role('button', name='Se connecter').click()
+    pg.wait_for_selector('.shell'); pg.wait_for_timeout(2300)
+    assert pg.evaluate("!!localStorage.getItem('killer.cache.v1')")
+    ctx.set_offline(True); pg.evaluate("window.__down = true")
+    pg.evaluate("K.store.auth.signOut()"); pg.wait_for_timeout(400)
+    expect(pg.locator('.auth-card')).to_contain_text('Espace privé')
+    assert pg.evaluate("localStorage.getItem('killer.cache.v1')") is None
+    assert ['signOut', 'local'] in pg.evaluate('window.__calls'), 'local sign-out when the server cannot be reached'
+    ctx.set_offline(False); pg.evaluate("window.__down = false")
+    errs[:] = [e for e in errs if 'Failed to fetch' not in e]
     print('· signed in but not on the list')
     pg.evaluate('window.__role = null')
     pg.locator('input[type=email]').fill('intrus@test.fr'); pg.locator('input[type=password]').fill('bonmotdepasse'); pg.get_by_role('button', name='Se connecter').click()

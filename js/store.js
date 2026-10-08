@@ -102,7 +102,11 @@
       }).subscribe();
     }
   };
-  function refreshRole() { var me = store.me(); if (me && ROLES.indexOf(me.role) >= 0) store.role = me.role; }
+  function refreshRole() {
+    var me = store.me();
+    if (me && ROLES.indexOf(me.role) >= 0) store.role = me.role;
+    else if (store.mode === 'supabase') recheckRole();   // no longer on the list? ask the server before locking out
+  }
 
   /* ------------------------------------------------------------ common API */
   function backend() { return store.mode === 'supabase' ? supa : local; }
@@ -467,7 +471,14 @@
     signUp: function (email, password) { return sb.auth.signUp({ email: email, password: password, options: { emailRedirectTo: location.origin + location.pathname } }); },
     resetPassword: function (email) { return sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname }); },
     updatePassword: function (password) { return sb.auth.updateUser({ password: password }); },
-    signOut: function () { return sb.auth.signOut(); }
+    /* Signing out wipes this device's copy of the game at once, network or not, and the session goes even
+       without a connection (a "local" sign-out when the server cannot be reached). */
+    signOut: function () {
+      signingOut = true; dropCache(); signed.clear();
+      if (!sb) { store.role = null; TABLES.concat(['members']).forEach(function (t) { store.state[t] = []; }); if (bootHandlers) bootHandlers.onSignedOut(); return Promise.resolve({}); }
+      var local = function () { return sb.auth.signOut({ scope: 'local' }); };
+      return sb.auth.signOut().then(function (res) { return res && res.error ? local() : res; }, local);
+    }
   };
 
   function loadScript(src) {
@@ -477,6 +488,26 @@
       document.head.appendChild(s);
     });
   }
+
+  var bootHandlers = null, signingOut = false;
+  /* The account's role is checked again when the app comes back on screen and every 10 minutes: a teammate removed
+     from the team loses access (and this device's copy) without having to reload; a changed role applies at once. */
+  function recheckRole() {
+    if (store.mode !== 'supabase' || !sb || store.offline || !store.user || !store.role || !bootHandlers) return;
+    sb.rpc('my_role').then(function (res) {
+      if (res.error) return;   // no connection or server hiccup: next time
+      var role = ROLES.indexOf(res.data) >= 0 ? res.data : null;
+      if (role === store.role) return;
+      if (!role) return lockOut();
+      store.role = role; store.emit();
+    }, function () { /* offline: next time */ });
+  }
+  function lockOut() {
+    store.role = null; dropCache(); signed.clear();
+    TABLES.concat(['members']).forEach(function (t) { store.state[t] = []; });
+    bootHandlers.onNotMember();
+  }
+  store.recheckRole = recheckRole;
 
   /* Boot. handlers = { onSignedOut, onNotMember, onReady, onRecovery, onError } */
   /* ----- offline copy: the last data loaded, kept on this device to open the app without a connection ----- */
@@ -490,7 +521,7 @@
       try { localStorage.setItem(CACHE_KEY, JSON.stringify(copy)); } catch (e) { /* quota: no offline copy */ }
     }, 2000);
   }
-  function dropCache() { try { localStorage.removeItem(CACHE_KEY); Object.keys(localStorage).filter(function (k) { return k.indexOf('killer.cal.') === 0; }).forEach(function (k) { localStorage.removeItem(k); }); } catch (e) { /* ignore */ } }
+  function dropCache() { clearTimeout(cacheTimer); try { localStorage.removeItem(CACHE_KEY); Object.keys(localStorage).filter(function (k) { return k.indexOf('killer.cal.') === 0; }).forEach(function (k) { localStorage.removeItem(k); }); } catch (e) { /* ignore */ } }
   /* Opens the offline copy (read-only) when it belongs to that account (any account when email is null). */
   function offlineStart(email, handlers) {
     var c = null;
@@ -503,6 +534,7 @@
     return true;
   }
   store.boot = function (handlers) {
+    bootHandlers = handlers;
     var cfg = window.KILLER_CONFIG || {};
     if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) { store.mode = 'local'; return local.init().then(handlers.onReady); }
     store.mode = 'supabase';
@@ -512,11 +544,13 @@
     return ready.then(function (state) {
       if (state === 'offline') return;
       sb = store.client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
-      var started = false;
+      var started = false, watching = false;
       function enter(session) {
         store.user = session ? session.user : null;
         if (!session) {
-          if (!navigator.onLine && offlineStart(null, handlers)) return;   // the session could not be refreshed without a connection
+          // the session could not be refreshed without a connection: the last copy, unless the person signed out
+          if (!signingOut && !navigator.onLine && offlineStart(null, handlers)) return;
+          signingOut = false;
           started = false; signed.clear(); store.role = null; dropCache();
           TABLES.concat(['members']).forEach(function (t) { store.state[t] = []; });
           return handlers.onSignedOut();
@@ -524,8 +558,15 @@
         if (started) return; started = true;
         return sb.rpc('my_role').then(check).then(function (role) {
           store.role = ROLES.indexOf(role) >= 0 ? role : null;
-          if (!store.role) return handlers.onNotMember();
-          return supa.loadAll().then(function () { supa.subscribe(); store.on(saveCache); saveCache(); handlers.onReady(); });
+          if (!store.role) { dropCache(); return handlers.onNotMember(); }   // not (or no longer) on the team: no copy of the game left here
+          return supa.loadAll().then(function () {
+            supa.subscribe(); store.on(saveCache); saveCache(); handlers.onReady();
+            if (!watching) {
+              watching = true;
+              document.addEventListener('visibilitychange', function () { if (!document.hidden) recheckRole(); });
+              setInterval(recheckRole, 10 * 6e4);
+            }
+          });
         }).catch(function (err) {
           started = false; console.error(err);
           if (offlineStart(session.user.email, handlers)) return;   // no connection: last copy, read-only
