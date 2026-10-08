@@ -109,16 +109,42 @@
   };
 
   /* ------------------------------------------------------------ export */
+  /* Every real player for the exports: the living first (by name), then the dead, latest death first. */
   function playerRows() {
     var st = store.state, dead = L.deadSet(st), round = L.currentRound(st), maps = round && L.linkMaps(st, round.id);
-    return L.realPlayers(st).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); }).map(function (p) {
+    var deathOf = new Map(st.kills.map(function (k) { return [k.victim_id, k]; }));
+    return L.realPlayers(st).map(function (p) {
       var d = dead.has(p.id), tg = round && !d ? L.resolveTarget(st, round.id, p.id, maps, dead) : null, hu = round && !d ? L.resolveHunter(st, round.id, p.id, maps, dead) : null;
-      return { p: p, dead: d, target: tg && tg.id ? name(tg.id) : '', hunter: hu && hu.id ? name(hu.id) : '', targetConf: tg && tg.id ? ui.confLabel(tg.confidence) : '' };
+      return { p: p, dead: d, kill: deathOf.get(p.id) || null, target: tg && tg.id ? name(tg.id) : '', hunter: hu && hu.id ? name(hu.id) : '', targetConf: tg && tg.id ? tg.confidence : '' };
+    }).sort(function (a, b) {
+      if (a.dead !== b.dead) return a.dead ? 1 : -1;
+      if (a.dead) return Date.parse((b.kill || {}).happened_at || 0) - Date.parse((a.kill || {}).happened_at || 0) || a.p.name.localeCompare(b.p.name, K.i18n.lang);
+      return a.p.name.localeCompare(b.p.name, K.i18n.lang);
     });
   }
+  /* "08/10/2026 14:05", Paris time: what a spreadsheet reads as a date */
+  function sheetDate(iso) {
+    if (!iso) return '';
+    var x = L.parisParts(new Date(iso)), two = function (n) { return (n < 10 ? '0' : '') + n; };
+    return two(x.d) + '/' + two(x.m + 1) + '/' + x.y + ' ' + two(x.hh) + ':' + two(x.mi);
+  }
+  /* One line per player, readable in a spreadsheet: the class in one column, the reliability next to the target only
+     when it is not sure, how and when the dead died, the shared flat or residence by name, notes on one line. */
   act.exportCsv = function () {
-    var header = [t('Name'), t('Status'), t('Year'), t('Department'), 'TD', 'TP', t('Option'), t('Language group'), t('Points'), t('Weapons'), t('Target'), t('Reliability'), t('Killer'), t('Alliance'), t('Address'), t('Housing type'), t('Notes')];
-    var rows = playerRows().map(function (r) { var p = r.p; return [p.name, r.dead ? t('Dead') : t('Alive'), p.year, p.dept, p.td, p.tp, p.option, p.lang_group, p.points || 0, p.weapons, r.target, r.targetConf, r.hunter, p.is_ally ? t('yes') : '', p.address, p.address ? t(L.ADDRESS_TYPES.find(function (x) { return x.id === L.addressType(p.address_type); }).label) : '', p.notes]; });
+    var st = store.state;
+    var header = [t('Name'), t('Status'), t('Class'), t('Option'), t('Language group'), t('Points'), t('Weapons'), t('Target'), t('Killer'), t('Died on'), t('Killed by'), t('Weapon of the kill'), t('Alliance'), t('Housing'), t('Address'), t('Notes')];
+    var rows = playerRows().map(function (r) {
+      var p = r.p, k = r.kill, home = p.home_id && (st.homes || []).find(function (x) { return x.id === p.home_id; }), range = L.pointsRange(st, p);
+      var type = L.addressType(p.address_type), housing = type === 'normale' ? '' : t(L.ADDRESS_TYPES.find(function (x) { return x.id === type; }).label);
+      if (home) housing = [housing, home.name, L.homeKind(home) === 'residence' && p.apartment ? t('apt. {n}', { n: p.apartment }) : ''].filter(Boolean).join(' · ');
+      var by = !k ? '' : k.admin_reason ? t('Administration') + ' (' + t(k.admin_reason === 'cheating' ? 'Cheating' : 'Other') + ')' : k.killer_id ? name(k.killer_id) : t('Unknown');
+      return [p.name, r.dead ? t('Dead') : t('Alive'), [p.year, p.dept, p.td, p.tp].filter(Boolean).join(' '), p.option, p.lang_group,
+        range.max > range.min ? t('{a} to {b}', { a: range.min, b: range.max }) : range.min,
+        ui.weaponsInOrder(p.weapons).join(', '),
+        r.target ? r.target + (r.targetConf && r.targetConf !== 'sur' ? ' (' + ui.confLabel(r.targetConf).toLowerCase() + ')' : '') : '', r.hunter,
+        k ? sheetDate(k.happened_at) : '', by, k ? k.weapon || '' : '',
+        p.is_ally ? t('yes') : '', housing, p.address, String(p.notes || '').replace(/\s*[\r\n]+\s*/g, ' / ').trim()];
+    });
     ui.download('players-' + new Date().toISOString().slice(0, 10) + '.csv', '\ufeff' + L.toCsv(header, rows), 'text/csv;charset=utf-8');
   };
   /* The whole game in one file: sheets, rounds, links, kills, the full log, catalogue, spots and settings. */

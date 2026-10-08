@@ -454,6 +454,18 @@ with sync_playwright() as p:
     order = pg.evaluate("id => { const st = K.store.state, p = K.store.player(id); return [...document.querySelectorAll('.row-player')].find(r => r.textContent.includes(p.name)).querySelectorAll('.tag-weapon')[0].className; }", pid4)
     assert 'tag-facile' in order, order
 
+    step('players CSV: one line per player, the living first, how the dead died, notes on one line')
+    pg.evaluate("() => { const p = K.store.state.players.find(x => !K.actions.isDead(x.id) && !x.is_mystery); K.store.update('players', p.id, { notes: ['Ligne 1', '', 'Ligne 2'].join(String.fromCharCode(10)) }); }")
+    with pg.expect_download() as dl: pg.evaluate("K.actions.exportCsv()")
+    import csv, io as _io
+    rows = list(csv.reader(_io.StringIO(open(dl.value.path(), encoding='utf-8-sig').read()), delimiter=';'))
+    assert rows[0][:3] == ['Nom', 'État', 'Classe'] and 'Mort le' in rows[0] and 'Tué(e) par' in rows[0], rows[0]
+    status = [r[1] for r in rows[1:]]
+    assert status == sorted(status, key=lambda x: x != 'Vivant'), 'the living first'
+    assert not any(chr(10) in c for r in rows for c in r), 'no cell over several lines'
+    assert any(r[-1] == 'Ligne 1 / Ligne 2' for r in rows)
+    assert all(r[9] for r in rows[1:] if r[1] == 'Mort'), 'every dead player has a date of death'
+
     step('deleting a reroll with kills: back exactly where the game was before it')
     snap = "(() => { const st = K.store.state, dead = [...K.logic.deadSet(st)].sort(); return JSON.stringify({ dead, round: K.logic.currentRound(st).name, players: st.players.map(p => [p.id, p.points || 0, K.logic.weaponList(p.weapons).join(', ')]) }); })()"
     before = pg.evaluate(snap)
