@@ -25,7 +25,7 @@
         ui.dialog({ title: t('Export'), render: function (b, api) {
           b.appendChild(h('p', { class: 'prose' }, t('The CSV opens in any spreadsheet. The report is a printable page: use "Save as PDF" in the print dialog. The saved game contains everything, photos included, and can be imported again from the settings.')));
           b.appendChild(h('div', { class: 'stack' },
-            h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.exportCsv(); api.close(); } }, K.icon('download'), t('Players (CSV)')),
+            h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.exportXlsx(); api.close(); } }, K.icon('download'), t('Players (Excel)')),
             h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.exportPdf(); api.close(); } }, K.icon('print'), t('Report (print / PDF)')),
             h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.exportJson(); api.close(); } }, K.icon('download'), t('Save the game'))));
         } });

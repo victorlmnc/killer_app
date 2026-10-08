@@ -122,30 +122,38 @@
       return a.p.name.localeCompare(b.p.name, K.i18n.lang);
     });
   }
-  /* "08/10/2026 14:05", Paris time: what a spreadsheet reads as a date */
-  function sheetDate(iso) {
-    if (!iso) return '';
-    var x = L.parisParts(new Date(iso)), two = function (n) { return (n < 10 ? '0' : '') + n; };
-    return two(x.d) + '/' + two(x.m + 1) + '/' + x.y + ' ' + two(x.hh) + ':' + two(x.mi);
-  }
-  /* One line per player, readable in a spreadsheet: the class in one column, the reliability next to the target only
-     when it is not sure, how and when the dead died, the shared flat or residence by name, notes on one line. */
-  act.exportCsv = function () {
+  /* The players as an Excel file: one column per piece of information whatever the spreadsheet's language, a tab for
+     the living (alliance highlighted) and one for the dead (latest death first), real dates, filters on every column. */
+  act.exportXlsx = function () {
     var st = store.state;
-    var header = [t('Name'), t('Status'), t('Class'), t('Option'), t('Language group'), t('Points'), t('Weapons'), t('Target'), t('Killer'), t('Died on'), t('Killed by'), t('Weapon of the kill'), t('Alliance'), t('Housing'), t('Address'), t('Notes')];
-    var rows = playerRows().map(function (r) {
-      var p = r.p, k = r.kill, home = p.home_id && (st.homes || []).find(function (x) { return x.id === p.home_id; }), range = L.pointsRange(st, p);
-      var type = L.addressType(p.address_type), housing = type === 'normale' ? '' : t(L.ADDRESS_TYPES.find(function (x) { return x.id === type; }).label);
-      if (home) housing = [housing, home.name, L.homeKind(home) === 'residence' && p.apartment ? t('apt. {n}', { n: p.apartment }) : ''].filter(Boolean).join(' · ');
-      var by = !k ? '' : k.admin_reason ? t('Administration') + ' (' + t(k.admin_reason === 'cheating' ? 'Cheating' : 'Other') + ')' : k.killer_id ? name(k.killer_id) : t('Unknown');
-      return [p.name, r.dead ? t('Dead') : t('Alive'), [p.year, p.dept, p.td, p.tp].filter(Boolean).join(' '), p.option, p.lang_group,
-        range.max > range.min ? t('{a} to {b}', { a: range.min, b: range.max }) : range.min,
-        ui.weaponsInOrder(p.weapons).join(', '),
-        r.target ? r.target + (r.targetConf && r.targetConf !== 'sur' ? ' (' + ui.confLabel(r.targetConf).toLowerCase() + ')' : '') : '', r.hunter,
-        k ? sheetDate(k.happened_at) : '', by, k ? k.weapon || '' : '',
-        p.is_ally ? t('yes') : '', housing, p.address, String(p.notes || '').replace(/\s*[\r\n]+\s*/g, ' / ').trim()];
+    function housing(p) {
+      var type = L.addressType(p.address_type), home = p.home_id && (st.homes || []).find(function (x) { return x.id === p.home_id; });
+      return { type: type === 'normale' ? '' : t(L.ADDRESS_TYPES.find(function (x) { return x.id === type; }).label), home: home ? home.name : '', apt: home && L.homeKind(home) === 'residence' ? p.apartment || '' : '' };
+    }
+    function points(p) { var r = L.pointsRange(st, p); return r.max > r.min ? t('{a} to {b}', { a: r.min, b: r.max }) : r.min; }
+    function weapons(p, level) { return ui.weaponsInOrder(p.weapons).filter(function (w) { var d = ui.weaponDifficulty(w); return level ? d === level : d !== 'facile' && d !== 'difficile'; }).join(', '); }
+    function notes(p) { return String(p.notes || '').replace(/(\r?\n\s*){2,}/g, '\n').trim(); }
+    var cls = [{ title: t('Year'), width: 7, type: 'number' }, { title: t('Department'), width: 12 }, { title: 'TD', width: 6 }, { title: 'TP', width: 6 }];
+    var place = [{ title: t('Housing type'), width: 16 }, { title: t('Housing'), width: 18 }, { title: t('Apartment'), width: 11, type: 'number' }, { title: t('Address'), width: 34 }, { title: t('Notes'), width: 50 }];
+    var all = playerRows(), living = [], dead = [];
+    all.forEach(function (r) {
+      var p = r.p, k = r.kill, hs = housing(p), c = [p.year, p.dept, p.td, p.tp], where = [hs.type, hs.home, hs.apt, p.address, notes(p)];
+      if (!r.dead) {
+        living.push({ style: p.is_ally ? 'ally' : null, cells: [p.name].concat(c, [p.option, p.lang_group, points(p), weapons(p, 'facile'), weapons(p, 'difficile'), weapons(p, null),
+          r.target, r.target ? ui.confLabel(r.targetConf) : '', r.hunter, p.is_ally ? t('yes') : ''], where) });
+      } else {
+        var by = !k ? '' : k.admin_reason ? t('Administration') + ' (' + t(k.admin_reason === 'cheating' ? 'Cheating' : 'Other') + ')' : k.killer_id ? name(k.killer_id) : t('Unknown');
+        dead.push({ style: p.is_ally ? 'ally' : null, cells: [p.name].concat(c, [k ? k.happened_at : '', by, k ? k.weapon || '' : '', points(p), p.is_ally ? t('yes') : ''], where) });
+      }
     });
-    ui.download('players-' + new Date().toISOString().slice(0, 10) + '.csv', '\ufeff' + L.toCsv(header, rows), 'text/csv;charset=utf-8');
+    var file = K.xlsx.build([
+      { name: t('Alive ({n})', { n: living.length }), rows: living, columns: [{ title: t('Name'), width: 24 }].concat(cls, [{ title: t('Option'), width: 12 }, { title: t('Language group'), width: 12 },
+        { title: t('Points'), width: 8, type: 'number' }, { title: t('Easy weapon'), width: 18 }, { title: t('Hard weapon'), width: 18 }, { title: t('Other weapons'), width: 16 },
+        { title: t('Target'), width: 22 }, { title: t('Reliability'), width: 11 }, { title: t('Killer'), width: 22 }, { title: t('Alliance'), width: 9 }], place) },
+      { name: t('Dead ({n})', { n: dead.length }), rows: dead, columns: [{ title: t('Name'), width: 24 }].concat(cls, [{ title: t('Died on'), width: 17, type: 'date' }, { title: t('Killed by'), width: 22 },
+        { title: t('Weapon of the kill'), width: 18 }, { title: t('Points'), width: 8, type: 'number' }, { title: t('Alliance'), width: 9 }], place) }
+    ]);
+    ui.download('players-' + new Date().toISOString().slice(0, 10) + '.xlsx', file);
   };
   /* The whole game in one file: sheets, rounds, links, kills, the full log, catalogue, spots and settings. */
   act.exportJson = function () {

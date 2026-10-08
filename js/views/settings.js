@@ -201,7 +201,7 @@
         root.appendChild(h('section', { class: 'panel' }, h('h2', {}, t('Data')),
           h('div', { class: 'actions actions-start' },
             h('button', { type: 'button', class: 'btn', onclick: K.actions.importDialog }, K.icon('upload'), t('Import players')),
-            h('button', { type: 'button', class: 'btn', onclick: K.actions.exportCsv }, K.icon('download'), t('Players (CSV)')),
+            h('button', { type: 'button', class: 'btn', onclick: K.actions.exportXlsx }, K.icon('download'), t('Players (Excel)')),
             h('button', { type: 'button', class: 'btn', onclick: K.actions.exportPdf }, K.icon('print'), t('Report (print / PDF)')),
             h('button', { type: 'button', class: 'btn', onclick: K.actions.exportJson }, K.icon('download'), t('Save the game')),
             h('button', { type: 'button', class: 'btn', onclick: K.actions.restoreDialog }, K.icon('upload'), t('Import a saved game')),

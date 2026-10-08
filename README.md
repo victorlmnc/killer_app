@@ -20,7 +20,7 @@ screen and in the profile dialog.
   new target and completes the chain if the link was unknown.
 - **Players** – sheets with class, weapons, address, notes and photo; a special status (dangerous, priority
   target) shown in colour on the chain and the lists; filters; import from a spreadsheet or CSV with column
-  mapping; export as CSV or printable report (PDF).
+  mapping; export as an Excel file (living and dead tabs) or printable report (PDF).
 - **Timetables** – the class each player is in right now and the next one, and their week. A student's timetable
   is several HyperPlanning layers stacked (whole year, department, TD, TP, language group, options); each layer
   is one iCal link, and each player gets every layer that matches their sheet. The dashboard shows where the

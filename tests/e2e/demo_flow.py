@@ -121,7 +121,7 @@ with sync_playwright() as p:
       document.addEventListener('copy', e => { res({ plain: e.clipboardData.getData('text/plain'), html: e.clipboardData.getData('text/html'), prevented: e.defaultPrevented }); }, { once: true }); document.execCommand('copy'); })""")
     assert got['plain'] and got['html'] == '' and got['prevented'], got
 
-    step('import: column mapping and row filter, CSV export')
+    step('import: column mapping and row filter, Excel export')
     pg.goto(URL + '#/players'); pg.get_by_role('button', name='Importer').click()
     pg.locator('dialog textarea').fill('Joue ?\tNom\tAnnée\tTD\nOUI\tTARTUFFE Orgon\t5\tTD2\nNON\tDORINE Elmire\t4\tTD1\nOUI\tVALJEAN Jean\t2\tTD1')
     expect(pg.locator('dialog .map-col')).to_have_count(4)
@@ -131,8 +131,10 @@ with sync_playwright() as p:
     pg.locator('dialog').get_by_role('button', name='Importer', exact=True).click()
     names = [x['name'] for x in state()['players']]; assert 'TARTUFFE Orgon' in names and 'DORINE Elmire' not in names
     pg.get_by_role('button', name='Exporter').click()
-    with pg.expect_download() as dl: pg.get_by_role('button', name='Joueurs (CSV)').click()
-    csv = open(dl.value.path(), encoding='utf-8-sig').read(); assert csv.startswith('Nom;État;') and 'TARTUFFE Orgon' in csv
+    with pg.expect_download() as dl: pg.get_by_role('button', name='Joueurs (Excel)').click()
+    import zipfile
+    with zipfile.ZipFile(dl.value.path()) as z: sheet = z.read('xl/worksheets/sheet1.xml').decode('utf-8')
+    assert dl.value.suggested_filename.endswith('.xlsx') and '<t>Nom</t>' in sheet and 'TARTUFFE Orgon' in sheet
     with pg.expect_popup() as pop: pg.get_by_role('button', name='Exporter').click(); pg.get_by_role('button', name='Rapport').click()
     expect(pop.value.locator('h1')).to_contain_text('Killer'); pop.value.close()
 

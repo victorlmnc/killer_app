@@ -454,17 +454,30 @@ with sync_playwright() as p:
     order = pg.evaluate("id => { const st = K.store.state, p = K.store.player(id); return [...document.querySelectorAll('.row-player')].find(r => r.textContent.includes(p.name)).querySelectorAll('.tag-weapon')[0].className; }", pid4)
     assert 'tag-facile' in order, order
 
-    step('players CSV: one line per player, the living first, how the dead died, notes on one line')
+    step('players Excel: a tab for the living, one for the dead, one column per information, real dates')
     pg.evaluate("() => { const p = K.store.state.players.find(x => !K.actions.isDead(x.id) && !x.is_mystery); K.store.update('players', p.id, { notes: ['Ligne 1', '', 'Ligne 2'].join(String.fromCharCode(10)) }); }")
-    with pg.expect_download() as dl: pg.evaluate("K.actions.exportCsv()")
-    import csv, io as _io
-    rows = list(csv.reader(_io.StringIO(open(dl.value.path(), encoding='utf-8-sig').read()), delimiter=';'))
-    assert rows[0][:3] == ['Nom', 'État', 'Classe'] and 'Mort le' in rows[0] and 'Tué(e) par' in rows[0], rows[0]
-    status = [r[1] for r in rows[1:]]
-    assert status == sorted(status, key=lambda x: x != 'Vivant'), 'the living first'
-    assert not any(chr(10) in c for r in rows for c in r), 'no cell over several lines'
-    assert any(r[-1] == 'Ligne 1 / Ligne 2' for r in rows)
-    assert all(r[9] for r in rows[1:] if r[1] == 'Mort'), 'every dead player has a date of death'
+    with pg.expect_download() as dl: pg.evaluate("K.actions.exportXlsx()")
+    assert dl.value.suggested_filename.endswith('.xlsx')
+    import zipfile, re as _re, xml.etree.ElementTree as ET
+    NS = {'m': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+    with zipfile.ZipFile(dl.value.path()) as z:
+        assert z.testzip() is None
+        tabs = [s.get('name') for s in ET.fromstring(z.read('xl/workbook.xml')).find('m:sheets', NS)]
+        def table(i):   # -> rows of {column letter: text or number}
+            out = []
+            for row in ET.fromstring(z.read('xl/worksheets/sheet%d.xml' % i)).find('m:sheetData', NS):
+                out.append({_re.sub(r'\d', '', c.get('r')): (''.join(c.itertext()) if c.get('t') == 'inlineStr' else float(c.find('m:v', NS).text)) for c in row if len(c)})
+            return out
+        alive, dead = table(1), table(2)
+    n_alive, n_dead = pg.evaluate("(() => { const st = K.store.state, d = K.logic.deadSet(st), r = K.logic.realPlayers(st); return [r.filter(p => !d.has(p.id)).length, r.filter(p => d.has(p.id)).length]; })()")
+    assert tabs == ['Vivants (%d)' % n_alive, 'Morts (%d)' % n_dead], tabs
+    assert len(alive) == n_alive + 1 and len(dead) == n_dead + 1
+    head = list(alive[0].values())
+    assert head[:5] == ['Nom', 'Année', 'Département', 'TD', 'TP'] and 'Arme facile' in head and 'Cible' in head and 'Notes' in head, head
+    assert list(dead[0].values())[5:7] == ['Mort le', 'Tué(e) par'], dead[0]
+    assert alive[0]['T'] == 'Notes' and any(r.get('T') == 'Ligne 1' + chr(10) + 'Ligne 2' for r in alive), 'notes kept on their lines, blank lines dropped'
+    assert all(isinstance(r.get('F'), float) and r['F'] > 45000 for r in dead[1:]), 'every death date is a real date'
+    assert all(isinstance(r.get('H'), float) for r in alive[1:] if 'H' in r and ' à ' not in str(r['H'])), 'points as numbers'
 
     step('deleting a reroll with kills: back exactly where the game was before it')
     snap = "(() => { const st = K.store.state, dead = [...K.logic.deadSet(st)].sort(); return JSON.stringify({ dead, round: K.logic.currentRound(st).name, players: st.players.map(p => [p.id, p.points || 0, K.logic.weaponList(p.weapons).join(', ')]) }); })()"
