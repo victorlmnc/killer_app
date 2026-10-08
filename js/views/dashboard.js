@@ -145,12 +145,19 @@
     }
     // one block per hunter and ally (or per ally and their immune target), every reason listed in it
     list.forEach(function (a) {
+      if (/^unknown-/.test(a.kind)) return groups.push({ key: 'unknown|' + a.bonus.id, level: a.level, kind: a.kind, reasons: [a] });   // a bonus whose buyer nobody knows
       var key = (a.kind === 'immune' ? 'target|' : 'hunter|') + a.allyId + '|' + a.otherId, g = groups.find(function (x) { return x.key === key; });
       if (!g) groups.push(g = { key: key, level: a.level, kind: a.kind === 'immune' ? 'immune' : 'hunter', allyId: a.allyId, otherId: a.otherId, reasons: [] });
       g.reasons.push(a);   // the list is sorted by gravity: the first one gives the colour
     });
     return h('section', { class: 'panel alerts', role: 'status' }, h('h2', {}, t('Alerts'), h('small', { class: 'muted' }, ' ' + groups.length)),
       groups.map(function (g) {
+        if (/^unknown-/.test(g.kind)) {
+          var b = g.reasons[0].bonus, cut = g.kind === 'unknown-cutthroat';
+          return h('div', { class: 'alert alert-' + g.level }, h('span', { class: 'alert-icon', 'aria-hidden': 'true' }, ICON[g.level]),
+            h('div', { class: 'alert-body' }, h('p', {}, (cut ? t('Someone unknown has a {bonus}', { bonus: b.name }) : t('Someone unknown is immune ({bonus})', { bonus: b.name })) + ' ', h('span', { class: 'muted' }, when(b))),
+              h('ul', { class: 'alert-reasons' }, h('li', {}, cut ? t('Any of us may be the target. Say who bought it from the Shop once you know.') : t('It may be one of our targets. Say who bought it from the Shop once you know.')))));
+        }
         var head = g.kind === 'immune' ? [t('The target of') + ' ', who(g.allyId), ', ', who(g.otherId), ', ' + t('is immune') + ' ', h('span', { class: 'muted' }, when(g.reasons[0].bonus))]
           : [who(g.otherId), ' ', h('span', { class: 'muted' }, '(' + ui.pointsText(store.player(g.otherId) || {}) + ')'), ' ' + t('hunts') + ' ', who(g.allyId)];
         var lines = g.kind === 'immune' ? [] : g.reasons.filter(function (a) { return a.kind !== 'rich'; }).map(function (a) {

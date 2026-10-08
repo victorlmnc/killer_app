@@ -572,7 +572,8 @@
       var out = {}; Object.keys(r.held_weapons).forEach(function (id) { var to = ref(id, 'players'); if (to && r.held_weapons[id]) out[to] = String(r.held_weapons[id]); });
       r.held_weapons = Object.keys(out).length ? out : null;
     });
-    data.bonuses = data.bonuses.map(function (b) { b.player_id = ref(b.player_id, 'players'); return b; }).filter(function (b) { return b.player_id; });
+    // no buyer: someone unknown bought it (kept); a buyer missing from the file: dropped like any dangling reference
+    data.bonuses = data.bonuses.filter(function (b) { var had = b.player_id != null; b.player_id = ref(b.player_id, 'players'); return b.player_id || !had; });
     data.intel = data.intel.map(function (x) { x.player_id = ref(x.player_id, 'players'); return x; }).filter(function (x) { return x.player_id && x.text.trim(); });
     data.kills = data.kills.map(function (k) { k.round_id = ref(k.round_id, 'rounds'); k.killer_id = ref(k.killer_id, 'players'); k.victim_id = ref(k.victim_id, 'players'); return k; })
       .filter(function (k) { return k.victim_id && !victims.has(k.victim_id) && victims.add(k.victim_id); });
@@ -954,6 +955,12 @@
       var target = resolveTarget(state, round.id, ally.id, maps, dead).id;
       var tp = target && state.players.find(function (p) { return p.id === target; });
       if (tp && !tp.is_ally) bonusesOf(target, /immun/i).forEach(function (b) { out.push({ level: 'info', kind: 'immune', allyId: ally.id, otherId: target, bonus: b }); });
+    });
+    // a bonus whose buyer is unknown: any of us may be the one it is used against
+    if (state.players.some(function (p) { return p.is_ally && !dead.has(p.id); })) (state.bonuses || []).forEach(function (b) {
+      if (b.player_id || bonusStatus(b, now) === 'over') return;
+      if (/coupe/i.test(b.name)) out.push({ level: bonusStatus(b, now) === 'active' ? 'high' : 'warn', kind: 'unknown-cutthroat', bonus: b });
+      else if (/immun/i.test(b.name)) out.push({ level: 'info', kind: 'unknown-immune', bonus: b });
     });
     var rank = { high: 0, warn: 1, info: 2 };
     return out.sort(function (a, b) { return rank[a.level] - rank[b.level]; });

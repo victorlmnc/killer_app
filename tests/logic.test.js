@@ -513,6 +513,18 @@ t('audit lot 6: clocks changing, merge conflicts, reroll undo, CSV formulas, bac
   const st = L.readBackup(raw).data.settings;
   assert.deepEqual(Object.keys(st).sort(), ['game_name', 'geocoder_url']); assert.equal({}.polluted, undefined);
 });
+t('a purchase whose buyer is unknown: an alert for the alliance, kept in backups', () => {
+  const s = base(); s.players[0].is_ally = true; s.links = [];
+  const now = new Date('2026-10-10T12:00:00Z');
+  s.bonuses = [{ id: 'b1', player_id: null, name: 'Super Coupe-Gorge', price: 8, starts_at: '2026-10-10T10:00:00Z', ends_at: '2026-10-11T10:00:00Z' },
+    { id: 'b2', player_id: null, name: 'Immunité', price: 4, starts_at: '2026-10-11T10:00:00Z', ends_at: '2026-10-12T10:00:00Z' }];
+  assert.deepEqual(L.dangerAlerts(s, now).map(a => a.level + ' ' + a.kind), ['high unknown-cutthroat', 'info unknown-immune']);
+  s.bonuses[0].player_id = 'b';
+  assert.ok(!L.dangerAlerts(s, now).some(a => a.kind === 'unknown-cutthroat'), 'buyer known: no longer "someone unknown"');
+  s.bonuses[0].player_id = null;
+  const r = L.readBackup(JSON.stringify(L.makeBackup(s)), { uuid: () => '00000000-0000-4000-8000-' + String(Math.random()).slice(2, 14).padEnd(12, '0') });
+  assert.equal(r.data.bonuses.length, 2); assert.equal(r.data.bonuses[0].player_id, null);
+});
 t('Paris time whatever the time zone of the phone', () => {
   const p = L.parisParts(new Date('2026-09-28T11:40:00Z'));
   assert.deepEqual([p.hh, p.mi, p.wd], [13, 40, 0], 'summer time: UTC+2, a Monday');

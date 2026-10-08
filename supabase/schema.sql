@@ -198,6 +198,8 @@ create table if not exists public.bonuses (
   note       text default '',
   created_at timestamptz not null default now()
 );
+-- the buyer may be unknown ("someone bought a Coupe-Gorge"): said later, when we learn who it was
+alter table public.bonuses alter column player_id drop not null;
 
 -- Places rather than people (canteen, gym, bus stop). Kept from one year to the next.
 create table if not exists public.spots (

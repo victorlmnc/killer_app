@@ -282,10 +282,11 @@
         var edit = store.canEdit(), cur = L.currentBonuses(st), past = (st.bonuses || []).filter(function (b) { return cur.indexOf(b) < 0; }).sort(function (a, b) { return new Date(b.bought_at) - new Date(a.bought_at); });
         function bonusRow(b) {
           var p = store.player(b.player_id);
-          return h('div', { class: 'row bonus-row' }, p ? ui.avatar(p, 'sm') : null,
-            h('button', { type: 'button', class: 'row-main linkish-row', onclick: function () { if (p) K.actions.openPlayer(p.id); } }, h('span', { class: 'row-title' }, p ? p.name : '?'),
+          return h('div', { class: 'row bonus-row' + (p ? '' : ' bonus-unknown') }, p ? ui.avatar(p, 'sm') : h('span', { class: 'avatar avatar-sm avatar-mystery', 'aria-hidden': 'true' }, h('span', {}, '?')),
+            h('button', { type: 'button', class: 'row-main linkish-row', onclick: function () { if (p) K.actions.openPlayer(p.id); else if (edit) K.actions.setBonusBuyer(b); } }, h('span', { class: 'row-title' }, p ? p.name : t('Someone (unknown)')),
               h('span', { class: 'bonus-line' }, ui.bonusTag(b, true)),
               h('span', { class: 'row-sub' }, t('bought {date}', { date: ui.whenShort(b.bought_at) }) + (b.note ? ' · ' + b.note : ''))),
+            !p && edit ? h('button', { type: 'button', class: 'btn btn-sm', onclick: function () { K.actions.setBonusBuyer(b); } }, t('Who was it?')) : null,
             edit ? h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('Remove this purchase'), onclick: function () { K.actions.removeBonus(b); } }, K.icon('close')) : null);
         }
         var active = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h2', {}, t('Bonuses in play'), h('small', { class: 'muted' }, ' ' + cur.length)),

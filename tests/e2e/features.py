@@ -62,7 +62,7 @@ with sync_playwright() as p:
     pg.locator('.shop-item', has=pg.locator('h3', has_text='Immunité')).get_by_role('button', name='Enregistrer un achat').click()
     dlg = pg.locator('dialog[open]').last
     dlg.locator('.field .btn-block').click()
-    picker = pg.locator('dialog[open]').last; picker.locator('input[type=search]').fill(ids['targetName']); picker.locator('.pick-list .row-btn').first.click()
+    picker = pg.locator('dialog[open]').last; picker.locator('input[type=search]').fill(ids['targetName']); picker.locator('.pick-list .row-btn', has_text=ids['targetName']).first.click()
     expect(dlg.locator('input[type=number]')).to_have_value('24')
     dlg.get_by_role('button', name='Enregistrer', exact=True).click()
     pg.wait_for_function("K.store.state.bonuses.length === 1")
@@ -75,6 +75,30 @@ with sync_playwright() as p:
     expect(pg.locator('.me')).to_contain_text('Immunité')                           # on "my target"
     pg.locator('.me-sched').get_by_role('button', name='Voir la semaine').click()    # "where is my target": the week too
     expect(pg.locator('dialog[open]').last).to_contain_text('Mathématiques'); pg.keyboard.press('Escape')
+
+    step('shop: a purchase whose buyer is unknown; an alert for all of us; the buyer said later, then their points taken')
+    pg.goto(URL + '#/shop')
+    pg.locator('.shop-item', has=pg.locator('h3', has_text='Super Coupe-Gorge')).get_by_role('button', name='Enregistrer un achat').click()
+    dlg = pg.locator('dialog[open]').last
+    dlg.locator('.field .btn-block').click()
+    pg.locator('dialog[open]').last.get_by_role('button', name='On ne sait pas qui').click()
+    expect(dlg.locator('.field .btn-block')).to_contain_text("Quelqu'un (inconnu)")
+    expect(dlg.locator('label.check', has_text='points')).to_be_hidden()          # no points to take off nobody
+    dlg.get_by_role('button', name='Enregistrer', exact=True).click(); pg.wait_for_timeout(200)
+    b2 = pg.evaluate("K.store.state.bonuses.find(b => b.name === 'Super Coupe-Gorge')")
+    assert b2['player_id'] is None
+    pg.evaluate("b => K.store.update('bonuses', b.id, { starts_at: new Date(Date.now() - 3600e3).toISOString(), ends_at: new Date(Date.now() + 3600e3).toISOString() })", b2)   # in effect now
+    pg.goto(URL + '#/dashboard'); expect(pg.locator('.alerts')).to_contain_text("Quelqu'un d'inconnu a un Super Coupe-Gorge")
+    pg.goto(URL + '#/shop')
+    row = pg.locator('.bonus-row', has_text="Quelqu'un (inconnu)"); expect(row).to_contain_text('Super Coupe-Gorge')
+    buyer = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st); const p = st.players.find(x => !dead.has(x.id) && !x.is_ally && (x.points || 0) < 3); return { id: p.id, name: p.name, points: p.points || 0 }; })()")
+    pg.evaluate("id => K.store.update('players', id, { points: 10 })", buyer['id'])
+    row.get_by_role('button', name="C'était qui ?").click()
+    picker = pg.locator('dialog[open]').last; picker.locator('input[type=search]').fill(buyer['name']); picker.locator('.pick-list .row-btn', has_text=buyer['name']).first.click()
+    pg.locator('dialog[open]').last.get_by_role('button', name='Enregistrer').click(); pg.wait_for_timeout(300)
+    got = pg.evaluate("a => [K.store.state.bonuses.find(b => b.id === a.b).player_id, K.store.player(a.p).points]", {'b': b2['id'], 'p': buyer['id']})
+    assert got == [buyer['id'], 2], got   # 10 - 8
+    pg.goto(URL + '#/dashboard'); expect(pg.locator('.alerts')).not_to_contain_text("Quelqu'un d'inconnu a un Super Coupe-Gorge")
 
     step('pre-shot: the weapons of our targets, with what we already have')
     pg.evaluate("() => { const w = K.store.state.weapons.find(x => K.logic.norm(x.name) === 'banane'); if (w) K.store.update('weapons', w.id, { owned: true, note: 'dans le frigo' }); }")
