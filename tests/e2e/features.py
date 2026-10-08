@@ -203,10 +203,10 @@ with sync_playwright() as p:
     pg.locator('dialog[open]').get_by_role('button', name='Ajouter une info').click()
     dlg = pg.locator('dialog[open]').last
     dlg.locator('textarea').fill('Vu au self avec un parapluie')
-    dlg.locator('select').first.select_option(label='Canteen')
+    dlg.locator('select').first.select_option(label='Cantine')
     dlg.get_by_role('button', name='Ajouter l\'info').click(); pg.wait_for_timeout(300)
     x = pg.evaluate("id => K.logic.intelOf(K.store.state, id)[0]", pid3)
-    assert x['text'] == 'Vu au self avec un parapluie' and x['place'] == 'Canteen' and x['lat'] == 47.0809, x
+    assert x['text'] == 'Vu au self avec un parapluie' and x['place'] == 'Cantine' and x['lat'] == 47.0809, x
     expect(pg.locator('dialog[open] .intel')).to_contain_text('Vu au self avec un parapluie'); expect(pg.locator('dialog[open] .intel')).to_contain_text('Sur la carte')
     pg.keyboard.press('Escape')
     pg.goto(URL + '#/dashboard'); expect(pg.locator('.intel-panel')).to_contain_text('Vu au self avec un parapluie')
@@ -377,6 +377,25 @@ with sync_playwright() as p:
     pg.locator('dialog[open]').last.get_by_role('button', name='Recalculer').click(); pg.wait_for_timeout(300)
     got = pg.evaluate("a => [K.store.state.kills.find(k => k.id === a.kill).points, K.store.state.kills.find(k => k.id === a.kill).weapon_level, K.store.player(a.killer).points]", c)
     assert got == [c['kp'] - c['gap'], 'facile', c['pp'] - c['gap']], (got, c)
+
+    step('deleting asks first: a catalogue weapon, a link from the sheet menu (and the log says it)')
+    pg.goto(URL + '#/weapons'); pg.locator('.weapon-cloud .chip', has_text='Lacet').first.click()
+    pg.locator('dialog[open]').get_by_role('button', name='Supprimer').click()
+    conf = pg.locator('dialog[open]').last; expect(conf).to_contain_text('sort du catalogue')
+    conf.get_by_role('button', name='Supprimer').click(); pg.wait_for_timeout(200)
+    assert not pg.evaluate("K.store.state.weapons.some(w => w.name === 'Lacet')") and pg.evaluate("K.store.state.events[0].text") == 'Arme retirée du catalogue : Lacet'
+    lk = pg.evaluate("""() => { const st = K.store.state, r = K.logic.currentRound(st), dead = K.logic.deadSet(st);
+      const free = st.players.filter(x => !dead.has(x.id) && !x.is_mystery && !K.logic.resolveHunter(st, r.id, x.id).id && !K.logic.resolveTarget(st, r.id, x.id).id);
+      return K.actions.setTarget(free[0].id, free[1].id, { roundId: r.id, noConfirm: true, silent: true }).then(() => ({ id: K.logic.resolveTarget(st, r.id, free[0].id).links.slice(-1)[0].id, hunter: free[0].id })); }   // the link that reaches the target (it may sit behind a dead player)""")
+    pg.evaluate("id => K.actions.openPlayer(id)", lk['hunter'])
+    pg.locator('dialog[open] select[aria-label="Cible"]').select_option('')
+    conf = pg.locator('dialog[open]').last; expect(conf).to_contain_text('Supprimer ce lien')
+    conf.get_by_role('button', name='Annuler').click(); pg.wait_for_timeout(100)
+    assert pg.evaluate("id => K.store.state.links.some(l => l.id === id)", lk['id']), 'cancelled: the link stays'
+    pg.locator('dialog[open] select[aria-label="Cible"]').select_option('')
+    pg.locator('dialog[open]').last.get_by_role('button', name='Supprimer le lien').click(); pg.wait_for_timeout(200)
+    assert not pg.evaluate("id => K.store.state.links.some(l => l.id === id)", lk['id']) and pg.evaluate("K.store.state.events[0].text").startswith('Lien supprimé')
+    pg.keyboard.press('Escape')
 
     step('players list: the easy weapon first, then the hard one')
     pid4 = pg.evaluate("(() => { const st = K.store.state, dead = K.logic.deadSet(st), a = st.players.filter(x => !dead.has(x.id) && !x.is_mystery && !(x.weapons || '').trim()); const easy = st.weapons.find(w => w.difficulty === 'facile' && !K.logic.weaponHolders(st, w.name).length).name, hard = st.weapons.find(w => w.difficulty === 'difficile' && !K.logic.weaponHolders(st, w.name).length).name; a[0].weapons = hard + ', ' + easy; K.store.emit(); return a[0].id; })()")

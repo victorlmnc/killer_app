@@ -751,7 +751,14 @@
           'aria-label': label, disabled: !isCurrent || !edit, onchange: function (e) {
             var id = e.target.value;
             if (id === '__mystery') { e.target.value = ''; act.newMystery(p.id, dir, roundId); return; }
-            if (!id) { var cut = dir === 'target' ? (other && maps.hunterOf.get(other.id)) : maps.hunterOf.get(p.id); if (cut) store.remove('links', cut.id); return; }
+            if (!id) {
+              var cut = dir === 'target' ? (other && maps.hunterOf.get(other.id)) : maps.hunterOf.get(p.id);
+              if (!cut) return;
+              e.target.value = other ? other.id : '';   // unchanged until confirmed
+              ui.confirm({ title: t('Delete this link?'), text: t('{a} will no longer hunt {b}: the chain is cut there.', { a: name(cut.hunter_id), b: name(cut.target_id) }), action: t('Delete link'), danger: true })
+                .then(function (ok) { if (ok) { store.remove('links', cut.id); store.log(t('Link removed: {a} no longer hunts {b}', { a: name(cut.hunter_id), b: name(cut.target_id) })); } });
+              return;
+            }
             if (dir === 'target') act.setTarget(p.id, id, { roundId: roundId, confidence: 'sur', noConfirm: true });
             else act.setTarget(id, p.id, { roundId: roundId, confidence: 'sur', noConfirm: true });
           } });

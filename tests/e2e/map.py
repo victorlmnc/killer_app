@@ -112,6 +112,11 @@ with sync_playwright() as p:
     sp = pg.evaluate("K.store.state.spots.find(s => s.name === 'Arrêt Lahitolle')"); assert (sp['lat'], sp['lng']) == (47.083, 2.417)
     pg.evaluate("__L.markers.find(m => m.o.title === 'Arrêt Lahitolle').openPopup()")
     expect(pg.locator('#fake-pop')).to_contain_text('Lieu stratégique')
+    pg.locator('#fake-pop').get_by_role('button', name='Modifier').dispatch_event('click')   # deleting asks first
+    pg.locator('dialog[open]').get_by_role('button', name='Supprimer').click()
+    expect(pg.locator('dialog[open]').last).to_contain_text('disparaît de la carte'); pg.locator('dialog[open]').last.get_by_role('button', name='Annuler').click()
+    assert pg.evaluate("K.store.state.spots.some(s => s.name === 'Arrêt Lahitolle')"), 'cancelled: still there'
+    pg.keyboard.press('Escape')
     print('· bus lines: hidden by default, official colour, stops, invalid colour neutralised')
     assert pg.evaluate('__L.bus.length') == 0
     pg.locator('.layer-row', has_text='Ligne 1').click()

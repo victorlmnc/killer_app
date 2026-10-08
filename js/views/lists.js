@@ -114,7 +114,10 @@
           if (w && store.state.weapons.length > 1) b.appendChild(h('p', { class: 'small' }, h('button', { type: 'button', class: 'linkish', onclick: function () { api.close(); merge(w); } }, t('Merge with another weapon…')),
             h('span', { class: 'muted' }, ' ' + t('for a duplicate: the sheets that carry it are updated.'))));
           b.appendChild(h('div', { class: 'actions' },
-            w ? h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () { store.remove('weapons', w.id); api.close(); } }, t('Delete')) : null,
+            w ? h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
+              ui.confirm({ title: t('Delete {name}?', { name: w.name }), text: t('It leaves the catalogue for the whole team. The sheets and kills that mention it keep its name.'), action: t('Delete'), danger: true })
+                .then(function (ok) { if (ok) { api.close(); store.remove('weapons', w.id); store.log(t('Weapon removed from the catalogue: {w}', { w: w.name })); } });
+            } }, t('Delete')) : null,
             h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
             h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
               var row = { name: name.value.trim(), difficulty: diff.value, owned: owned.checked, note: note.value.trim() }; if (!row.name) return name.focus();
@@ -255,7 +258,7 @@
         if (!store.isAdmin()) return;
         var s = store.state.settings, items = (s.shop || []).slice(), it = i == null ? { name: '', price: 1, description: '', start: 'now', hours: 0 } : items[i];
         ui.dialog({ title: i == null ? t('Add a bonus') : t('Edit bonus'), render: function (b, api) {
-          var name = h('input', { type: 'text', value: it.name }), price = h('input', { type: 'number', min: '0', value: String(it.price) }), desc = h('textarea', { rows: '6', value: it.description });
+          var name = h('input', { type: 'text', value: it.name }), price = h('input', { type: 'number', min: '0', value: String(it.price) }), desc = h('textarea', { rows: '6', value: t(it.description) });
           var tm = L.bonusTiming(it), start = ui.select([{ value: 'now', label: t('As soon as it is bought') }, { value: 'next_day', label: t('At 00:10 the next day') }], tm.start);
           var hours = h('input', { type: 'number', min: '0', step: '0.5', value: String(tm.hours) });
           b.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Price in points'), price), ui.field(t('Description'), desc),
@@ -300,7 +303,7 @@
             h('div', { class: 'shop-head' }, h('h3', {}, it.name), h('span', { class: 'price' }, K.n(it.price, '{n} pt', '{n} pts')), admin ? h('button', { type: 'button', class: 'linkish', onclick: function () { editItem(i); } }, t('Edit')) : null),
             h('p', { class: 'muted small' }, (function () { var tm = L.bonusTiming(it); return (tm.start === 'next_day' ? t('From 00:10 the next day') : t('Immediately')) + ' · ' + (tm.hours ? K.n(tm.hours, '{n} hour', '{n} hours') : t('one-off')); })()),
             edit ? h('button', { type: 'button', class: 'btn btn-block', onclick: function () { K.actions.recordBonus(it); } }, K.icon('plus'), t('Record a purchase')) : null,
-            h('details', { class: 'desc' }, h('summary', {}, K.icon('chevron', 'ic-sm'), t('What it does')), h('p', { class: 'prose' }, it.description)),
+            h('details', { class: 'desc' }, h('summary', {}, K.icon('chevron', 'ic-sm'), t('What it does')), h('p', { class: 'prose' }, t(it.description))),
             h('p', { class: 'small' }, can.length ? h('span', { class: 'muted' }, K.n(can.length, '{n} rival can afford it: ', '{n} rivals can afford it: ')) : h('span', { class: 'muted' }, t('No known rival has enough points.')),
               can.slice(0, 8).map(function (p, j) { return [j ? ', ' : '', h('button', { type: 'button', class: 'linkish' + (hunters.has(p.id) ? ' threat' : ''), onclick: function () { K.actions.openPlayer(p.id); } }, p.name + ' (' + ui.pointsText(p) + ')')]; }))));
         });

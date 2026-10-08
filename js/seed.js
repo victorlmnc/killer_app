@@ -214,7 +214,7 @@
     var easy = WEAPONS.filter(function (w) { return w[1] === 'facile'; }), hard = WEAPONS.filter(function (w) { return w[1] === 'difficile'; });
     players.forEach(function (p, i) { if (i % 3 !== 1) p.weapons = easy[(i * 7) % easy.length][0] + ', ' + hard[(i * 5) % hard.length][0]; });
 
-    var r0 = { id: uid(), name: 'Initial loop', position: 0 }, r1 = { id: uid(), name: 'Reroll 1', position: 1 };
+    var r0 = { id: uid(), name: 'Boucle initiale', position: 0 }, r1 = { id: uid(), name: 'Reroll 1', position: 1 };
     var links = [], kills = [], P = players, conf = ['sur', 'sur', 'probable', 'sur', 'rumeur'];
     function L(round, a, b, c) { links.push({ id: uid(), round_id: round.id, hunter_id: P[a].id, target_id: P[b].id, confidence: c || 'sur', source: '' }); }
     function X(round, a, b, weapon, pts, daysAgo) {
@@ -238,34 +238,34 @@
     // nobody knows yet whether the lighter is easy or hard: that kill counts 1 point for now (1 or 3)
     kills.filter(function (k) { return k.weapon === 'Briquet'; })[0].weapon_level = 'inconnue';
     var now = Date.now();
-    var k1 = kills.filter(function (k) { return k.victim_id === P[20].id; })[0]; k1.note = 'Outside the canteen at 12:40, he was alone. Video sent to the organiser.';
-    links.filter(function (l) { return l.hunter_id === P[10].id; })[0].source = 'Seen on his phone during a lecture';
-    links.filter(function (l) { return l.hunter_id === P[12].id; })[0].source = 'Heard from a 3rd year, unverified';
+    var k1 = kills.filter(function (k) { return k.victim_id === P[20].id; })[0]; k1.note = 'Devant la cantine à 12 h 40, il était seul. Vidéo envoyée à l\'orga.';
+    links.filter(function (l) { return l.hunter_id === P[10].id; })[0].source = 'Vu sur son téléphone pendant un amphi';
+    links.filter(function (l) { return l.hunter_id === P[12].id; })[0].source = 'Entendu d\'un 3A, pas vérifié';
     var events = [
-      { text: 'LUPIN Arsène eliminated LANTIER Étienne (Écocup)', details: { type: 'kill', kill_id: k1.id, killer_id: P[7].id, victim_id: P[20].id, killer: P[7].name, victim: P[20].name, weapon: 'Écocup', points: 2, note: k1.note } },
-      { text: 'Link added: BERGERAC Cyrano hunts POQUELIN Agnès', details: { type: 'link', hunter_id: P[10].id, target_id: P[35].id, hunter: P[10].name, target: P[35].name, confidence: 'sur', source: 'Seen on his phone during a lecture' } },
-      { text: 'New round: Reroll 1', details: null }
+      { text: 'LUPIN Arsène a éliminé LANTIER Étienne (Écocup)', details: { type: 'kill', kill_id: k1.id, killer_id: P[7].id, victim_id: P[20].id, killer: P[7].name, victim: P[20].name, weapon: 'Écocup', points: 2, note: k1.note } },
+      { text: 'Lien ajouté : BERGERAC Cyrano chasse POQUELIN Agnès', details: { type: 'link', hunter_id: P[10].id, target_id: P[35].id, hunter: P[10].name, target: P[35].name, confidence: 'sur', source: 'Vu sur son téléphone pendant un amphi' } },
+      { text: 'Nouvelle boucle : Reroll 1', details: null }
     ].map(function (e, i) { return { id: uid(), text: e.text, details: e.details, actor: 'Arsène', created_at: new Date(now - (i + 1) * 36e5 * 7).toISOString() }; });
 
     // the flatmates of 14 rue du Port, as a named shared flat
-    var port = { id: uid(), name: 'Coloc du Port', address: '14 rue du Port', lat: 47.07410, lng: 2.39520, building: '', note: 'Second floor, on the left.' };
+    var port = { id: uid(), name: 'Coloc du Port', address: '14 rue du Port', lat: 47.07410, lng: 2.39520, building: '', note: 'Deuxième étage, à gauche.' };
     players.forEach(function (p) { if (p.address === port.address) p.home_id = port.id; });
     // the Tanneurs residence is named, with a few apartment numbers; the Lac residence is left to be detected
-    var tanneurs = { id: uid(), kind: 'residence', name: 'Résidence des Tanneurs', address: 'Résidence des Tanneurs', lat: 47.08712, lng: 2.39105, building: '', note: 'Badge needed at the gate after 22:00.' };
+    var tanneurs = { id: uid(), kind: 'residence', name: 'Résidence des Tanneurs', address: 'Résidence des Tanneurs', lat: 47.08712, lng: 2.39105, building: '', note: 'Badge nécessaire au portail après 22 h.' };
     players.filter(function (p) { return p.address === tanneurs.address; }).forEach(function (p, i) { p.home_id = tanneurs.id; if (i % 2 === 0) p.apartment = String(101 + i * 37); });
     var settings = JSON.parse(JSON.stringify(K.seed.settings));
-    settings.game_name = 'Killer (demo)'; settings.official_players = 48; settings.school_total = 440; settings.depts = ['A', 'B'];
+    settings.game_name = 'Killer (démo)'; settings.official_players = 48; settings.school_total = 440; settings.depts = ['A', 'B'];
     settings.map_center = { lat: 47.0833, lng: 2.4 };
     // a few pieces of intel: one seen two hours ago at the canteen shows on the map
     var ago = function (h) { return new Date(now - h * 36e5).toISOString(); };
     var intel = [
-      { id: uid(), player_id: P[22].id, text: 'Queuing at the canteen with two friends, black backpack.', place: 'Canteen', lat: 47.0809, lng: 2.4149, seen_at: ago(2), author: 'Arsène', created_at: ago(2) },
-      { id: uid(), player_id: P[12].id, text: 'Leaves the gym every Tuesday around 6 pm, alone.', place: 'Gym', lat: null, lng: null, seen_at: ago(26), author: 'Arsène', created_at: ago(26) },
-      { id: uid(), player_id: P[22].id, text: 'Said in the group chat they never go out after 10 pm.', place: '', lat: null, lng: null, seen_at: ago(50), author: 'Arsène', created_at: ago(50) }
+      { id: uid(), player_id: P[22].id, text: 'Dans la queue de la cantine avec deux amis, sac à dos noir.', place: 'Cantine', lat: 47.0809, lng: 2.4149, seen_at: ago(2), author: 'Arsène', created_at: ago(2) },
+      { id: uid(), player_id: P[12].id, text: 'Sort du gymnase tous les mardis vers 18 h, seul.', place: 'Gymnase', lat: null, lng: null, seen_at: ago(26), author: 'Arsène', created_at: ago(26) },
+      { id: uid(), player_id: P[22].id, text: 'A dit sur le groupe qu\'il ne sort jamais après 22 h.', place: '', lat: null, lng: null, seen_at: ago(50), author: 'Arsène', created_at: ago(50) }
     ];
     return { players: players, rounds: [r0, r1], links: links, kills: kills, events: events, settings: settings, homes: [port, tanneurs], intel: intel,
-      spots: [{ id: uid(), name: 'Campus gate', note: 'Everybody walks through it between classes.', address: '', lat: 47.0822, lng: 2.4163 },
-        { id: uid(), name: 'Canteen', note: 'Busy between 12:00 and 13:00.', address: '', lat: 47.0809, lng: 2.4149 }],
+      spots: [{ id: uid(), name: 'Entrée du campus', note: 'Tout le monde y passe entre deux cours.', address: '', lat: 47.0822, lng: 2.4163 },
+        { id: uid(), name: 'Cantine', note: 'Bondée entre 12 h et 13 h.', address: '', lat: 47.0809, lng: 2.4149 }],
       weapons: WEAPONS.map(function (w) { return { id: uid(), name: w[0], difficulty: w[1] }; }).concat([{ id: uid(), name: 'Briquet', difficulty: 'inconnue' }]),
       members: [{ email: 'demo@local', name: 'Demo', role: 'admin', tabs: null, avatar_path: null }] };
   };

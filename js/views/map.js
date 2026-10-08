@@ -135,7 +135,10 @@
           var address = h('input', { type: 'text', value: s.address || '', placeholder: t('Optional: otherwise tap the map') });
           body.appendChild(h('div', { class: 'stack' }, ui.field(t('Name'), name), ui.field(t('Note'), note), ui.field(t('Address'), address)));
           body.appendChild(h('div', { class: 'actions' },
-            isNew ? null : h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () { store.remove('spots', s.id); api.close(); if (map) map.closePopup(); } }, t('Delete')),
+            isNew ? null : h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
+              ui.confirm({ title: t('Delete {name}?', { name: s.name }), text: t('The strategic spot disappears from the map for the whole team.'), action: t('Delete'), danger: true })
+                .then(function (ok) { if (ok) { api.close(); if (map) map.closePopup(); store.remove('spots', s.id); store.log(t('Strategic spot removed: {name}', { name: s.name })); } });
+            } }, t('Delete')),
             h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
             h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
               var row = { name: name.value.trim(), note: note.value.trim(), address: address.value.trim() };
