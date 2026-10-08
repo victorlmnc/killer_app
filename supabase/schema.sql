@@ -43,12 +43,22 @@ language sql stable security definer set search_path = public, auth as $$
   join public.accounts a on lower(a.email) = lower(u.email)
   where u.id = auth.uid() and u.email_confirmed_at is not null;
 $$;
-create or replace function public.is_member() returns boolean language sql stable as $$ select public.my_role() is not null; $$;
-create or replace function public.can_edit() returns boolean language sql stable as $$ select public.my_role() in ('admin', 'member'); $$;
-create or replace function public.is_admin() returns boolean language sql stable as $$ select public.my_role() = 'admin'; $$;
+create or replace function public.is_member() returns boolean language sql stable set search_path = public as $$ select public.my_role() is not null; $$;
+create or replace function public.can_edit() returns boolean language sql stable set search_path = public as $$ select public.my_role() in ('admin', 'member'); $$;
+create or replace function public.is_admin() returns boolean language sql stable set search_path = public as $$ select public.my_role() = 'admin'; $$;
+-- The display name of the signed-in account (its name, or the start of its email): written by the server on the log
+-- and the intel, so nobody can sign as someone else.
+create or replace function public.my_name() returns text
+language sql stable security definer set search_path = public, auth as $$
+  select coalesce(nullif(a.name, ''), split_part(u.email, '@', 1)) from auth.users u
+  join public.accounts a on lower(a.email) = lower(u.email)
+  where u.id = auth.uid();
+$$;
 
 revoke all on function public.my_role() from public, anon;
 grant execute on function public.my_role() to authenticated;
+revoke all on function public.my_name() from public, anon;
+grant execute on function public.my_name() to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Game tables
@@ -216,18 +226,73 @@ alter table public.events add column if not exists details jsonb;
 
 -- ---------------------------------------------------------------------------
 -- Row-level security. Nobody outside the accounts table reads anything, even with the anon key.
--- members and admins write game data; only admins write settings and accounts.
+-- Members and admins add and change game data. What would wipe the game is kept for administrators, on the
+-- server and not only in the app: the log is append-only for members (only an admin clears it), and only an admin
+-- deletes rounds and player sheets (a member may delete a "mystery" sheet, merged once identified).
+-- Only admins write settings and accounts.
 -- ---------------------------------------------------------------------------
 do $$
-declare t text;
+declare t text; upd text; del text;
 begin
   foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots', 'bonuses', 'homes', 'intel'] loop
+    upd := case when t = 'events' then 'public.is_admin()' else 'public.can_edit()' end;
+    del := case when t in ('events', 'rounds') then 'public.is_admin()'
+                when t = 'players' then 'public.is_admin() or (public.can_edit() and is_mystery)'
+                else 'public.can_edit()' end;
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "membres" on public.%I', t);
     execute format('drop policy if exists "read" on public.%I', t);
     execute format('drop policy if exists "write" on public.%I', t);
+    execute format('drop policy if exists "insert" on public.%I', t);
+    execute format('drop policy if exists "update" on public.%I', t);
+    execute format('drop policy if exists "delete" on public.%I', t);
     execute format('create policy "read" on public.%I for select to authenticated using (public.is_member())', t);
-    execute format('create policy "write" on public.%I for all to authenticated using (public.can_edit()) with check (public.can_edit())', t);
+    execute format('create policy "insert" on public.%I for insert to authenticated with check (public.can_edit())', t);
+    execute format('create policy "update" on public.%I for update to authenticated using (%s) with check (%s)', t, upd, upd);
+    execute format('create policy "delete" on public.%I for delete to authenticated using (%s)', t, del);
+  end loop;
+end $$;
+
+-- SEC: the author of a log entry or of a piece of intel is the signed-in account, set by the server. An administrator
+-- restoring a backup keeps the original authors.
+create or replace function public.stamp_author() returns trigger language plpgsql set search_path = public as $$
+begin
+  if public.is_admin() then return new; end if;
+  if tg_table_name = 'events' then new.actor := public.my_name();
+  elsif tg_op = 'UPDATE' then new.author := old.author;
+  else new.author := public.my_name();
+  end if;
+  return new;
+end $$;
+drop trigger if exists stamp_author on public.events;
+create trigger stamp_author before insert on public.events for each row execute function public.stamp_author();
+drop trigger if exists stamp_author on public.intel;
+create trigger stamp_author before insert or update on public.intel for each row execute function public.stamp_author();
+
+-- Deletion journal: every deleted row of the game, who deleted it and when. Nobody can change or erase it through the
+-- API (no write policy); administrators read it in Settings. Kept 14 days, like the backups.
+create table if not exists public.audit (
+  id         bigint generated always as identity primary key,
+  at         timestamptz not null default now(),
+  actor      text,
+  table_name text not null,
+  row_data   jsonb
+);
+alter table public.audit enable row level security;
+drop policy if exists "admin" on public.audit;
+create policy "admin" on public.audit for select to authenticated using (public.is_admin());
+create or replace function public.audit_delete() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.audit (actor, table_name, row_data) values (auth.email(), tg_table_name, to_jsonb(old));
+  return old;
+end $$;
+revoke all on function public.audit_delete() from public, anon, authenticated;
+do $$
+declare t text;
+begin
+  foreach t in array array['players', 'rounds', 'links', 'kills', 'weapons', 'events', 'spots', 'bonuses', 'homes', 'intel'] loop
+    execute format('drop trigger if exists audit_delete on public.%I', t);
+    execute format('create trigger audit_delete after delete on public.%I for each row execute function public.audit_delete()', t);
   end loop;
 end $$;
 
@@ -247,7 +312,7 @@ create policy "admin"   on public.accounts for all to authenticated using (publi
 create policy "own row" on public.accounts for update to authenticated using (lower(email) = lower(auth.email())) with check (lower(email) = lower(auth.email()));
 
 -- A non-admin may only change their own name and avatar.
-create or replace function public.protect_account() returns trigger language plpgsql as $$
+create or replace function public.protect_account() returns trigger language plpgsql set search_path = public as $$
 begin
   if not public.is_admin() then
     if new.email <> old.email or new.role <> old.role or new.tabs is distinct from old.tabs then
@@ -293,10 +358,23 @@ begin
     'settings', coalesce((select jsonb_object_agg(key, value) from public.settings), '{}'::jsonb))
   returning id into new_id;
   delete from public.game_backups where taken_at < now() - interval '14 days';
+  delete from public.audit where at < now() - interval '14 days';
   return new_id;
 end $$;
 revoke all on function public.take_backup() from public, anon;
 grant execute on function public.take_backup() to authenticated;
+
+-- SEC: end of game. The automatic backups and the deletion journal hold the whole game (names, addresses, notes):
+-- "End of game" erases them too, administrators only.
+create or replace function public.purge_history() returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'administrators only'; end if;
+  delete from public.game_backups;
+  delete from public.audit;
+end $$;
+revoke all on function public.purge_history() from public, anon;
+grant execute on function public.purge_history() to authenticated;
 
 do $$ begin
   begin

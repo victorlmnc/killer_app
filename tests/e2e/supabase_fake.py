@@ -102,6 +102,12 @@ with sync_playwright() as p:
     calls = pg.evaluate('window.__calls'); order = [c[1] for c in calls if c[0] == 'delete' and c[3] and c[3][0][0] == 'neq']
     assert order[-8:] == ['intel', 'bonuses', 'links', 'kills', 'players', 'homes', 'rounds', 'events'], order   # le premier 'events' vient du vidage du journal testé plus haut
     assert ['removeFiles', 'photos', ['p1.jpg']] in calls
+    assert ['rpc', 'purge_history'] in calls, 'end of game also erases the automatic backups and the deletion journal'
+    print('· deletion journal (administrators)')
+    pg.evaluate("window.__db.audit = [{id: 1, at: new Date().toISOString(), actor: 'max@test.fr', table_name: 'links', row_data: {hunter_id: 'x', target_id: 'y'}}, {id: 2, at: new Date().toISOString(), actor: 'max@test.fr', table_name: 'players', row_data: {name: 'DUPONT Léa'}}]")
+    pg.goto(URL + '#/settings'); pg.get_by_role('button', name='Journal des suppressions').click()
+    expect(pg.locator('dialog[open] .audit-row')).to_have_count(2); expect(pg.locator('dialog[open]')).to_contain_text('Fiche · DUPONT Léa'); expect(pg.locator('dialog[open]')).to_contain_text('max@test.fr')
+    pg.keyboard.press('Escape')
     print('· sign out')
     pg.evaluate('K.store.auth.signOut()'); expect(pg.locator('.auth-card')).to_be_visible()
     print('· observer: read-only, only allowed tabs')

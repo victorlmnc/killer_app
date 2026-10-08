@@ -333,7 +333,13 @@
       .then(function () { return sb.from('players').delete().neq('id', all).then(check); })
       .then(function () { return sb.from('homes').delete().neq('id', all).then(check); })
       .then(function () { return sb.from('rounds').delete().neq('id', all).then(check); })
-      .then(function () { return sb.from('events').delete().neq('id', all).then(check); }), K.t('Reset'));
+      .then(function () { return sb.from('events').delete().neq('id', all).then(check); })
+      .then(function () { return sb.rpc('purge_history').then(check); }), K.t('Reset'));   // backups and deletion journal: the whole game, gone too
+  };
+  /* Deletion journal (supabase/schema.sql: audit), administrators only: who deleted what, last 14 days */
+  store.audit = {
+    available: function () { return store.mode === 'supabase' && store.isAdmin(); },
+    list: function () { return sb.from('audit').select('id, at, actor, table_name, row_data').order('at', { ascending: false }).limit(60).then(check); }
   };
   store.resetDemo = function () { return local.reset().then(store.emit); };
 

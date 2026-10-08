@@ -203,6 +203,7 @@
             h('button', { type: 'button', class: 'btn', onclick: K.actions.exportJson }, K.icon('download'), t('Save the game')),
             h('button', { type: 'button', class: 'btn', onclick: K.actions.restoreDialog }, K.icon('upload'), t('Import a saved game')),
             store.nightly.available() ? h('button', { type: 'button', class: 'btn', onclick: K.actions.nightlyDialog }, t('Automatic backups')) : null,
+            store.audit.available() ? h('button', { type: 'button', class: 'btn', onclick: K.actions.auditDialog }, t('Deletion journal')) : null,
             store.mode !== 'supabase' ? h('button', { type: 'button', class: 'btn', onclick: function () { store.resetDemo().then(function () { ui.toast(t('Demo game reloaded.')); }); } }, t('Reload the demo')) : null),
           h('h3', {}, t('Activity log')),
           h('p', { class: 'prose' }, t('Clears the "Latest activity" list on the dashboard ({n} entries). Kills, links and sheets are untouched.', { n: st.events.length })),
@@ -211,7 +212,7 @@
               .then(function (ok) { if (ok) store.clearEvents().then(function () { ui.toast(t('Log cleared.')); }); });
           } }, t('Clear log'))),
           h('h3', {}, t('End of game')),
-          h('p', { class: 'prose' }, t('Erases sheets, photos, chains, kills and the log. The weapon catalogue, strategic spots, shop and settings stay for next year.')),
+          h('p', { class: 'prose' }, t('Erases sheets, photos, chains, kills, the log, the automatic backups and the deletion journal. The weapon catalogue, strategic spots, shop and settings stay for next year.')),
           h('div', { class: 'actions actions-start' }, h('button', { type: 'button', class: 'btn btn-danger', onclick: function () {
             ui.confirm({ title: t('Erase everything?'), text: [t('The {n} sheets and their photos will be deleted for the whole team. This cannot be undone.', { n: st.players.length }), t('Save the game first if you want to keep it.')], action: t('Erase the game'), danger: true })
               .then(function (ok) { if (ok) store.purge().then(function () { ui.toast(t('Game erased.')); }); });

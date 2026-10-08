@@ -982,7 +982,8 @@
         showHome();
         drawLevels();
         var actions = h('div', { class: 'actions' });
-        if (playerId) actions.appendChild(h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
+        // the server lets only an administrator delete a sheet (a member may delete a mystery sheet)
+        if (playerId && (store.isAdmin() || p.is_mystery)) actions.appendChild(h('button', { type: 'button', class: 'btn btn-danger btn-push', onclick: function () {
           ui.confirm({ title: t('Delete {name}?', { name: p.name }), text: t('Their sheet, photo, links and kill (if any) are erased.'), action: t('Delete'), danger: true })
             .then(function (ok) { if (ok) { store.removePhoto(playerId).then(function () { store.remove('players', playerId); }); api.close(); } });
         } }, t('Delete')));
@@ -1330,6 +1331,30 @@
     });
   };
   /* Nightly copies of the game kept by the database (14 days): download one, restore one, or take one now. */
+  /* Deletion journal (administrators): every row deleted in the last 14 days, by whom. Written by the database itself,
+     nobody can erase it through the app or the API. */
+  act.auditDialog = function () {
+    if (!store.audit.available()) return;
+    var TABLE = { players: t('Sheet'), rounds: t('Round'), links: t('Link'), kills: t('Kill'), weapons: t('Weapon'), events: t('Log entry'), spots: t('Strategic spot'), bonuses: t('Bonus'), homes: t('Shared flat or residence'), intel: t('Info') };
+    function what(r) {
+      var d = r.row_data || {};
+      if (r.table_name === 'links') return name(d.hunter_id) + ' → ' + name(d.target_id);
+      if (r.table_name === 'kills') return t('{name} is dead', { name: name(d.victim_id) });
+      return d.name || d.text || d.weapon || '';
+    }
+    ui.dialog({ title: t('Deletion journal'), wide: true, render: function (body) {
+      body.appendChild(h('p', { class: 'muted small' }, t('Every deletion of the last 14 days, recorded by the database: nobody can change it from the app or the API.')));
+      var box = body.appendChild(h('div', { class: 'stack-tight' }, h('p', { class: 'muted small' }, t('Loading…'))));
+      store.audit.list().then(function (rows) {
+        ui.clear(box);
+        if (!rows.length) return box.appendChild(h('p', { class: 'empty' }, t('Nothing deleted lately.')));
+        rows.forEach(function (r) {
+          box.appendChild(h('div', { class: 'row audit-row' }, h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, (TABLE[r.table_name] || r.table_name) + (what(r) ? ' · ' + what(r) : '')),
+            h('span', { class: 'row-sub' }, [r.actor || t('automatic'), ui.when(r.at)].join(' · ')))));
+        });
+      }, function (err) { ui.clear(box).appendChild(h('p', { class: 'empty' }, t('Could not load the journal: {err}', { err: err.message || err }))); });
+    } });
+  };
   act.nightlyDialog = function () {
     if (!store.nightly.available()) return;
     ui.dialog({ title: t('Automatic backups'), render: function (body, api) {
