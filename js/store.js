@@ -106,38 +106,72 @@
 
   /* ------------------------------------------------------------ common API */
   function backend() { return store.mode === 'supabase' ? supa : local; }
-  function guard(promise, what) {
+  /* A write the server refused, or could not receive: the change shown at once is undone (undo), the person is told,
+     the server's version is reloaded when it can be reached, and the promise rejects so the next steps of an action
+     do not run on top of a failed one (no points without the kill). */
+  function guard(promise, what, undo) {
     return promise.catch(function (err) {
       console.error(err);
+      if (undo) { try { undo(); } catch (e) { console.error(e); } store.emit(); }
       if (K.ui) K.ui.toast((what || K.t('Save')) + ' — ' + (err.message || err), 'error');
-      if (store.mode === 'supabase') return supa.loadAll().then(store.emit).catch(console.error);
+      if (store.mode === 'supabase') supa.loadAll().then(store.emit).catch(console.error);
+      var shown = err instanceof Error ? err : new Error(err && err.message || String(err));
+      shown.shown = true;   // already told: nothing more to report
+      throw shown;
     });
   }
+  // failures already shown to the person are not reported again as unhandled errors
+  window.addEventListener('unhandledrejection', function (e) { if (e.reason && e.reason.shown) e.preventDefault(); });
   function denied() { if (K.ui) K.ui.toast(K.t('Read-only account: you cannot change the game data.'), 'error'); return Promise.resolve(null); }
 
+  function dropIds(table, ids) { store.state[table] = store.state[table].filter(function (r) { return ids.indexOf(r.id) < 0; }); }
   store.insert = function (table, row) {
     if (!store.canEdit()) return denied();
     row = Object.assign({ id: uuid() }, row);
     if (table === 'events') store.state.events.unshift(row); else store.state[table].push(row);
     store.emit();
-    return guard(backend().insert(table, row)).then(function () { return row; });
+    return guard(backend().insert(table, row), null, function () { dropIds(table, [row.id]); }).then(function () { return row; });
   };
   store.insertMany = function (table, rows) {
     if (!store.canEdit()) return denied();
     rows = rows.map(function (r) { return Object.assign({ id: uuid() }, r); });
     Array.prototype.push.apply(store.state[table], rows);
     store.emit();
-    return guard(backend().insert(table, rows), K.t('Import')).then(function () { return rows; });
+    return guard(backend().insert(table, rows), K.t('Import'), function () { dropIds(table, rows.map(function (r) { return r.id; })); }).then(function () { return rows; });
   };
   store.update = function (table, id, patch) {
     if (!store.canEdit()) return denied();
-    var row = store.state[table].find(function (r) { return r.id === id; });
-    if (row) Object.assign(row, patch);
+    var row = store.state[table].find(function (r) { return r.id === id; }), before = {};
+    if (row) { Object.keys(patch).forEach(function (k) { before[k] = row[k]; }); Object.assign(row, patch); }
     store.emit();
-    return guard(backend().update(table, id, patch));
+    return guard(backend().update(table, id, patch), null, function () { if (row) Object.assign(row, before); });
+  };
+  /* Points added (or taken) on the server itself (add_points), so two teammates scoring the same player at once
+     both count. Never below 0. */
+  store.addPoints = function (playerId, delta) {
+    if (!store.canEdit()) return denied();
+    delta = Math.round(Number(delta) || 0);
+    var p = store.player(playerId); if (!p || !delta) return Promise.resolve(p ? p.points || 0 : 0);
+    var before = p.points || 0;
+    p.points = Math.max(0, before + delta); store.emit();
+    if (store.mode !== 'supabase') { local.persist(); return Promise.resolve(p.points); }
+    return guard(sb.rpc('add_points', { p_player: playerId, p_delta: delta }).then(check), null, function () { p.points = Math.max(0, (p.points || 0) - delta); })
+      .then(function (v) { if (typeof v === 'number' && v !== p.points) { p.points = v; store.emit(); } return p.points; });   // the server's total, with teammates' changes
+  };
+  /* Links removed and added in one transaction (set_links): together, or nothing changes. */
+  store.replaceLinks = function (removeIds, addRows) {
+    if (!store.canEdit()) return denied();
+    addRows = (addRows || []).map(function (r) { return Object.assign({ id: uuid() }, r); });
+    var before = store.state.links.slice();
+    store.state.links = store.state.links.filter(function (l) { return removeIds.indexOf(l.id) < 0; }).concat(addRows);
+    store.emit();
+    if (store.mode !== 'supabase') { local.persist(); return Promise.resolve(addRows); }
+    return guard(sb.rpc('set_links', { p_remove: removeIds, p_add: addRows }).then(check), null, function () { store.state.links = before; }).then(function () { return addRows; });
   };
   store.remove = function (table, id) {
     if (!store.canEdit()) return denied();
+    var touched = [table].concat(table === 'players' || table === 'rounds' ? ['links', 'kills'] : []), before = {};
+    touched.forEach(function (t) { before[t] = JSON.parse(JSON.stringify(store.state[t])); });   // the cascades below change rows in place
     store.state[table] = store.state[table].filter(function (r) { return r.id !== id; });
     if (table === 'players') { // mirror the SQL foreign-key cascades
       store.state.links = store.state.links.filter(function (l) { return l.hunter_id !== id && l.target_id !== id; });
@@ -149,13 +183,14 @@
       store.state.kills.forEach(function (k) { if (k.round_id === id) k.round_id = null; });
     }
     store.emit();
-    return guard(backend().remove(table, id), K.t('Delete'));
+    return guard(backend().remove(table, id), K.t('Delete'), function () { touched.forEach(function (t) { store.state[t] = before[t]; }); });
   };
   store.setSetting = function (key, value) {
     if (!store.isAdmin()) return denied();
+    var had = Object.prototype.hasOwnProperty.call(store.state.settings, key), old = store.state.settings[key];
     store.state.settings[key] = value;
     store.emit();
-    return guard(backend().setSetting(key, value));
+    return guard(backend().setSetting(key, value), null, function () { if (had) store.state.settings[key] = old; else delete store.state.settings[key]; });
   };
   store.displayName = function (email) {
     email = String(email || (store.user && store.user.email) || '').toLowerCase();

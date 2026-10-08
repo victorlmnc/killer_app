@@ -364,6 +364,28 @@ end $$;
 revoke all on function public.take_backup() from public, anon;
 grant execute on function public.take_backup() to authenticated;
 
+-- Points change on the server itself (points = points + delta): two teammates scoring the same player at once both
+-- count. Runs with the caller's rights, so the row-level rules apply.
+create or replace function public.add_points(p_player uuid, p_delta integer) returns integer
+language sql security invoker set search_path = public as $$
+  update public.players set points = greatest(0, points + p_delta) where id = p_player returning points;
+$$;
+revoke all on function public.add_points(uuid, integer) from public, anon;
+grant execute on function public.add_points(uuid, integer) to authenticated;
+
+-- Links replaced in one transaction: the old ones go and the new ones come together, or nothing changes (a conflict
+-- with a teammate's change no longer loses the old link).
+create or replace function public.set_links(p_remove uuid[], p_add jsonb) returns void
+language plpgsql security invoker set search_path = public as $$
+begin
+  delete from public.links where id = any(coalesce(p_remove, '{}'));
+  insert into public.links (id, round_id, hunter_id, target_id, confidence, source)
+    select (x->>'id')::uuid, (x->>'round_id')::uuid, (x->>'hunter_id')::uuid, (x->>'target_id')::uuid, coalesce(x->>'confidence', 'sur'), coalesce(x->>'source', '')
+    from jsonb_array_elements(coalesce(p_add, '[]'::jsonb)) x;
+end $$;
+revoke all on function public.set_links(uuid[], jsonb) from public, anon;
+grant execute on function public.set_links(uuid[], jsonb) to authenticated;
+
 -- SEC: end of game. The automatic backups and the deletion journal hold the whole game (names, addresses, notes):
 -- "End of game" erases them too, administrators only.
 create or replace function public.purge_history() returns void

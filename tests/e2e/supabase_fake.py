@@ -20,7 +20,9 @@ window.supabase = { createClient: function (url, key) {
       eq: function (c, v) { op.filters.push(['eq', c, v]); return b; }, neq: function (c, v) { op.filters.push(['neq', c, v]); return b; },
       then: function (res, rej) {
         window.__calls.push([op.type, table, op.rows || op.patch || null, op.filters]);
-        var t = window.__db[table];
+        if (window.__down) return Promise.reject(new TypeError('Failed to fetch')).then(res, rej);   // no network at all
+        var t = window.__db[table], refused = window.__fail === table && op.type !== 'select';
+        if (refused) return Promise.resolve({ data: null, error: { message: 'RLS refuse' } }).then(res, rej);   // a refused write changes nothing
         if (op.type === 'insert') [].concat(op.rows).forEach(function (r) { t.push(r); });
         if (op.type === 'delete') window.__db[table] = t.filter(function (r) { return !op.filters.every(function (f) { return f[0] === 'eq' ? r[f[1]] === f[2] : r[f[1]] !== f[2]; }); });
         if (op.type === 'update') t.forEach(function (r) { if (op.filters.every(function (f) { return r[f[1]] === f[2]; })) Object.assign(r, op.patch); });
@@ -39,7 +41,12 @@ window.supabase = { createClient: function (url, key) {
       },
       signOut: function () { session = null; setTimeout(function () { authCb('SIGNED_OUT', null); }, 0); return Promise.resolve({ error: null }); }
     },
-    rpc: function (name) { window.__calls.push(['rpc', name]); return Promise.resolve({ data: window.__role === undefined ? 'admin' : window.__role, error: null }); },
+    rpc: function (name, args) {
+      window.__calls.push(['rpc', name, args || null]);
+      if (name === 'set_links') { window.__db.links = window.__db.links.filter(function (l) { return args.p_remove.indexOf(l.id) < 0; }).concat(args.p_add); return Promise.resolve({ data: null, error: window.__fail === 'links' ? { message: 'RLS refuse' } : null }); }
+      if (name === 'add_points') { var p = window.__db.players.find(function (x) { return x.id === args.p_player; }); if (p) p.points = Math.max(0, (p.points || 0) + args.p_delta); return Promise.resolve({ data: p ? p.points : null, error: window.__fail === 'players' ? { message: 'RLS refuse' } : null }); }
+      return Promise.resolve({ data: window.__role === undefined ? 'admin' : window.__role, error: null });
+    },
     from: builder,
     storage: { from: function (bucket) { return {
       createSignedUrls: function (paths, ttl) { window.__calls.push(['sign', bucket, paths, ttl]); return Promise.resolve({ data: paths.map(function (p) { return { path: p, signedUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' }; }), error: null }); },
@@ -66,7 +73,7 @@ with sync_playwright() as p:
     pg.locator('input[type=password]').fill('bonmotdepasse'); pg.get_by_role('button', name='Se connecter').click()
     pg.wait_for_selector('.shell')
     calls = pg.evaluate('window.__calls')
-    assert ['rpc', 'my_role'] in calls and ['subscribe'] in calls
+    assert any(c[:2] == ['rpc', 'my_role'] for c in calls) and ['subscribe'] in calls
     assert pg.evaluate('K.store.state.settings.game_name') == 'Killer test'
     assert pg.evaluate('K.store.state.settings.shop.length') == 5          # réglages absents → valeurs par défaut
     assert pg.locator('.demo-flag').count() == 0
@@ -76,8 +83,20 @@ with sync_playwright() as p:
     print('· writes: link (creates the round), kill, setting')
     pg.evaluate("K.actions.setTarget('p1','p2',{confidence:'sur'})"); pg.wait_for_timeout(300)
     db = pg.evaluate('window.__db'); assert len(db['rounds']) == 1 and len(db['links']) == 1 and db['links'][0]['round_id'] == db['rounds'][0]['id']
+    assert any(c[:2] == ['rpc', 'set_links'] for c in pg.evaluate('window.__calls')), 'links written in one transaction'
     pg.evaluate("K.actions.recordKill({victimId:'p2', killerId:'p1', weapon:'Banane', points:1, inherit:true})"); pg.wait_for_timeout(300)
     db = pg.evaluate('window.__db'); assert db['kills'][0]['victim_id'] == 'p2' and db['players'][0]['points'] == 3
+    assert ['rpc', 'add_points', {'p_player': 'p1', 'p_delta': 1}] in pg.evaluate('window.__calls'), 'points added on the server'
+    print('· points: a teammate scoring at the same time is not overwritten')
+    pg.evaluate("window.__db.players[0].points += 5"); pg.evaluate("K.store.addPoints('p1', 2)"); pg.wait_for_timeout(200)
+    assert pg.evaluate("[window.__db.players[0].points, K.store.player('p1').points]") == [10, 10]
+    print('· a kill refused by the server: nothing else written, the screen goes back')
+    pg.evaluate("window.__db.players.push({id:'p4', name:'FANTINE', points:0}); K.store.state.players.push({id:'p4', name:'FANTINE', points:0}); window.__fail = 'kills'")
+    before = pg.evaluate("K.store.player('p1').points")
+    pg.evaluate("() => { K.actions.recordKill({victimId:'p4', killerId:'p1', points:3}); }"); pg.wait_for_timeout(400)
+    expect(pg.locator('.toast-error').last).to_contain_text('RLS refuse')
+    got = pg.evaluate("[K.store.player('p1').points, window.__db.players[0].points, K.store.state.kills.some(k => k.victim_id === 'p4'), K.store.state.links.length, window.__db.kills.length]"); assert got[:3] == [before, before, False], (got, before)
+    pg.evaluate("window.__fail = null")
     pg.evaluate("K.store.setSetting('official_players', 120)"); pg.wait_for_timeout(100)
     assert ['upsert', 'settings', {'key': 'official_players', 'value': 120}, []] in pg.evaluate('window.__calls')
     print('· realtime: a teammate change arrives without reload')
@@ -85,8 +104,13 @@ with sync_playwright() as p:
     pg.locator('.filterbar').get_by_role('button', name='Tous', exact=True).click()
     expect(pg.locator('.list')).to_contain_text('COSETTE Euphrasie')
     print('· server error: clear message then resync')
-    pg.evaluate("window.__fail='players'; K.store.update('players','p1',{points:99})")
-    expect(pg.locator('.toast-error')).to_contain_text('RLS refuse')
+    pg.evaluate("window.__fail='players'; window.__db.players[0].points = 77; window.__loadFail = true; K.store.update('players','p1',{points:99}).catch(() => {})")
+    expect(pg.locator('.toast-error').last).to_contain_text('RLS refuse')
+    assert pg.evaluate("K.store.player('p1').points") != 99, 'the refused change is not left on screen'
+    print('· network cut mid-session: the unsaved change is undone, not kept as if saved')
+    pg.evaluate("window.__down = true; K.store.update('players','p1',{name:'NOT SAVED'}).catch(() => {})"); pg.wait_for_timeout(300)
+    assert pg.evaluate("K.store.player('p1').name") == 'VALJEAN Jean'
+    pg.evaluate("window.__down = false"); errs[:] = [e for e in errs if 'Failed to fetch' not in e]   # the cut was on purpose
     pg.evaluate("window.__fail=null")
     print('· display name: saved server-side, signs the log')
     pg.evaluate("K.store.updateMember('moi@test.fr', {name: 'Capitaine'})"); pg.wait_for_timeout(100)
@@ -102,7 +126,7 @@ with sync_playwright() as p:
     calls = pg.evaluate('window.__calls'); order = [c[1] for c in calls if c[0] == 'delete' and c[3] and c[3][0][0] == 'neq']
     assert order[-8:] == ['intel', 'bonuses', 'links', 'kills', 'players', 'homes', 'rounds', 'events'], order   # le premier 'events' vient du vidage du journal testé plus haut
     assert ['removeFiles', 'photos', ['p1.jpg']] in calls
-    assert ['rpc', 'purge_history'] in calls, 'end of game also erases the automatic backups and the deletion journal'
+    assert any(c[:2] == ['rpc', 'purge_history'] for c in calls), 'end of game also erases the automatic backups and the deletion journal'
     print('· deletion journal (administrators)')
     pg.evaluate("window.__db.audit = [{id: 1, at: new Date().toISOString(), actor: 'max@test.fr', table_name: 'links', row_data: {hunter_id: 'x', target_id: 'y'}}, {id: 2, at: new Date().toISOString(), actor: 'max@test.fr', table_name: 'players', row_data: {name: 'DUPONT Léa'}}]")
     pg.goto(URL + '#/settings'); pg.get_by_role('button', name='Journal des suppressions').click()

@@ -14,9 +14,8 @@
     if (r) return Promise.resolve(r.id);
     return store.insert('rounds', { name: t('Initial loop'), position: 0 }).then(function (row) { return row.id; });
   }
-  function applyPlan(plan) {
-    return Promise.all(plan.remove.map(function (l) { return store.remove('links', l.id); }))
-      .then(function () { return Promise.all(plan.add.map(function (l) { return store.insert('links', l); })); });
+  function applyPlan(plan) {   // the links removed and added together (one transaction on the server)
+    return store.replaceLinks(plan.remove.map(function (l) { return l.id; }), plan.add);
   }
   function linkDetails(hunterId, targetId, confidence, source) {
     return { type: 'link', hunter_id: hunterId, target_id: targetId, hunter: name(hunterId), target: name(targetId), confidence: confidence || 'sur', source: source || '' };
@@ -254,6 +253,7 @@
     var cat = weapon && store.state.weapons.find(function (x) { return L.norm(x.name) === L.norm(weapon); });
     if (level === 'inconnue' && cat && cat.difficulty !== 'inconnue') { level = cat.difficulty; if (level === 'difficile' && !parts) points += L.levelGap(sc); }   // the catalogue knows it
     if (parts) points = L.killPoints({ difficulty: level, bonus: parts.bonus, firstBlood: parts.firstBlood, mates: parts.mates }, sc);
+    if (act.isDead(k.victimId)) { ui.toast(t('{name} is already dead: a teammate recorded it.', { name: name(k.victimId) }), 'error'); return Promise.resolve(false); }
     return ensureRound().then(function (roundId) {
       var pre = Promise.resolve(true);
       // A kill proves the killer was hunting the victim: complete the chain if we did not know.
@@ -264,20 +264,22 @@
         var victim = store.player(k.victimId), killer = killerId && store.player(killerId);
         var killId = store.uuid();
         var inherits = !!(killer && victim.weapons);   // the victim's contract always passes to the killer; theirs is kept on the kill for an undo
-        var jobs = [store.insert('kills', { id: killId, round_id: roundId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, weapon: weapon, weapon_level: level, bonus: parts ? parts.bonus : null, first_blood: parts ? !!parts.firstBlood : null, mates: parts ? parts.mates : null, points: points, note: k.note || '', killer_weapons: inherits ? killer.weapons || '' : null, happened_at: k.when || new Date().toISOString() })];
-        if (killer) {
-          var patch = { points: (killer.points || 0) + points };
-          if (inherits) patch.weapons = victim.weapons;
-          jobs.push(store.update('players', killer.id, patch));
-        }
-        var text = adminReason ? t('Administrative elimination of {name}: {reason}', { name: victim.name, reason: t(adminReason === 'cheating' ? 'Cheating' : 'Other') })
-          : killer ? t('{a} eliminated {b}', { a: killer.name, b: victim.name }) + (weapon ? ' (' + weapon + ')' : '') : t('{name} is dead', { name: victim.name });
-        store.log(text, { type: 'kill', kill_id: killId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, killer: killer ? killer.name : '', victim: victim.name, weapon: weapon, weapon_level: level, points: points, note: k.note || '' });
-        // the weapon goes to the catalogue; a difficulty chosen here that differs from the catalogue's becomes the
-        // catalogue's: the kills made with it while unknown are settled, the others recomputed if the person agrees
-        if (weapon && level && !cat) jobs.push(store.insert('weapons', { name: weapon, difficulty: level }));
-        else if (cat && level && level !== 'inconnue' && level !== cat.difficulty) jobs.push(Promise.all(jobs).then(function () { return act.setWeaponDifficulty(weapon, level); }));
-        return Promise.all(jobs);
+        // the kill first: if the server refuses it (a teammate recorded this death a moment ago), nothing else is written
+        return store.insert('kills', { id: killId, round_id: roundId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, weapon: weapon, weapon_level: level, bonus: parts ? parts.bonus : null, first_blood: parts ? !!parts.firstBlood : null, mates: parts ? parts.mates : null, points: points, note: k.note || '', killer_weapons: inherits ? killer.weapons || '' : null, happened_at: k.when || new Date().toISOString() }).then(function () {
+          var jobs = [];
+          if (killer) {
+            if (points) jobs.push(store.addPoints(killer.id, points));
+            if (inherits) jobs.push(store.update('players', killer.id, { weapons: victim.weapons }));
+          }
+          var text = adminReason ? t('Administrative elimination of {name}: {reason}', { name: victim.name, reason: t(adminReason === 'cheating' ? 'Cheating' : 'Other') })
+            : killer ? t('{a} eliminated {b}', { a: killer.name, b: victim.name }) + (weapon ? ' (' + weapon + ')' : '') : t('{name} is dead', { name: victim.name });
+          store.log(text, { type: 'kill', kill_id: killId, killer_id: killerId || null, victim_id: k.victimId, admin_reason: adminReason, killer: killer ? killer.name : '', victim: victim.name, weapon: weapon, weapon_level: level, points: points, note: k.note || '' });
+          // the weapon goes to the catalogue; a difficulty chosen here that differs from the catalogue's becomes the
+          // catalogue's: the kills made with it while unknown are settled, the others recomputed if the person agrees
+          if (weapon && level && !cat) jobs.push(store.insert('weapons', { name: weapon, difficulty: level }));
+          else if (cat && level && level !== 'inconnue' && level !== cat.difficulty) jobs.push(Promise.all(jobs).then(function () { return act.setWeaponDifficulty(weapon, level); }));
+          return Promise.all(jobs);
+        });
       }).then(function () {
         var next = killerId ? L.resolveTarget(store.state, roundId, killerId) : null;
         ui.toast(next && next.id ? t('Kill recorded. New target for {a}: {b}.', { a: name(k.killerId), b: name(next.id) }) : t('Kill recorded.'));
@@ -298,11 +300,12 @@
     return ui.confirm({ title: t('Undo this kill?'), text: text, action: t('Undo the kill'), danger: true })
       .then(function (ok) {
         if (!ok) return;
-        var jobs = [store.remove('kills', kill.id)], patch = {};
-        if (pts) patch.points = Math.max(0, (killer.points || 0) - pts);
-        if (restore) patch.weapons = kill.killer_weapons;
-        if (Object.keys(patch).length) jobs.push(store.update('players', killer.id, patch));
-        return Promise.all(jobs).then(function () { store.log(t('Kill undone: {name} is alive again', { name: name(playerId) })); });
+        return store.remove('kills', kill.id).then(function () {   // then the points and weapons, once the kill is gone
+          var jobs = [];
+          if (pts) jobs.push(store.addPoints(killer.id, -pts));
+          if (restore) jobs.push(store.update('players', killer.id, { weapons: kill.killer_weapons }));
+          return Promise.all(jobs);
+        }).then(function () { store.log(t('Kill undone: {name} is alive again', { name: name(playerId) })); });
       });
   };
   /* ------------------------------------------- shared flats and student residences */
@@ -456,8 +459,7 @@
             var s = starts.value ? parisInput(starts.value) : new Date(), hrs = Math.max(0, parseFloat(hours.value) || 0);
             var row = { player_id: p.id, name: item.name, price: item.price || 0, bought_at: (bought.value ? parisInput(bought.value) : new Date()).toISOString(),
               starts_at: s.toISOString(), ends_at: hrs ? new Date(+s + hrs * 3600e3).toISOString() : null, note: note.value.trim() };
-            var jobs = [store.insert('bonuses', row)];
-            if (pay.checked && item.price) jobs.push(store.update('players', p.id, { points: Math.max(0, (p.points || 0) - item.price) }));
+            var jobs = [store.insert('bonuses', row).then(function () { if (pay.checked && item.price) return store.addPoints(p.id, -item.price); })];
             store.log(t('{name} bought {bonus}', { name: p.name, bonus: item.name }) + (row.ends_at ? ' (' + ui.whenShort(row.starts_at) + ' → ' + ui.whenShort(row.ends_at) + ')' : ''), { type: 'bonus', player_id: p.id, bonus: item.name, starts_at: row.starts_at, ends_at: row.ends_at, note: row.note });
             Promise.all(jobs).then(function () { api.close(); ui.toast(t('Purchase recorded.')); });
           } }, t('Record'))));
@@ -474,8 +476,7 @@
       if (b.price && p) body.appendChild(h('label', { class: 'check' }, refund, t('Give the {n} points back', { n: b.price })));
       body.appendChild(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn', onclick: api.close }, t('Cancel')),
         h('button', { type: 'button', class: 'btn btn-danger', onclick: function () {
-          store.remove('bonuses', b.id);
-          if (refund.checked && b.price && p) store.update('players', p.id, { points: (p.points || 0) + b.price });
+          store.remove('bonuses', b.id).then(function () { if (refund.checked && b.price && p) return store.addPoints(p.id, b.price); });
           store.log(t('Purchase removed: {bonus} of {name}', { bonus: b.name, name: p ? p.name : '?' }));
           api.close();
         } }, t('Remove'))));
@@ -489,20 +490,24 @@
       .then(function (v) {
         if (v === undefined || (v === kill.killer_id && !kill.admin_reason)) return;
         var pts = kill.admin_reason ? 0 : kill.points || 0, victim = store.player(kill.victim_id), current = kill.round_id === act.currentRoundId();
-        var old = kill.killer_id && store.player(kill.killer_id), neu = v && store.player(v), patches = new Map(), killPatch = { killer_id: v, admin_reason: null };
+        var old = kill.killer_id && store.player(kill.killer_id), neu = v && store.player(v), patches = new Map(), gains = new Map(), killPatch = { killer_id: v, admin_reason: null };
         function add(p, x) { patches.set(p.id, Object.assign(patches.get(p.id) || {}, x)); }
         var same = function (a, b) { return L.weaponList(a).map(L.norm).sort().join() === L.weaponList(b).map(L.norm).sort().join(); };
         if (old) {
-          if (pts) add(old, { points: Math.max(0, (old.points || 0) - pts) });
+          if (pts) gains.set(old.id, -pts);
           if (kill.killer_weapons != null && victim && same(old.weapons, victim.weapons)) add(old, { weapons: kill.killer_weapons });   // gets theirs back
           killPatch.killer_weapons = null;
         }
         if (neu) {
-          if (pts) add(neu, { points: (neu.points || 0) + pts });
+          if (pts) gains.set(neu.id, (gains.get(neu.id) || 0) + pts);
           if (current && victim && L.weaponList(victim.weapons).length) { killPatch.killer_weapons = neu.weapons || ''; add(neu, { weapons: victim.weapons }); }
         }
-        var jobs = [store.update('kills', kill.id, killPatch)];
-        patches.forEach(function (x, id) { jobs.push(store.update('players', id, x)); });
+        var jobs = [store.update('kills', kill.id, killPatch).then(function () {   // the kill first, then who gets what
+          var more = [];
+          gains.forEach(function (d, id) { more.push(store.addPoints(id, d)); });
+          patches.forEach(function (x, id) { more.push(store.update('players', id, x)); });
+          return Promise.all(more);
+        })];
         // the chain: the kill proves the new killer was hunting the victim, so they take over the victim's target;
         // the former killer's link to the victim goes
         var roundId = kill.round_id || act.currentRoundId();
@@ -529,7 +534,7 @@
   function applySettle(list, what) {
     var jobs = [], gain = new Map();
     list.forEach(function (s) { jobs.push(store.update('kills', s.kill.id, s.patch)); if (s.delta) gain.set(s.killerId, (gain.get(s.killerId) || 0) + s.delta); });
-    gain.forEach(function (d, id) { var p = store.player(id); if (p) jobs.push(store.update('players', id, { points: (p.points || 0) + d })); });
+    gain.forEach(function (d, id) { jobs.push(store.addPoints(id, d)); });
     if (list.length) {
       store.log(t('{what}: {n} kills settled', { what: what, n: list.length }), { type: 'settle', kills: list.map(function (s) { return s.kill.id; }) });
       gain.forEach(function (d, id) { ui.toast(t('{name} gets {n} more points.', { name: name(id), n: d })); });
@@ -579,7 +584,7 @@
       if (!ok) return false;
       var jobs = [store.setSetting('scoring', sc)];
       plan.changes.forEach(function (c) { jobs.push(store.update('kills', c.kill.id, c.patch)); });
-      gain.forEach(function (d, id) { var p = store.player(id); if (p && d) jobs.push(store.update('players', id, { points: Math.max(0, (p.points || 0) + d) })); });
+      gain.forEach(function (d, id) { if (d) jobs.push(store.addPoints(id, d)); });
       store.log(t('Scoring changed: {n} kills recomputed', { n: plan.changes.length }), { type: 'scoring', scoring: sc });
       return Promise.all(jobs).then(function () { ui.toast(t('Scoring saved.')); return true; });
     });
@@ -696,10 +701,16 @@
     else if (plan.prev) text.push(t('"{name}" becomes the current loop again.', { name: plan.prev.name }));
     return ui.confirm({ title: t('Delete "{name}"?', { name: plan.round.name }), text: text, action: t('Delete'), danger: true }).then(function (ok) {
       if (!ok) return false;
-      var jobs = plan.kills.map(function (k) { return store.remove('kills', k.id); });
-      plan.patches.forEach(function (x) { jobs.push(store.update('players', x.id, x.patch)); });
-      if (plan.restoreHeld) jobs.push(store.update('rounds', plan.prev.id, { held_weapons: null }));   // back in play: no longer history
-      return Promise.all(jobs).then(function () { return store.remove('rounds', roundId); }).then(function () {
+      return Promise.all(plan.kills.map(function (k) { return store.remove('kills', k.id); })).then(function () {
+        var jobs = [];
+        plan.patches.forEach(function (x) {
+          var p = store.player(x.id), rest = Object.assign({}, x.patch);
+          if ('points' in rest) { if (p) jobs.push(store.addPoints(x.id, rest.points - (p.points || 0))); delete rest.points; }   // a difference: a teammate's points meanwhile still count
+          if (Object.keys(rest).length) jobs.push(store.update('players', x.id, rest));
+        });
+        if (plan.restoreHeld) jobs.push(store.update('rounds', plan.prev.id, { held_weapons: null }));   // back in play: no longer history
+        return Promise.all(jobs);
+      }).then(function () { return store.remove('rounds', roundId); }).then(function () {
         store.log(t('Round deleted: {name}', { name: plan.round.name }) + (dead ? ' (' + K.n(dead, '{n} kill undone', '{n} kills undone') + ')' : ''));
         ui.toast(t('Round deleted: back to where the game was before it.'));
         return true;
