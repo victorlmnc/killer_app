@@ -16,7 +16,8 @@
     user: null, role: null,
     ROLES: ROLES,
     on: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
-    emit: function () { listeners.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } }); }
+    version: 0,   // goes up at every change (for caches)
+    emit: function () { store.version++; listeners.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } }); }
   };
 
   /* ----- permissions ----- */

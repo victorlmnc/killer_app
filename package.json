@@ -1,0 +1,14 @@
+{
+  "name": "qg-killer",
+  "private": true,
+  "description": "QG Killer: static web app (no build). These scripts only run the tests.",
+  "scripts": {
+    "test": "node tests/logic.test.js && node tests/db/rls.test.mjs",
+    "test:logic": "node tests/logic.test.js",
+    "test:db": "node tests/db/rls.test.mjs",
+    "test:edge": "deno run --config tests/edge/deno.jsonc --allow-env --allow-read --allow-net --allow-write tests/edge/edt.test.ts"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
+  }
+}

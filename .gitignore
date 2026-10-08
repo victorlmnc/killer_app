@@ -4,6 +4,7 @@
 *.csv
 *.json
 !package.json
+!package-lock.json
 data/bus.js.bak
 # Someone else's site, kept locally for reference only
 kill3r_exemple_autre_site/

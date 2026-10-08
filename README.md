@@ -116,10 +116,15 @@ signed URLs. Addresses are geocoded through a public geocoder that receives the 
 ## Development
 
 ```
-node tests/logic.test.js          # chain logic, import/export
+npm install                       # once: PGlite, a real Postgres in WebAssembly, for the database tests
+npm test                          # chain logic, import/export + row-level security of supabase/schema.sql
+npm run test:edge                 # the timetable relay (needs Deno), against a fake network
 python3 tests/e2e/demo_flow.py    # browser flows (see tests/e2e/README.md)
 python3 tests/e2e/features.py     # timetables, bonuses, alerts, pre-shot, offline copy
 ```
+
+None of them touches the real database: `tests/db/rls.test.mjs` runs `supabase/schema.sql` on PGlite with stand-ins for
+Supabase's `auth` and `storage`, then plays each role (anonymous, outsider, observer, member, admin).
 
 ```
 index.html
@@ -127,7 +132,12 @@ css/app.css             single dark theme
 js/i18n.js, js/lang/    translations (English source strings, French table)
 js/logic.js             pure logic: derived chain, fragments, drag planning, import/export
 js/store.js             data layer: Supabase adapter, local demo adapter, roles, photos
-js/actions.js           links, kills, rounds, player sheet, import/export, profile
+js/actions/             what the buttons do, one file per domain (helpers they share: core.js, as K.actions._):
+  chain.js              links, reliability, drag and drop, rounds and rerolls
+  kills.js              kill form, recording and undoing, weapons of unknown difficulty, scoring
+  homes.js, shop.js     shared flats and residences; shop purchases
+  sheet.js              player sheet, its weapons and edit form, intel, mystery players, sharing
+  data.js               log entries, import, export, backups, deletion journal, report, profile
 js/views/               one file per tab
 supabase/schema.sql     tables, roles, row-level security, storage, realtime
 supabase/functions/edt  timetable relay (iCal links of the school's HyperPlanning)
