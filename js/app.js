@@ -23,11 +23,14 @@
   }
 
   /* ------------------------------------------------------------ sign in */
-  function authScreen(mode, message) {
+  /* info: a message that is not an error (account created, link sent), shown in a calm box under the title;
+     address: the email to fill in again */
+  function authScreen(mode, info, address) {
     refreshView = null; shell = null; ui.clear(app);
-    var email = h('input', { type: 'email', autocomplete: 'email', required: true, placeholder: 'name@example.org' });
+    var email = h('input', { type: 'email', autocomplete: 'email', required: true, placeholder: 'name@example.org', value: address || '' });
     var pass = h('input', { type: 'password', autocomplete: mode === 'signin' ? 'current-password' : 'new-password', required: true, minlength: '8' });
-    var note = h('p', { class: 'auth-note', role: 'alert' }, message || '');
+    var note = h('p', { class: 'auth-note', role: 'alert' });   // errors only
+    var infoBox = info ? h('div', { class: 'auth-info', role: 'status' }, h('span', { class: 'auth-info-icon', 'aria-hidden': 'true' }, '✓'), h('p', {}, info)) : null;
     var labels = { signin: t('Sign in'), signup: t('Create my account'), reset: t('Send the link'), newpass: t('Save the password') };
     var submit = h('button', { type: 'submit', class: 'btn btn-primary btn-block' }, labels[mode]);
     function run(e) {
@@ -38,8 +41,9 @@
       job.then(function (res) {
         submit.disabled = false;
         if (res.error) { note.textContent = /invalid login/i.test(res.error.message) ? t('Wrong email or password.') : res.error.message; return; }
-        if (mode === 'signup') authScreen('signin', t('Account created. Click the link you received by email, then sign in.'));
-        if (mode === 'reset') authScreen('signin', t('If this address has an account, a link is on its way.'));
+        var sent = email.value.trim();
+        if (mode === 'signup') authScreen('signin', t('Account created. A confirmation email was sent to {email}: open the link in it, then sign in here.', { email: sent }), sent);
+        if (mode === 'reset') authScreen('signin', t('If this address has an account, a link to choose a new password is on its way to {email}.', { email: sent }), sent);
         if (mode === 'newpass') { ui.toast(t('Password saved.')); location.hash = '#/dashboard'; location.reload(); }
       }).catch(function (err) { submit.disabled = false; note.textContent = err.message || String(err); });
     }
@@ -47,6 +51,7 @@
     app.appendChild(h('main', { class: 'auth' }, h('form', { class: 'auth-card', onsubmit: run },
       brand('h1'),
       h('p', { class: 'prose' }, mode === 'newpass' ? t('Choose your new password.') : t('Private team workspace. Your address must have been allowed by the administrator.')),
+      infoBox,
       mode !== 'newpass' ? ui.field(t('Email'), email) : null,
       mode !== 'reset' ? ui.field(mode === 'signin' ? t('Password') : t('Password (8 characters minimum)'), pass) : null,
       note, submit,

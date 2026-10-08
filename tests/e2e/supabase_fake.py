@@ -34,6 +34,8 @@ window.supabase = { createClient: function (url, key) {
   return {
     auth: {
       onAuthStateChange: function (cb) { authCb = cb; setTimeout(function () { cb('INITIAL_SESSION', session); }, 0); return { data: { subscription: {} } }; },
+      signUp: function (c) { window.__calls.push(['signUp', c.email]); return Promise.resolve({ data: {}, error: null }); },
+      resetPasswordForEmail: function (e) { window.__calls.push(['reset', e]); return Promise.resolve({ data: {}, error: null }); },
       signInWithPassword: function (c) {
         if (c.password !== 'bonmotdepasse') return Promise.resolve({ data: {}, error: { message: 'Invalid login credentials' } });
         session = { user: { id: 'u1', email: c.email } }; setTimeout(function () { authCb('SIGNED_IN', session); }, 0);
@@ -69,6 +71,14 @@ with sync_playwright() as p:
     pg.goto(URL)
     print('· sign-in screen when nobody is signed in')
     expect(pg.locator('.auth-card')).to_contain_text('Espace privé')
+    print('· account created / link sent: a calm message, not an error, the address kept')
+    pg.get_by_role('button', name='Créer mon compte').click()
+    pg.locator('input[type=email]').fill('nouveau@test.fr'); pg.locator('input[type=password]').fill('bonmotdepasse'); pg.get_by_role('button', name='Créer mon compte').click()
+    expect(pg.locator('.auth-info')).to_contain_text('Compte créé ! Un e-mail de confirmation a été envoyé à nouveau@test.fr')
+    expect(pg.locator('.auth-note')).to_be_hidden(); expect(pg.locator('input[type=email]')).to_have_value('nouveau@test.fr')
+    pg.get_by_role('button', name='Mot de passe oublié').click(); pg.locator('input[type=email]').fill('nouveau@test.fr'); pg.get_by_role('button', name='Recevoir le lien').click()
+    expect(pg.locator('.auth-info')).to_contain_text('nouveau@test.fr')
+    pg.locator('input[type=email]').fill('')
     pg.locator('input[type=email]').fill('moi@test.fr'); pg.locator('input[type=password]').fill('mauvais12')
     pg.get_by_role('button', name='Se connecter').click()
     expect(pg.locator('.auth-note')).to_have_text('E-mail ou mot de passe incorrect.')

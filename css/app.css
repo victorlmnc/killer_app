@@ -460,7 +460,11 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .auth { min-height: 100dvh; display: grid; place-items: center; padding: 1.5rem; }
 .auth-card { width: min(410px, 100%); display: grid; gap: 1rem; padding: 1rem; }
 .auth-card .brand { font-size: 2.4rem; padding: 0; justify-self: center; margin-bottom: .5rem; }
-.auth-note { color: var(--thread); min-height: 1.4em; font-size: .9rem; }
+.auth-note { color: var(--thread); font-size: .9rem; margin: 0; } .auth-note:empty { display: none; }   /* errors only */
+.auth-info { display: grid; grid-template-columns: auto 1fr; gap: .7rem; align-items: start; padding: .8rem .9rem; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--alive) 12%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--alive) 40%, transparent); }
+.auth-info p { margin: 0; line-height: 1.45; font-size: .92rem; overflow-wrap: anywhere; }
+.auth-info-icon { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--alive); color: var(--bg); font-weight: 700; font-size: .85rem; }
 .auth-switch { display: flex; justify-content: space-between; gap: 1rem; font-size: .9rem; color: var(--muted); }
 
 /* ------------------------------------------------------------------ map */
