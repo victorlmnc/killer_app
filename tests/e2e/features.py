@@ -479,8 +479,16 @@ with sync_playwright() as p:
     assert all(isinstance(r.get('F'), float) and r['F'] > 45000 for r in dead[1:]), 'every death date is a real date'
     assert all(isinstance(r.get('H'), float) for r in alive[1:] if 'H' in r and ' à ' not in str(r['H'])), 'points as numbers'
 
-    step('dashboard carousel: named tabs, keyboard, two blocks on a wide screen, the block shown is remembered')
+    step('dashboard: registered players without a sheet are announced, the percentage only counts the sheets')
     pg.goto(URL + '#/dashboard'); pg.wait_for_selector('.carousel.is-ready')
+    total = pg.evaluate("K.logic.stats(K.store.state).total")
+    pg.evaluate("n => { K.store.state.settings.official_players = n + 7; K.store.emit(); }", total); pg.wait_for_timeout(100)
+    expect(pg.locator('.hero-note')).to_contain_text("7 inscrits n'ont pas encore de fiche."); expect(pg.locator('.hero-note')).to_contain_text('les %d fiches' % total)
+    pg.evaluate("n => { K.store.state.settings.official_players = n + 1; K.store.emit(); }", total); expect(pg.locator('.hero-note')).to_contain_text("1 inscrit n'a pas encore de fiche.")
+    for n in [0, total]:   # unknown, or every registered player has a sheet: nothing to say
+        pg.evaluate("n => { K.store.state.settings.official_players = n; K.store.emit(); }", n); assert pg.locator('.hero-note').count() == 0
+
+    step('dashboard carousel: named tabs, keyboard, two blocks on a wide screen, the block shown is remembered')
     cur = lambda: pg.evaluate("[...document.querySelectorAll('.carousel-track > .slide.is-current')].map(s => s.getAttribute('aria-label'))")
     on = lambda: pg.evaluate("[...document.querySelectorAll('.carousel-tab[aria-selected=true]')].map(b => b.firstChild.textContent)")
     pg.locator('.carousel-tab', has_text='Statistiques').click(); pg.wait_for_timeout(700)

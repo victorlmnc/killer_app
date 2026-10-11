@@ -295,12 +295,19 @@
         var mine = meBar(st, round);
         if (mine) root.appendChild(mine);
         var obs = store.isObserver();   // an observer gets the figures only: no ring, no blocks below
+        /* Registered players without a sheet yet: the ring and its percentage only know the sheets, so say it. */
+        var missing = Math.max(0, official - stats.total);
+        var missingNote = missing ? h('div', { class: 'hero-note', role: 'note' },
+          h('p', {}, h('strong', {}, K.n(missing, '{n} registered player has no sheet yet.', '{n} registered players have no sheet yet.')),
+            obs ? null : ' ' + t('The loop percentage only counts the {n} sheets in the database.', { n: stats.total })),
+          edit ? h('button', { type: 'button', class: 'linkish small', onclick: K.actions.importDialog }, t('Import players')) : null) : null;
         root.appendChild(h('section', { class: 'panel hero' + (obs ? ' hero-solo' : '') },
           obs ? null : h('div', { class: 'hero-ring' }, round ? ring(st, round) : null,
             h('div', { class: 'hero-center' }, h('span', { class: 'hero-figure' }, ui.pct(stats.coverage)), h('span', { class: 'hero-caption' }, t('of the loop known')))),
           h('div', { class: 'hero-side' },
             h('h2', {}, round ? round.name : t('No round')),
             h('p', { class: 'prose' }, t(obs ? '{a} known targets among {b} living players.' : '{a} known targets among {b} living players. Every gap in the ring is a contract still to find.', { a: stats.knownTargets, b: stats.alive })),
+            missingNote,
             h('dl', { class: 'figures' },
               h('div', {}, h('dt', {}, t('Alive')), h('dd', {}, stats.alive, h('small', {}, ' ' + ui.pct(stats.total ? stats.alive / stats.total : 0)))),
               h('div', {}, h('dt', {}, t('Dead')), h('dd', {}, stats.dead)),

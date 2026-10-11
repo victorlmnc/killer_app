@@ -258,7 +258,9 @@ select:disabled { opacity: .6; }
 .hero-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
 .hero-figure { font: 500 clamp(2.4rem, 7vw, 3.6rem)/1 var(--display); }
 .hero-caption { color: var(--muted); font-size: .85rem; max-width: 11ch; margin: .2rem auto 0; line-height: 1.25; }
-.hero-side { display: grid; gap: .9rem; justify-items: start; } .hero-side h2 { font-size: 1.8rem; }
+.hero-side { display: grid; gap: .9rem; justify-items: start; }
+.hero-note { display: grid; gap: .2rem; justify-items: start; border-left: 2px solid var(--brass); padding: .15rem 0 .15rem .7rem; font-size: .88rem; color: var(--muted); }
+.hero-note strong { color: var(--brass); font-weight: 600; } .hero-side h2 { font-size: 1.8rem; }
 .figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: .75rem 1.5rem; margin: 0; width: 100%; }
 .figures > div { border-left: 1px solid var(--line-2); padding-left: .7rem; }
 .figures dt { color: var(--muted); font-size: .8rem; } .figures dd { margin: 0; font: 500 1.6rem/1.1 var(--display); } .figures small { font: 400 .85rem var(--body); color: var(--muted); }
