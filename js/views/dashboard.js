@@ -175,7 +175,7 @@
   K.views.dashboard = {
     title: t('Dashboard'),
     render: function (root) {
-      var showAll = false, showAllIncomplete = false, showAllBoard = false, leaderboardMode = 'kills', slide = 0;
+      var showAll = false, showAllIncomplete = false, showAllBoard = false, leaderboardMode = 'kills', slide = 0, keptHeight = '';   // keptHeight: the carousel's, across re-renders
       try { slide = Number(localStorage.getItem('killer.dash.slide')) || 0; } catch (e) { /* storage unavailable */ }
       /* Blocks below the hero, in a carousel: a bar of named tabs (with a count when it helps) whose highlight follows
          the finger while swiping, one block at a time on a phone, two side by side on a wide screen. The block shown
@@ -204,13 +204,14 @@
         /* The highlight covers the tabs of the blocks on screen; mid-swipe it sits between two positions. */
         function paintInk(f) {
           if (!isFinite(f)) return;
+          if (Math.abs(f - Math.round(f)) < .02) f = Math.round(f);   // at rest: exactly on the tabs, not a pixel off
           f = Math.max(0, Math.min(last(), f));
           var a = Math.floor(f), b = Math.min(last(), a + 1), x = f - a;
           function edges(i) { var l = tabEls[i], r = tabEls[Math.min(n - 1, i + per - 1)]; return [l.offsetLeft, r.offsetLeft + r.offsetWidth]; }
           var ea = edges(a), eb = edges(b), left = ea[0] + (eb[0] - ea[0]) * x, right = ea[1] + (eb[1] - ea[1]) * x;
-          ink.style.transform = 'translateX(' + left + 'px)'; ink.style.width = (right - left) + 'px';
+          ink.style.transform = 'translateX(' + Math.round(left) + 'px)'; ink.style.width = Math.round(right - left) + 'px';
         }
-        function mark() {
+        function mark(smooth) {   // smooth: the bar glides to the tabs (a tap, a swipe), else it is simply there
           tabEls.forEach(function (b, i) {
             var on = i >= slide && i < slide + per;
             b.classList.toggle('is-on', on); b.setAttribute('aria-selected', String(on)); b.tabIndex = i === slide ? 0 : -1;
@@ -219,7 +220,7 @@
           prev.disabled = slide <= 0; next.disabled = slide >= last();
           var a = tabEls[slide], b = tabEls[Math.min(n - 1, slide + per - 1)];   // keep the highlighted tabs in view in the bar
           var mid = (a.offsetLeft + b.offsetLeft + b.offsetWidth) / 2;
-          tabs.scrollTo({ left: mid - tabs.clientWidth / 2, behavior: reduce ? 'auto' : 'smooth' });
+          tabs.scrollTo({ left: mid - tabs.clientWidth / 2, behavior: smooth && !reduce ? 'smooth' : 'auto' });
           try { localStorage.setItem('killer.dash.slide', String(slide)); } catch (e) { /* storage unavailable */ }
           if (!swiping) fit();
         }
@@ -227,7 +228,7 @@
           slide = Math.max(0, Math.min(last(), i));
           track.scrollTo({ left: slide * step(), behavior: smooth && !reduce ? 'smooth' : 'auto' });
           if (!smooth || reduce) paintInk(slide);
-          mark();
+          mark(smooth);
         }
         /* The track takes the height of the blocks on screen, not the tallest one, and follows them when they change.
            It never shrinks by more than the page can lose without moving (arriving on a short block must not throw the
@@ -240,6 +241,7 @@
           want += parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
           if (want < now) { var slack = document.documentElement.scrollHeight - window.innerHeight - window.scrollY; want = Math.max(want, now - Math.max(0, slack)); }
           if (Math.abs(want - now) > 1) track.style.height = want + 'px';
+          keptHeight = track.style.height;
         }
         var ro = window.ResizeObserver ? new ResizeObserver(function () {
           if (!track.isConnected) return fit();   // replaced by a re-render: fit() lets go
@@ -257,7 +259,7 @@
             ticking = false;
             var f = track.scrollLeft / step(), best = Math.max(0, Math.min(last(), Math.round(f)));
             paintInk(f);
-            if (best !== slide) { slide = best; mark(); }
+            if (best !== slide) { slide = best; mark(true); }
           });
         }, { passive: true });
         function keys(e) {
@@ -266,7 +268,13 @@
           e.preventDefault(); go(to, true); if (e.currentTarget === tabs) tabEls[slide].focus({ preventScroll: true });
         }
         tabs.addEventListener('keydown', keys); track.addEventListener('keydown', keys);
-        requestAnimationFrame(function () { layout(); go(slide, false); requestAnimationFrame(function () { el.classList.add('is-ready'); }); });
+        /* Called once the carousel is on the page, before it is painted: a re-render (a leaderboard switch, a change
+           from a teammate) puts the bar, the highlight and the height back exactly where they were, nothing moves. */
+        el.start = function () {
+          if (keptHeight) track.style.height = keptHeight;
+          layout(); go(slide, false);
+          requestAnimationFrame(function () { el.classList.add('is-ready'); });   // transitions only for what changes next
+        };
         return el;
       }
       function refresh() {
@@ -419,7 +427,7 @@
         if (links.length) feed.appendChild(h('div', { class: 'stack' }, h('h3', {}, t('Useful links')),
           links.map(function (l) { return h('a', { class: 'row row-btn', href: l.url, target: '_blank', rel: 'noopener noreferrer' }, h('span', { class: 'row-main' }, l.label || l.url)); })));
         grid.appendChild(feed);
-        root.appendChild(carousel(slides));
+        var car = carousel(slides); root.appendChild(car); car.start();
       }
       refresh();
       return refresh;
