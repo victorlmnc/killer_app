@@ -55,7 +55,7 @@
         section.classList.toggle('is-folded', folded);
         section.appendChild(h('div', { class: 'panel-head fold-head' },
           h('button', { type: 'button', class: 'fold-toggle', 'aria-expanded': String(!folded), onclick: function () { prefs.folded = prefs.folded || {}; prefs.folded[key] = !folded; savePrefs(); refresh(); } },
-            K.icon('chevron', 'fold-icon'), h('h2', {}, title, h('small', { class: 'muted' }, ' ' + count))), action || null));
+            K.icon('chevron', 'fold-icon'), h('h2', {}, title, h('small', { class: 'muted' }, ' ' + count))), folded ? null : action || null));   // its button only when the list is open
       }
       function savePrefs() { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch (e) { /* rien */ } }
       function isHidden(id) { return prefs.hidden.indexOf(id) >= 0; }
@@ -224,19 +224,25 @@
         });
         layersBody.appendChild(layerRow({ name: t('Strategic spots'), count: spots.length, on: !isHidden('spots'), swatch: swatch(pinHtml('spot')), toggle: function () { toggle(prefs.hidden, 'spots'); } }));
         layersBody.appendChild(layerRow({ name: t('Seen lately ({n} days)', { n: SEEN_DAYS }), count: sightsCount, on: !isHidden('seen'), swatch: swatch(pinHtml('seen', { year: '#8A93A0' })), toggle: function () { toggle(prefs.hidden, 'seen'); } }));
-        if (edit) layersBody.appendChild(h('button', { type: 'button', class: 'btn btn-block', disabled: !map, onclick: function () { editSpot(null); } }, t('Add a strategic spot')));
 
-        layersBody.appendChild(h('h3', {}, t('Bus lines')));
-        if (!busReady) layersBody.appendChild(h('p', { class: 'muted small' }, t('Loading…')));
-        else if (!bus) layersBody.appendChild(h('p', { class: 'muted small' }, t('No bus network yet. Run tools/build_bus.py with the GTFS feed of your city to generate data/bus.js.')));
-        else {
-          var all = bus.lines.map(function (l) { return l.id; }), anyOn = prefs.bus.some(function (id) { return all.indexOf(id) >= 0; });
-          layersBody.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { prefs.bus = anyOn ? [] : all.slice(); savePrefs(); refresh(); } }, anyOn ? t('Hide all') : t('Show all')));
-          bus.lines.forEach(function (line) {
-            var sw = h('span', { class: 'layer-swatch' }, h('span', { class: 'bus-line', style: { background: hex(line.color, '#4363D8') } }));
-            layersBody.appendChild(layerRow({ name: t('Line {n}', { n: line.name }), count: K.n(line.stops.length, '{n} stop', '{n} stops'), on: prefs.bus.indexOf(line.id) >= 0, swatch: sw, toggle: function () { toggle(prefs.bus, line.id); } }));
-          });
-          layersBody.appendChild(h('p', { class: 'muted small' }, bus.source + ' (' + bus.generated + ').'));
+        /* Bus lines: a list that folds (folded at first when there are many), "show all / hide all" always at hand */
+        if (!busReady || !bus) {
+          layersBody.appendChild(h('h3', {}, t('Bus lines')));
+          layersBody.appendChild(h('p', { class: 'muted small' }, !busReady ? t('Loading…') : t('No bus network yet. Run tools/build_bus.py with the GTFS feed of your city to generate data/bus.js.')));
+        } else {
+          var all = bus.lines.map(function (l) { return l.id; }), shown = prefs.bus.filter(function (id) { return all.indexOf(id) >= 0; }).length;
+          var busFolded = prefs.folded && 'bus' in prefs.folded ? prefs.folded.bus : all.length > 5;
+          layersBody.appendChild(h('div', { class: 'bus-head' + (busFolded ? ' is-folded' : '') },
+            h('button', { type: 'button', class: 'fold-toggle', 'aria-expanded': String(!busFolded), onclick: function () { prefs.folded = prefs.folded || {}; prefs.folded.bus = !busFolded; savePrefs(); refresh(); } },
+              K.icon('chevron', 'fold-icon'), h('h3', {}, t('Bus lines'), h('small', { class: 'muted' }, ' ' + (shown ? t('{a} of {b} shown', { a: shown, b: all.length }) : all.length)))),
+            h('button', { type: 'button', class: 'linkish small', onclick: function () { prefs.bus = shown ? [] : all.slice(); savePrefs(); refresh(); } }, shown ? t('Hide all') : t('Show all'))));
+          if (!busFolded) {
+            bus.lines.forEach(function (line) {
+              var sw = h('span', { class: 'layer-swatch' }, h('span', { class: 'bus-line', style: { background: hex(line.color, '#4363D8') } }));
+              layersBody.appendChild(layerRow({ name: t('Line {n}', { n: line.name }), count: K.n(line.stops.length, '{n} stop', '{n} stops'), on: prefs.bus.indexOf(line.id) >= 0, swatch: sw, toggle: function () { toggle(prefs.bus, line.id); } }));
+            });
+            layersBody.appendChild(h('p', { class: 'muted small' }, bus.source + ' (' + bus.generated + ').'));
+          }
         }
       }
 
@@ -319,8 +325,9 @@
         });
 
         ui.clear(spotsList);
-        spotsList.hidden = !allSpots.length && !lostSpots.length;
-        foldHead(spotsList, 'spots', t('Strategic spots'), allSpots.length);
+        spotsList.hidden = !allSpots.length && !lostSpots.length && !edit;   // editors keep it, to add the first one
+        foldHead(spotsList, 'spots', t('Strategic spots'), allSpots.length, edit ? h('button', { type: 'button', class: 'btn', disabled: !map, onclick: function () { editSpot(null); } }, K.icon('plus'), t('New spot')) : null);
+        if (!allSpots.length && !lostSpots.length) spotsList.appendChild(h('p', { class: 'empty' }, t('No strategic spot yet: add the places that matter (canteen, gym, a meeting point).')));
         allSpots.concat(lostSpots).forEach(function (sp) {
           var placed = L.hasCoords(sp);
           spotsList.appendChild(h('div', { class: 'row map-row' },

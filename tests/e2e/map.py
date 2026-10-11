@@ -106,8 +106,11 @@ with sync_playwright() as p:
     expect(pg.locator('.view-map > section.panel').first).not_to_contain_text('Résidence des Tanneurs')      # la liste suit les calques
     assert json.loads(pg.evaluate('localStorage.getItem("killer.map.v1")'))['hidden'] == ['residence']   # remembered on the device
     pg.locator('.layer-row', has_text='Résidences étudiantes').click()
-    print('· add a strategic spot by tapping the map, then its popup')
-    pg.get_by_role('button', name='Ajouter un lieu stratégique').click()
+    print('· add a strategic spot from its own list (its button shows once the list is open), by tapping the map, then its popup')
+    assert pg.locator('.layers').get_by_role('button', name='Nouveau lieu').count() == 0, 'no longer in the layers'
+    spots = pg.locator('section.panel', has=pg.locator('h2', has_text='Lieux stratégiques'))
+    assert spots.get_by_role('button', name='Nouveau lieu').count() == 0, 'folded list: no button'
+    spots.locator('.fold-toggle').click(); spots.get_by_role('button', name='Nouveau lieu').click()
     pg.get_by_placeholder('ex. resto U').fill('Arrêt Lahitolle'); pg.get_by_role('button', name='Ajouter le lieu').click()
     expect(pg.locator('.map-hint')).to_contain_text('Arrêt Lahitolle')
     pg.evaluate("__L.map.fire('click', { latlng: { lat: 47.083, lng: 2.417 } })"); pg.wait_for_timeout(150)
@@ -128,6 +131,14 @@ with sync_playwright() as p:
     pg.locator('.layer-row', has_text='Ligne 2').click()
     assert 'javascript' not in json.dumps(pg.evaluate("__L.bus.map(x => x.o.color)"))
     pg.get_by_role('button', name='Tout masquer').click(); assert pg.evaluate('__L.bus.length') == 0
+    print('· bus lines: the list folds, "show all" stays at hand, the choice is remembered')
+    pg.locator('.bus-head .fold-toggle').click(); pg.wait_for_timeout(100)
+    assert pg.locator('.layer-row', has_text='Ligne').count() == 0 and pg.locator('.bus-head .fold-toggle').get_attribute('aria-expanded') == 'false'
+    pg.locator('.bus-head').get_by_role('button', name='Tout afficher').click(); assert pg.evaluate('__L.bus.length') > 0
+    expect(pg.locator('.bus-head')).to_contain_text('2 sur 2 affichées')
+    assert json.loads(pg.evaluate('localStorage.getItem("killer.map.v1")'))['folded']['bus'] is True
+    pg.locator('.bus-head .fold-toggle').click(); assert pg.locator('.layer-row', has_text='Ligne').count() == 2
+    pg.get_by_role('button', name='Tout masquer').click()
     print('· shared flat: its marker stays lit while a flatmate is alive, greyed once they are all dead')
     mates = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), two = st.players.filter(p => !dead.has(p.id)).slice(0, 2);
       st.homes = (st.homes || []).concat([{ id: 'flat-test', name: 'Les Lilas', address: '8 rue des Lilas', lat: 47.09, lng: 2.41 }]);

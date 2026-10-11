@@ -268,7 +268,8 @@ with sync_playwright() as p:
     pg.goto(URL + '#/map')
     flats = pg.locator('section.panel', has=pg.locator('h2', has_text='Colocs'))
     expect(flats).to_contain_text('Coloc du Port')                                    # the demo flat
-    flats.get_by_role('button', name='Nouvelle coloc').click()
+    flats.locator('.fold-toggle').click(); assert flats.get_by_role('button', name='Nouvelle coloc').count() == 0, 'folded list: no button'
+    flats.locator('.fold-toggle').click(); flats.get_by_role('button', name='Nouvelle coloc').click()
     dlg = pg.locator('dialog[open]').last
     dlg.get_by_placeholder('ex. Coloc du Port').fill('Les Lilas'); dlg.locator('input[type=text]').nth(1).fill('8 rue des Lilas, Bourges')
     for name in mates:
