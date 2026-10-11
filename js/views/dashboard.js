@@ -176,57 +176,97 @@
     title: t('Dashboard'),
     render: function (root) {
       var showAll = false, showAllIncomplete = false, showAllBoard = false, leaderboardMode = 'kills', slide = 0;
-      /* Blocks below the hero live in a swipeable carousel; the active slide survives re-renders. */
+      try { slide = Number(localStorage.getItem('killer.dash.slide')) || 0; } catch (e) { /* storage unavailable */ }
+      /* Blocks below the hero, in a carousel: a bar of named tabs (with a count when it helps) whose highlight follows
+         the finger while swiping, one block at a time on a phone, two side by side on a wide screen. The block shown
+         survives re-renders and the next visit. The bar stays on top while reading a long block. */
       function carousel(slides) {
-        var track = h('div', { class: 'carousel-track', tabindex: '0', 'aria-label': t('Dashboard blocks') }), dots = h('div', { class: 'carousel-dots', role: 'tablist' });
-        slides.forEach(function (sl, i) {
-          sl.el.classList.add('slide'); sl.el.setAttribute('role', 'tabpanel'); track.appendChild(sl.el);
-          dots.appendChild(h('button', { type: 'button', role: 'tab', class: 'carousel-dot' + (i === slide ? ' is-on' : ''), 'aria-selected': String(i === slide), 'aria-label': sl.title, onclick: function () { go(i, true); } }, h('span', {}, sl.title)));
+        var n = slides.length, per = 1, swiping = false, settle = null, ticking = false;
+        var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var ink = h('span', { class: 'carousel-ink', 'aria-hidden': 'true' });
+        var tabs = h('div', { class: 'carousel-tabs', role: 'tablist', 'aria-label': t('Dashboard blocks') }, ink);
+        var tabEls = slides.map(function (sl, i) {
+          return tabs.appendChild(h('button', { type: 'button', role: 'tab', class: 'carousel-tab', tabindex: '-1', onclick: function () { go(i, true); } },
+            h('span', {}, sl.title), sl.count ? h('span', { class: 'carousel-count' }, sl.count) : null));
         });
-        /* Positions are measured against the track itself: offsetLeft would be relative to the page on wide layouts. */
-        function leftOf(el) { return el.getBoundingClientRect().left - track.getBoundingClientRect().left + track.scrollLeft; }
-        function go(i, smooth) {
-          slide = Math.max(0, Math.min(slides.length - 1, i));
-          var target = slides[slide].el;
-          track.scrollTo({ left: leftOf(target) - (track.clientWidth - target.clientWidth) / 2, behavior: smooth ? 'smooth' : 'auto' });
-          mark();
+        var track = h('div', { class: 'carousel-track' });
+        slides.forEach(function (sl) { sl.el.classList.add('slide'); sl.el.setAttribute('role', 'tabpanel'); sl.el.setAttribute('aria-label', sl.title); track.appendChild(sl.el); });
+        var prev = h('button', { type: 'button', class: 'carousel-arrow', 'aria-label': t('Previous block'), onclick: function () { go(slide - 1, true); } }, K.icon('chevron', 'ic-left'));
+        var next = h('button', { type: 'button', class: 'carousel-arrow', 'aria-label': t('Next block'), onclick: function () { go(slide + 1, true); } }, K.icon('chevron', 'ic-right'));
+        var el = h('div', { class: 'carousel' }, h('div', { class: 'carousel-bar' }, prev, tabs, next), track);
+
+        function last() { return Math.max(0, n - per); }
+        function step() { var s = n > 1 ? track.children[1].offsetLeft - track.children[0].offsetLeft : 0; return s > 0 ? s : track.clientWidth || 1; }
+        function layout() {   // two blocks side by side when the space allows it
+          var want = track.clientWidth >= 860 && n > 1 ? 2 : 1;
+          if (want !== per) { per = want; el.classList.toggle('is-duo', per === 2); }
+        }
+        /* The highlight covers the tabs of the blocks on screen; mid-swipe it sits between two positions. */
+        function paintInk(f) {
+          if (!isFinite(f)) return;
+          f = Math.max(0, Math.min(last(), f));
+          var a = Math.floor(f), b = Math.min(last(), a + 1), x = f - a;
+          function edges(i) { var l = tabEls[i], r = tabEls[Math.min(n - 1, i + per - 1)]; return [l.offsetLeft, r.offsetLeft + r.offsetWidth]; }
+          var ea = edges(a), eb = edges(b), left = ea[0] + (eb[0] - ea[0]) * x, right = ea[1] + (eb[1] - ea[1]) * x;
+          ink.style.transform = 'translateX(' + left + 'px)'; ink.style.width = (right - left) + 'px';
         }
         function mark() {
-          Array.prototype.forEach.call(dots.children, function (d, i) { d.classList.toggle('is-on', i === slide); d.setAttribute('aria-selected', String(i === slide)); });
-          Array.prototype.forEach.call(track.children, function (c, i) { c.classList.toggle('is-current', i === slide); });
-          prev.disabled = slide === 0; next.disabled = slide === slides.length - 1;
+          tabEls.forEach(function (b, i) {
+            var on = i >= slide && i < slide + per;
+            b.classList.toggle('is-on', on); b.setAttribute('aria-selected', String(on)); b.tabIndex = i === slide ? 0 : -1;
+          });
+          slides.forEach(function (sl, i) { sl.el.classList.toggle('is-current', i >= slide && i < slide + per); });
+          prev.disabled = slide <= 0; next.disabled = slide >= last();
+          var a = tabEls[slide], b = tabEls[Math.min(n - 1, slide + per - 1)];   // keep the highlighted tabs in view in the bar
+          var mid = (a.offsetLeft + b.offsetLeft + b.offsetWidth) / 2;
+          tabs.scrollTo({ left: mid - tabs.clientWidth / 2, behavior: reduce ? 'auto' : 'smooth' });
+          try { localStorage.setItem('killer.dash.slide', String(slide)); } catch (e) { /* storage unavailable */ }
           if (!swiping) fit();
         }
-        /* The track takes the height of the current block, not the tallest one, and follows it when its content changes.
+        function go(i, smooth) {
+          slide = Math.max(0, Math.min(last(), i));
+          track.scrollTo({ left: slide * step(), behavior: smooth && !reduce ? 'smooth' : 'auto' });
+          if (!smooth || reduce) paintInk(slide);
+          mark();
+        }
+        /* The track takes the height of the blocks on screen, not the tallest one, and follows them when they change.
            It never shrinks by more than the page can lose without moving (arriving on a short block must not throw the
            page back to the top); the rest goes as the reader scrolls up. No resize mid-swipe: it breaks the snapping. */
-        var ro = window.ResizeObserver ? new ResizeObserver(function () { fit(); }) : null, swiping = false, settle = null;
         function fit() {
           if (!track.isConnected) { if (ro) ro.disconnect(); if (fitPage === fit) fitPage = null; return; }   // replaced by a re-render
-          var cs = getComputedStyle(track), c = slides[slide].el;
-          var want = c.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom), now = track.offsetHeight;
+          var want = 0;
+          for (var i = slide; i < Math.min(n, slide + per); i++) want = Math.max(want, slides[i].el.offsetHeight);
+          var cs = getComputedStyle(track), now = track.offsetHeight;
+          want += parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
           if (want < now) { var slack = document.documentElement.scrollHeight - window.innerHeight - window.scrollY; want = Math.max(want, now - Math.max(0, slack)); }
           if (Math.abs(want - now) > 1) track.style.height = want + 'px';
         }
-        if (ro) slides.forEach(function (sl) { ro.observe(sl.el); });
+        var ro = window.ResizeObserver ? new ResizeObserver(function () {
+          if (!track.isConnected) return fit();   // replaced by a re-render: fit() lets go
+          var was = per; layout();
+          if (per !== was) go(slide, false); else { paintInk(track.scrollLeft / step()); if (!swiping) fit(); }
+        }) : null;
+        if (ro) { ro.observe(track); slides.forEach(function (sl) { ro.observe(sl.el); }); }
         fitPage = fit;
-        var ticking = false;
-        track.addEventListener('scroll', function () {   // swiping: the slide nearest to the centre becomes current
-          swiping = true; clearTimeout(settle);
-          settle = setTimeout(function () { swiping = false; fit(); }, 160);   // scroll (and snap) has come to rest
+
+        track.addEventListener('scroll', function () {   // swiping: the highlight follows, the nearest block becomes current
+          swiping = true; el.classList.add('is-swiping'); clearTimeout(settle);
+          settle = setTimeout(function () { swiping = false; el.classList.remove('is-swiping'); fit(); }, 140);   // scroll (and snap) has come to rest
           if (ticking) return; ticking = true;
           requestAnimationFrame(function () {
             ticking = false;
-            var mid = track.scrollLeft + track.clientWidth / 2, best = 0, dist = Infinity;
-            Array.prototype.forEach.call(track.children, function (c, i) { var d = Math.abs(leftOf(c) + c.clientWidth / 2 - mid); if (d < dist) { dist = d; best = i; } });
+            var f = track.scrollLeft / step(), best = Math.max(0, Math.min(last(), Math.round(f)));
+            paintInk(f);
             if (best !== slide) { slide = best; mark(); }
           });
-        });
-        track.addEventListener('keydown', function (e) { if (e.key === 'ArrowRight') go(slide + 1, true); if (e.key === 'ArrowLeft') go(slide - 1, true); });
-        var prev = h('button', { type: 'button', class: 'carousel-arrow', 'aria-label': t('Previous block'), onclick: function () { go(slide - 1, true); } }, K.icon('chevron', 'ic-left'));
-        var next = h('button', { type: 'button', class: 'carousel-arrow', 'aria-label': t('Next block'), onclick: function () { go(slide + 1, true); } }, K.icon('chevron', 'ic-right'));
-        var el = h('div', { class: 'carousel' }, h('div', { class: 'carousel-head' }, prev, dots, next), track);
-        requestAnimationFrame(function () { go(slide, false); });
+        }, { passive: true });
+        function keys(e) {
+          var to = e.key === 'ArrowRight' ? slide + 1 : e.key === 'ArrowLeft' ? slide - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? last() : null;
+          if (to === null) return;
+          e.preventDefault(); go(to, true); if (e.currentTarget === tabs) tabEls[slide].focus({ preventScroll: true });
+        }
+        tabs.addEventListener('keydown', keys); track.addEventListener('keydown', keys);
+        requestAnimationFrame(function () { layout(); go(slide, false); requestAnimationFrame(function () { el.classList.add('is-ready'); }); });
         return el;
       }
       function refresh() {
@@ -261,7 +301,7 @@
             store.allowedTabs(['chain']).length ? h('a', { class: 'btn btn-primary', href: '#/chain' }, t('Open the chain')) : null)));
         if (obs) return;
 
-        var slides = [], grid = { appendChild: function (el) { slides.push({ title: el.querySelector('h2').textContent, el: el }); } };
+        var slides = [], grid = { appendChild: function (el) { slides.push({ title: el.querySelector('h2').textContent, count: el.getAttribute('data-count') || '', el: el }); } };
         var allies = st.players.filter(function (p) { return p.is_ally; }).sort(function (a, b) { return a.name.localeCompare(b.name, K.i18n.lang); });
         var dead = L.deadSet(st);
         var box = h('section', { class: 'panel' }, h('h2', {}, t('The alliance')));
@@ -275,6 +315,8 @@
               h('p', {}, h('span', { class: 'muted' }, t('Hunted by') + ' '), killer ? h('button', { type: 'button', class: 'linkish threat', onclick: function () { K.actions.openPlayer(killer.id); } }, killer.name + (killer.points >= 6 ? ' (' + killer.points + ' pts)' : '')) : t('unknown')),
               h('p', {}, h('span', { class: 'muted' }, t('Hunts') + ' '), target ? h('button', { type: 'button', class: 'linkish', onclick: function () { K.actions.openPlayer(target.id); } }, target.name) : t('unknown')))));
         });
+        var aliveAllies = allies.filter(function (p) { return !dead.has(p.id); }).length;
+        if (aliveAllies) box.setAttribute('data-count', aliveAllies);
         grid.appendChild(box);
 
         /* Where the players we are after are right now: the alliance's targets, then priority targets. */
@@ -289,6 +331,7 @@
           where.appendChild(h('div', { class: 'ally' }, personRow(w.p, ui.statusTag(w.p, true)),
             h('div', { class: 'ally-lines' }, h('p', { class: 'muted small' }, w.why), ui.bonusTags(w.p, true), ui.schedule(w.p, true) || h('p', { class: 'muted small' }, t('No timetable applies to this player yet.')))));
         });
+        if (wanted.length) where.setAttribute('data-count', wanted.length);
         grid.appendChild(where);
 
         var board = L.leaderboard(st), visibleBoard = board.slice(0, showAllBoard ? board.length : 10), adminRow = board.find(function (r) { return r.admin; });
@@ -360,6 +403,7 @@
           inc.appendChild(personRow(p, h('span', { class: 'muted small' }, t('missing: {x}', { x: miss }))));
         });
         if (stats.incomplete.length > 12) inc.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAllIncomplete = !showAllIncomplete; refresh(); } }, showAllIncomplete ? t('Show less') : t('Show all')));
+        if (stats.incomplete.length) inc.setAttribute('data-count', stats.incomplete.length);
         grid.appendChild(inc);
 
         var feed = h('section', { class: 'panel' }, h('h2', {}, t('Latest activity')));

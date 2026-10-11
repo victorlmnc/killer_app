@@ -479,6 +479,24 @@ with sync_playwright() as p:
     assert all(isinstance(r.get('F'), float) and r['F'] > 45000 for r in dead[1:]), 'every death date is a real date'
     assert all(isinstance(r.get('H'), float) for r in alive[1:] if 'H' in r and ' à ' not in str(r['H'])), 'points as numbers'
 
+    step('dashboard carousel: named tabs, keyboard, two blocks on a wide screen, the block shown is remembered')
+    pg.goto(URL + '#/dashboard'); pg.wait_for_selector('.carousel.is-ready')
+    cur = lambda: pg.evaluate("[...document.querySelectorAll('.carousel-track > .slide.is-current')].map(s => s.getAttribute('aria-label'))")
+    on = lambda: pg.evaluate("[...document.querySelectorAll('.carousel-tab[aria-selected=true]')].map(b => b.firstChild.textContent)")
+    pg.locator('.carousel-tab', has_text='Statistiques').click(); pg.wait_for_timeout(700)
+    assert cur() == ['Statistiques'] == on(), (cur(), on())
+    pg.locator('.carousel-tab', has_text='Statistiques').press('ArrowRight'); pg.wait_for_timeout(700)
+    assert cur() == ['Fiches à compléter'], cur()
+    assert pg.evaluate("document.activeElement.textContent").startswith('Fiches à compléter'), 'focus follows the keyboard'
+    assert pg.locator('.carousel-tab', has_text='Fiches à compléter').locator('.carousel-count').inner_text().isdigit()
+    pg.set_viewport_size({'width': 1500, 'height': 900}); pg.wait_for_timeout(500)
+    assert len(cur()) == 2 and cur()[0] == 'Fiches à compléter', cur()
+    pg.locator('.carousel-tab').last.click(); pg.wait_for_timeout(700)
+    assert cur() == on() and len(cur()) == 2 and cur()[1] == pg.locator('.carousel-tab').last.locator('span').first.inner_text(), 'the last tab shows the last two blocks'
+    pg.set_viewport_size({'width': 1100, 'height': 900}); pg.reload(); pg.wait_for_selector('.carousel.is-ready'); pg.wait_for_timeout(300)
+    assert len(cur()) == 1 and cur()[0] == pg.evaluate("document.querySelectorAll('.carousel-tab')[document.querySelectorAll('.carousel-tab').length - 2].firstChild.textContent"), 'remembered after a reload'
+    pg.evaluate("localStorage.removeItem('killer.dash.slide')")
+
     step('deleting a reroll with kills: back exactly where the game was before it')
     snap = "(() => { const st = K.store.state, dead = [...K.logic.deadSet(st)].sort(); return JSON.stringify({ dead, round: K.logic.currentRound(st).name, players: st.players.map(p => [p.id, p.points || 0, K.logic.weaponList(p.weapons).join(', ')]) }); })()"
     before = pg.evaluate(snap)
