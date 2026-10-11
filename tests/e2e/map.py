@@ -13,10 +13,12 @@ window.L = (function () {
         host.innerHTML = ''; host.appendChild(typeof m.pop === 'function' ? m.pop() : m.pop); state.opened = o.title; } }; return m; }
   return {
     map: function (el) { state.groups = 0; var handlers = {}; state.map = { el: el, setView: function (c, z) { state.views.push([c, z]); state.zoom = z; return state.map; }, getZoom: function () { return state.zoom || 13; },
-        fitBounds: function (b) { state.fits.push(b); }, closePopup: function () {}, on: function (ev, fn) { handlers[ev] = fn; }, fire: function (ev, e) { handlers[ev](e); }, remove: function () { state.removed = true; } }; return state.map; },
+        fitBounds: function (b) { state.fits.push(b); }, closePopup: function () {}, invalidateSize: function () { state.resized = (state.resized || 0) + 1; }, on: function (ev, fn) { handlers[ev] = fn; }, fire: function (ev, e) { handlers[ev](e); }, remove: function () { state.removed = true; } }; return state.map; },
     tileLayer: function (url, o) { state.tile = { url: url, o: o }; return { addTo: function () {} }; },
     layerGroup: function () { var first = !state.groups; state.groups = (state.groups || 0) + 1; var key = first ? 'bus' : 'markers'; state[key] = [];
       return { addTo: function () { return this; }, clearLayers: function () { state[key] = []; }, addLayer: function (m) { state[key].push(m); } }; },
+    Control: { extend: function (proto) { return function () { this.addTo = function (map) { map.el.appendChild(proto.onAdd.call(this, map)); return this; }; }; } },
+    DomEvent: { disableClickPropagation: function () {} },
     divIcon: function (o) { return o; }, marker: marker,
     polyline: function (path, o) { return { kind: 'line', path: path, o: o }; },
     circleMarker: function (ll, o) { var m = marker(ll, o); m.kind = 'stop'; return m; }
@@ -163,6 +165,20 @@ with sync_playwright() as p:
     assert titles and all(name.split()[0] in t for t in titles), titles
     pg.get_by_label('Chercher un joueur').fill(''); pg.wait_for_timeout(400)
     assert len(pg.evaluate("__L.markers")) > len(titles)
+
+    print('· full screen: the map covers the screen, the page behind is locked; Escape, the button or back closes it')
+    btn = pg.get_by_role('button', name='Plein écran'); n0 = pg.evaluate('__L.resized || 0'); h0 = pg.evaluate('history.length')
+    btn.click(); pg.wait_for_timeout(350)
+    bx = pg.locator('.map').bounding_box(); assert bx['x'] == 0 and bx['y'] == 0 and bx['width'] == 390 and bx['height'] == 844, bx
+    assert pg.evaluate("document.body.classList.contains('map-full-open')") and pg.evaluate('__L.resized') > n0, 'page locked, map resized'
+    assert pg.evaluate('history.length') == h0 + 1, 'an entry for the back gesture'
+    pg.get_by_role('button', name='Quitter le plein écran').click(); pg.wait_for_timeout(350)
+    assert pg.locator('.map.is-full').count() == 0 and not pg.evaluate("document.body.classList.contains('map-full-open')")
+    btn.click(); pg.wait_for_timeout(200); pg.keyboard.press('Escape'); pg.wait_for_timeout(350); assert pg.locator('.map.is-full').count() == 0, 'Escape'
+    btn.click(); pg.wait_for_timeout(200); pg.go_back(); pg.wait_for_timeout(350)
+    assert pg.locator('.map.is-full').count() == 0 and pg.evaluate('location.hash').startswith('#/map'), 'back closes it and stays on the map'
+    btn.click(); pg.wait_for_timeout(200); pg.evaluate("location.hash = '#/dashboard'"); pg.wait_for_timeout(300)
+    assert not pg.evaluate("document.body.classList.contains('map-full-open')"), 'leaving the page unlocks it'
     b.close()
 assert not errs, errs
 print('OK')

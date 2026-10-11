@@ -34,6 +34,7 @@
       var view = { list: 'tous', placing: null, fit: true, busy: false, q: '' }, searchTimer = null, sightsCount = 0;
       var prefs = loadPrefs(), bus = null, busReady = false;
       var map = null, layer = null, busLayer = null, pins = new Map(), gone = false;
+      var full = false, fullBtn = null, fullHistory = false;
 
       var chips = h('div', { class: 'chips chips-wrap', role: 'group', 'aria-label': t('Players shown') });
       var hint = h('div', { class: 'link-hint map-hint', hidden: true });
@@ -363,6 +364,14 @@
           attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>' }).addTo(map);
         busLayer = Lf.layerGroup().addTo(map);
         layer = Lf.layerGroup().addTo(map);
+        /* Full screen: a button on the map (top right) */
+        var FullControl = Lf.Control.extend({ options: { position: 'topright' }, onAdd: function () {
+          fullBtn = h('button', { type: 'button', class: 'map-full-btn', 'aria-pressed': 'false', 'aria-label': t('Full screen'), title: t('Full screen'), onclick: function () { setFull(!full); } }, K.icon('expand'));
+          var bar = h('div', { class: 'leaflet-bar map-full-bar' }, fullBtn);
+          Lf.DomEvent.disableClickPropagation(bar);
+          return bar;
+        } });
+        new FullControl().addTo(map);
         map.on('click', function (e) {
           if (!view.placing) return;
           var job = view.placing; view.placing = null;
@@ -379,8 +388,39 @@
         ui.clear(box).appendChild(h('p', { class: 'map-wait' }, t('The map tiles cannot load here (offline, or a preview that blocks external resources). The lists below still work; on the deployed site the map shows normally.')));
       });
 
+      /* The map over the whole screen, from its button: the page behind stays put, the phone's back gesture or Escape
+         closes it, and where the browser allows it (computers, Android) the browser bars go too. On an iPhone, where a
+         page cannot hide Safari's bars, the map still covers the whole page. */
+      function setFull(on, fromHistory) {
+        if (on === full || !map) return;
+        full = on;
+        box.classList.toggle('is-full', on); document.body.classList.toggle('map-full-open', on);
+        fullBtn.setAttribute('aria-pressed', String(on)); fullBtn.setAttribute('aria-label', on ? t('Exit full screen') : t('Full screen')); fullBtn.title = fullBtn.getAttribute('aria-label');
+        ui.clear(fullBtn).appendChild(K.icon(on ? 'shrink' : 'expand'));
+        var de = document.documentElement;
+        if (on) {
+          try { history.pushState({ mapFull: true }, ''); fullHistory = true; } catch (e) { /* no history entry: Escape and the button still work */ }
+          if (de.requestFullscreen && !document.fullscreenElement) de.requestFullscreen().catch(function () { /* refused: the map still fills the page */ });
+        } else {
+          if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () { /* already out */ });
+          if (fullHistory && !fromHistory) history.back();   // the entry added on the way in
+          fullHistory = false;
+        }
+        fitSize();
+      }
+      function fitSize() { requestAnimationFrame(function () { if (map) map.invalidateSize(); }); setTimeout(function () { if (map) map.invalidateSize(); }, 250); }
+      function onPop() { if (full) setFull(false, true); }
+      function onFullscreen() { if (!document.fullscreenElement && full) setFull(false); else fitSize(); }   // left with the browser's own Escape
+      function onKey(e) { if (e.key === 'Escape' && full && !document.querySelector('dialog[open]')) setFull(false); }
+      window.addEventListener('popstate', onPop); document.addEventListener('fullscreenchange', onFullscreen); document.addEventListener('keydown', onKey);
+
       refresh();
-      refresh.destroy = function () { gone = true; if (map) { map.remove(); map = null; } };
+      refresh.destroy = function () {
+        gone = true;
+        window.removeEventListener('popstate', onPop); document.removeEventListener('fullscreenchange', onFullscreen); document.removeEventListener('keydown', onKey);
+        if (full) { document.body.classList.remove('map-full-open'); if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () { /* already out */ }); }
+        if (map) { map.remove(); map = null; }
+      };
       return refresh;
     }
   };
