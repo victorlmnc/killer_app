@@ -133,11 +133,11 @@ with sync_playwright() as p:
     pg.get_by_role('button', name='Tout masquer').click(); assert pg.evaluate('__L.bus.length') == 0
     print('· bus lines: the list folds, "show all" stays at hand, the choice is remembered')
     pg.locator('.bus-head .fold-toggle').click(); pg.wait_for_timeout(100)
-    assert pg.locator('.layer-row', has_text='Ligne').count() == 0 and pg.locator('.bus-head .fold-toggle').get_attribute('aria-expanded') == 'false'
+    assert pg.locator('.bus-lines .layer-row').count() == 0 and pg.locator('.bus-head .fold-toggle').get_attribute('aria-expanded') == 'false'
     pg.locator('.bus-head').get_by_role('button', name='Tout afficher').click(); assert pg.evaluate('__L.bus.length') > 0
-    expect(pg.locator('.bus-head')).to_contain_text('2 sur 2 affichées')
+    expect(pg.locator('.bus-head')).to_contain_text('2 / 2'); assert pg.locator('.bus-head [title="2 sur 2 affichées"]').count() == 1
     assert json.loads(pg.evaluate('localStorage.getItem("killer.map.v1")'))['folded']['bus'] is True
-    pg.locator('.bus-head .fold-toggle').click(); assert pg.locator('.layer-row', has_text='Ligne').count() == 2
+    pg.locator('.bus-head .fold-toggle').click(); assert pg.locator('.bus-lines .layer-row').count() == 2
     pg.get_by_role('button', name='Tout masquer').click()
     print('· shared flat: its marker stays lit while a flatmate is alive, greyed once they are all dead')
     mates = pg.evaluate("""() => { const st = K.store.state, dead = K.logic.deadSet(st), two = st.players.filter(p => !dead.has(p.id)).slice(0, 2);

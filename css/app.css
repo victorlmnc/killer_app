@@ -521,7 +521,14 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .layers { display: block; padding: .9rem 1rem; max-height: min(62dvh, 600px); overflow-y: auto; }
 .layers summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; } .layers summary::-webkit-details-marker { display: none; }
 .layers summary::after { content: "▾"; color: var(--muted); } .layers[open] summary::after { content: "▴"; }
-.bus-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin: .9rem 0 .2rem; } .bus-head h3 { margin: 0; } .bus-head h3 small { font: 400 .8rem var(--body); }
+/* the bus lines group: a layer row (chevron, name, count) and its eye, under a thin line */
+.bus-head { display: flex; align-items: center; margin-top: .5rem; padding-top: .45rem; border-top: 1px solid var(--line); }
+.bus-head > .layer-row { flex: 1 1 auto; min-width: 0; padding-right: .2rem; font-weight: 600; }
+.bus-head .fold-icon { width: 1.1rem; height: 1.1rem; color: var(--muted); }
+.bus-all { appearance: none; border: 0; background: none; color: var(--muted); cursor: pointer; display: grid; place-items: center; min-height: 40px; padding: .3rem .35rem; border-radius: var(--radius-sm); flex: none; }
+.bus-all:hover { background: var(--surface-2); color: var(--ink); }
+.bus-lines { display: grid; grid-template-columns: minmax(0, 1fr); gap: .15rem; }
+@media (max-width: 820px) { .bus-lines { max-height: 22rem; overflow-y: auto; overscroll-behavior: contain; border-bottom: 1px solid var(--line); } }   /* a long network does not stretch the page */
 .layers-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: .15rem; margin-top: .6rem; } .layers-body h3 { margin: .9rem 0 .2rem; } .layers-body .btn { margin-top: .4rem; min-height: 36px; font-size: .88rem; }
 .layer-row { appearance: none; border: 0; background: none; color: var(--ink); display: flex; align-items: center; gap: .6rem; width: 100%; text-align: left; padding: .3rem .35rem; border-radius: var(--radius-sm); cursor: pointer; min-height: 40px; }
 .layer-row:hover { background: var(--surface-2); } .layer-row.is-off .layer-name, .layer-row.is-off .layer-swatch { opacity: .4; }

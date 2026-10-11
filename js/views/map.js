@@ -232,14 +232,18 @@
         } else {
           var all = bus.lines.map(function (l) { return l.id; }), shown = prefs.bus.filter(function (id) { return all.indexOf(id) >= 0; }).length;
           var busFolded = prefs.folded && 'bus' in prefs.folded ? prefs.folded.bus : all.length > 5;
+          // laid out like a layer: the chevron where the swatch goes, the count, and an eye that shows or hides every line
           layersBody.appendChild(h('div', { class: 'bus-head' + (busFolded ? ' is-folded' : '') },
-            h('button', { type: 'button', class: 'fold-toggle', 'aria-expanded': String(!busFolded), onclick: function () { prefs.folded = prefs.folded || {}; prefs.folded.bus = !busFolded; savePrefs(); refresh(); } },
-              K.icon('chevron', 'fold-icon'), h('h3', {}, t('Bus lines'), h('small', { class: 'muted' }, ' ' + (shown ? t('{a} of {b} shown', { a: shown, b: all.length }) : all.length)))),
-            h('button', { type: 'button', class: 'linkish small', onclick: function () { prefs.bus = shown ? [] : all.slice(); savePrefs(); refresh(); } }, shown ? t('Hide all') : t('Show all'))));
+            h('button', { type: 'button', class: 'layer-row fold-toggle', 'aria-expanded': String(!busFolded), onclick: function () { prefs.folded = prefs.folded || {}; prefs.folded.bus = !busFolded; savePrefs(); refresh(); } },
+              h('span', { class: 'layer-swatch' }, K.icon('chevron', 'fold-icon')), h('span', { class: 'layer-name' }, t('Bus lines')),
+              h('span', { class: 'muted small', title: shown ? t('{a} of {b} shown', { a: shown, b: all.length }) : null }, shown ? shown + ' / ' + all.length : String(all.length))),
+            h('button', { type: 'button', class: 'bus-all', 'aria-label': shown ? t('Hide all') : t('Show all'), title: shown ? t('Hide all') : t('Show all'),
+              onclick: function () { prefs.bus = shown ? [] : all.slice(); savePrefs(); refresh(); } }, K.icon(shown ? 'eye' : 'eyeOff', 'layer-eye'))));
           if (!busFolded) {
+            var busList = layersBody.appendChild(h('div', { class: 'bus-lines' }));   // its own scroll on a phone
             bus.lines.forEach(function (line) {
               var sw = h('span', { class: 'layer-swatch' }, h('span', { class: 'bus-line', style: { background: hex(line.color, '#4363D8') } }));
-              layersBody.appendChild(layerRow({ name: t('Line {n}', { n: line.name }), count: K.n(line.stops.length, '{n} stop', '{n} stops'), on: prefs.bus.indexOf(line.id) >= 0, swatch: sw, toggle: function () { toggle(prefs.bus, line.id); } }));
+              busList.appendChild(layerRow({ name: t('Line {n}', { n: line.name }), count: K.n(line.stops.length, '{n} stop', '{n} stops'), on: prefs.bus.indexOf(line.id) >= 0, swatch: sw, toggle: function () { toggle(prefs.bus, line.id); } }));
             });
             layersBody.appendChild(h('p', { class: 'muted small' }, bus.source + ' (' + bus.generated + ').'));
           }
