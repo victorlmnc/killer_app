@@ -504,7 +504,23 @@ with sync_playwright() as p:
     assert cur() == on() and len(cur()) == 2 and cur()[1] == pg.locator('.carousel-tab').last.locator('span').first.inner_text(), 'the last tab shows the last two blocks'
     pg.set_viewport_size({'width': 1100, 'height': 900}); pg.reload(); pg.wait_for_selector('.carousel.is-ready'); pg.wait_for_timeout(300)
     assert len(cur()) == 1 and cur()[0] == pg.evaluate("document.querySelectorAll('.carousel-tab')[document.querySelectorAll('.carousel-tab').length - 2].firstChild.textContent"), 'remembered after a reload'
-    pg.evaluate("localStorage.removeItem('killer.dash.slide')")
+    # a flick that stops between two blocks (snap cut short on some phones) is finished: a block lands in place
+    pg.evaluate("(() => { const t = document.querySelector('.carousel-track'); t.style.scrollSnapType = 'none'; t.scrollLeft = (t.children[1].offsetLeft - t.children[0].offsetLeft) * 1.4; })()")
+    pg.wait_for_timeout(1200)
+    off = pg.evaluate("(() => { const t = document.querySelector('.carousel-track'), s = t.children[1].offsetLeft - t.children[0].offsetLeft; return Math.abs(t.scrollLeft / s - Math.round(t.scrollLeft / s)); })()")
+    assert off < 0.01, off
+    assert pg.locator('.carousel-track > .slide.is-current').count() == 1 and pg.locator('.carousel.is-swiping').count() == 0
+    pg.evaluate("document.querySelector('.carousel-track').style.scrollSnapType = ''; localStorage.removeItem('killer.dash.slide')")
+
+    step('sharing a sheet waits for the timetable: copy and share are off while it loads')
+    pg.evaluate("""() => { const p = K.store.state.players.find(x => !K.actions.isDead(x.id) && !x.is_mystery); window.__cal = K.store.calendarsFor; window.__ev = K.store.playerEvents;
+      K.store.calendarsFor = () => [{}]; K.store.playerEvents = () => new Promise(r => { window.__go = () => r({ events: [] }); }); K.actions.shareSheet(p.id); }""")
+    dlg = pg.locator('dialog[open]').last
+    expect(dlg.locator('.share-status')).to_have_text("Chargement de l'emploi du temps…"); assert dlg.get_by_role('button', name='Copier').is_disabled()
+    dlg.locator('label.check', has_text='Emploi du temps').locator('input').uncheck(); assert dlg.get_by_role('button', name='Copier').is_enabled(), 'not wanted: no wait'
+    dlg.locator('label.check', has_text='Emploi du temps').locator('input').check(); assert dlg.get_by_role('button', name='Copier').is_disabled()
+    pg.evaluate('window.__go()'); expect(dlg.get_by_role('button', name='Copier')).to_be_enabled(); assert dlg.locator('.share-status').is_hidden()
+    pg.evaluate('K.store.calendarsFor = window.__cal; K.store.playerEvents = window.__ev'); pg.keyboard.press('Escape')
 
     step('deleting a reroll with kills: back exactly where the game was before it')
     snap = "(() => { const st = K.store.state, dead = [...K.logic.deadSet(st)].sort(); return JSON.stringify({ dead, round: K.logic.currentRound(st).name, players: st.players.map(p => [p.id, p.points || 0, K.logic.weaponList(p.weapons).join(', ')]) }); })()"

@@ -251,9 +251,23 @@
         if (ro) { ro.observe(track); slides.forEach(function (sl) { ro.observe(sl.el); }); }
         fitPage = fit;
 
+        /* At rest (finger lifted, scroll and snap over): a block exactly in place, then the height. A fast flick can
+           leave the track between two blocks on some phones (the snap cut short): it is then finished by hand. */
+        var touching = false;
+        function rest() {
+          clearTimeout(settle);
+          if (touching || !track.isConnected) return;
+          var target = slide * step();
+          if (Math.abs(track.scrollLeft - target) > 2) { track.scrollTo({ left: target, behavior: reduce ? 'auto' : 'smooth' }); settle = setTimeout(rest, 400); return; }
+          swiping = false; el.classList.remove('is-swiping'); paintInk(slide); fit();
+        }
+        track.addEventListener('touchstart', function () { touching = true; }, { passive: true });
+        track.addEventListener('touchend', function () { touching = false; clearTimeout(settle); settle = setTimeout(rest, 250); }, { passive: true });
+        track.addEventListener('touchcancel', function () { touching = false; clearTimeout(settle); settle = setTimeout(rest, 250); }, { passive: true });
+        if ('onscrollend' in window) track.addEventListener('scrollend', function () { if (!touching) rest(); });
         track.addEventListener('scroll', function () {   // swiping: the highlight follows, the nearest block becomes current
           swiping = true; el.classList.add('is-swiping'); clearTimeout(settle);
-          settle = setTimeout(function () { swiping = false; el.classList.remove('is-swiping'); fit(); }, 140);   // scroll (and snap) has come to rest
+          settle = setTimeout(rest, 250);   // no scroll event for a while: at rest
           if (ticking) return; ticking = true;
           requestAnimationFrame(function () {
             ticking = false;

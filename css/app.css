@@ -96,6 +96,8 @@ button, input, select, textarea { font: inherit; color: var(--ink); }
 .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: .8rem; } .stack-lg { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }   /* columns never wider than the screen */
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; align-items: start; }
 .grid-2.grid-align-start { align-items: start; }
+.grid-2:not(:has(> :not(.field))) > .field { grid-row: span 3; grid-template-rows: subgrid; row-gap: .3rem; align-items: end; }
+.grid-2:not(:has(> :not(.field))) > .field > .field-hint { align-self: start; }
 .actions { display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; } .actions-start { justify-content: flex-start; margin-top: .25rem; }
 .toolbar { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
 /* filter block: one labelled row per kind of filter; chips wrap instead of scrolling off the screen */
@@ -241,7 +243,15 @@ select:disabled { opacity: .6; }
 .board-score { flex: none; display: grid; justify-items: end; line-height: 1; gap: .15rem; min-width: 2.6rem; }
 .board-score strong { font: 500 1.35rem/1 var(--display); } .board-score small { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .me-sched-links { display: inline-flex; gap: .9rem; flex-wrap: wrap; justify-content: flex-end; } .count { width: 1.5rem; text-align: right; font-family: var(--display); }
-.member { border-top: 1px solid var(--line); padding-top: .4rem; } .member:first-of-type { border-top: 0; } .member input[type="text"] { flex: 0 1 180px; }
+.member { border-top: 1px solid var(--line); padding-top: .4rem; } .member:first-of-type { border-top: 0; }
+.member-line { display: grid; grid-template-columns: auto minmax(7rem, 13rem) minmax(0, 1fr) auto auto; grid-template-areas: "av name mail role rm"; align-items: center; gap: .5rem .7rem; padding-block: .3rem; }
+.member-av { grid-area: av; display: flex; } .member-name { grid-area: name; min-width: 0; } .member-mail { grid-area: mail; overflow-wrap: anywhere; min-width: 0; }
+.member-role { grid-area: role; justify-self: start; } .member-rm { grid-area: rm; }
+@media (max-width: 640px) {   /* phone: the address under the name, never cut */
+  .member-line { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "av name name" "av mail mail" "av role rm"; align-items: center; row-gap: .4rem; }
+  .member-av { align-self: start; margin-top: .3rem; } .member-name { width: 100%; } .member-mail { overflow-wrap: break-word; word-break: normal; }
+  select.member-role { justify-self: stretch; min-width: 0; } .member-rm { min-height: 40px; padding: .3rem .9rem; font-size: .88rem; }
+}
 .tab-picks { display: flex; flex-wrap: wrap; gap: .1rem 1rem; padding: 0 0 .5rem 2.4rem; }
 
 /* -------------------------------------------------------------- dashboard */
@@ -527,6 +537,8 @@ details.desc summary .ic { transition: transform .15s; } details.desc[open] summ
 .bus-head .fold-icon { width: 1.1rem; height: 1.1rem; color: var(--muted); }
 .bus-all { appearance: none; border: 0; background: none; color: var(--muted); cursor: pointer; display: grid; place-items: center; min-height: 40px; padding: .3rem .35rem; border-radius: var(--radius-sm); flex: none; }
 .bus-all:hover { background: var(--surface-2); color: var(--ink); }
+.share-status { margin: 0; font-size: .85rem; color: var(--muted); } .share-status.is-loading::before { content: ""; display: inline-block; width: .8em; height: .8em; margin-right: .45rem; vertical-align: -.1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .bus-lines { display: grid; grid-template-columns: minmax(0, 1fr); gap: .15rem; }
 @media (max-width: 820px) { .bus-lines { max-height: 22rem; overflow-y: auto; overscroll-behavior: contain; border-bottom: 1px solid var(--line); } }   /* a long network does not stretch the page */
 .layers-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: .15rem; margin-top: .6rem; } .layers-body h3 { margin: .9rem 0 .2rem; } .layers-body .btn { margin-top: .4rem; min-height: 36px; font-size: .88rem; }

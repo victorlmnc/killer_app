@@ -522,7 +522,7 @@
     var home = p.home_id && (st.homes || []).find(function (x) { return x.id === p.home_id; });
     var PARTS = [['class', t('Year and groups'), true], ['points', t('Points'), true], ['chain', t('Killer and target'), true], ['weapons', t('Weapons'), true],
       ['timetable', t('Timetable now'), true], ['address', t('Address'), false], ['notes', t('Notes'), false], ['photo', t('Photo (with "Share…")'), !!p.photo_path]];
-    var sched = null, photo = null;
+    var sched = null, photo = null, schedState = null, photoState = null;   // states: 'loading', 'ready', 'failed'
     ui.dialog({ title: t('Share {name}', { name: p.name }), render: function (body, api) {
       var boxes = {}, text = h('textarea', { rows: '9', class: 'share-text', 'aria-label': t('Text to send') });
       function on(id) { return boxes[id] && boxes[id].checked; }
@@ -540,6 +540,17 @@
         if (on('address') && (p.address || home)) lines.push(t('Address') + ' : ' + [home ? home.name : null, home && L.homeKind(home) === 'residence' && p.apartment ? t('apt. {n}', { n: p.apartment }) : null, p.address && (!home || p.address !== home.name) ? p.address : null].filter(Boolean).join(', '));
         if (on('notes') && p.notes) lines.push(p.notes);
         text.value = lines.join('\n');
+        ready();
+      }
+      /* Nothing leaves before what is ticked has arrived: copying or sharing too early would send it without. */
+      var status = h('p', { class: 'share-status', role: 'status' }), copyBtn = null, shareBtn = null;
+      function ready() {
+        if (!copyBtn) return;
+        var waitSched = on('timetable') && schedState === 'loading', waitPhoto = on('photo') && photoState === 'loading';
+        copyBtn.disabled = waitSched; if (shareBtn) shareBtn.disabled = waitSched || waitPhoto;
+        var msg = waitSched ? t('Loading the timetable…') : waitPhoto && shareBtn ? t('Loading the photo…')
+          : on('timetable') && schedState === 'failed' ? t('Timetable unavailable: it is not in the text.') : '';
+        status.textContent = msg; status.hidden = !msg; status.classList.toggle('is-loading', waitSched || waitPhoto);
       }
       var list = h('div', { class: 'share-parts' }, PARTS.map(function (x) {
         if (x[0] === 'photo' && !p.photo_path) return null;
@@ -550,24 +561,34 @@
       body.appendChild(h('p', { class: 'muted small' }, t('Choose what to send: once shared, it leaves the app.')));
       body.appendChild(list);
       body.appendChild(ui.field(t('Text to send'), text, t('You can still change it before sending.')));
+      body.appendChild(status);
       var canShare = !!navigator.share;
       body.appendChild(h('div', { class: 'actions' },
-        h('button', { type: 'button', class: 'btn', onclick: function () {
+        copyBtn = h('button', { type: 'button', class: 'btn', onclick: function () {
           // the text only: pasted, a photo would win over it in most apps ("Share…" sends both)
           (navigator.clipboard ? navigator.clipboard.writeText(text.value) : Promise.reject()).then(function () { ui.toast(t('Copied: paste it in the conversation.')); }, function () { text.select(); ui.toast(t('Select the text and copy it.'), 'error'); });
         } }, t('Copy')),
-        canShare ? h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+        canShare ? shareBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
           var data = { title: p.name, text: text.value };
           if (on('photo') && photo && navigator.canShare && navigator.canShare({ files: [photo] })) data.files = [photo];
           navigator.share(data).then(function () { api.close(); }, function (err) { if (err && err.name !== 'AbortError') ui.toast(t('Sharing failed: {err}', { err: err.message || err }), 'error'); });
         } }, K.icon('share'), t('Share…')) : null));
-      build();
-      if (store.calendarsFor(p).length) store.playerEvents(p).then(function (res) { sched = ui.scheduleLines(res.events); build(); }, function () {});
+      if (store.calendarsFor(p).length) {
+        schedState = 'loading';
+        var late = setTimeout(function () { if (schedState === 'loading') { schedState = 'failed'; build(); } }, 15000);   // never stuck waiting
+        store.playerEvents(p).then(function (res) { clearTimeout(late); if (schedState !== 'loading') return; sched = ui.scheduleLines(res.events); schedState = 'ready'; build(); },
+          function () { clearTimeout(late); schedState = 'failed'; build(); });
+      }
       // the photo is fetched beforehand: sharing must follow the tap straight away
       var url = p.photo_path && store.photoUrl(p.photo_path);
-      if (url && window.fetch && window.File) fetch(url).then(function (r) { return r.blob(); }).then(function (b) {
-        photo = new File([b], L.norm(p.name).replace(/[^a-z0-9]+/g, '-') + '.' + ((b.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')), { type: b.type || 'image/jpeg' });
-      }).catch(function () {});
+      if (url && window.fetch && window.File) {
+        photoState = 'loading';
+        fetch(url).then(function (r) { return r.blob(); }).then(function (b) {
+          photo = new File([b], L.norm(p.name).replace(/[^a-z0-9]+/g, '-') + '.' + ((b.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')), { type: b.type || 'image/jpeg' });
+          photoState = 'ready'; ready();
+        }).catch(function () { photoState = 'failed'; ready(); });
+      }
+      build();
     } });
   };
 

@@ -169,17 +169,18 @@
         function memberRow(m) {
           var mine = m.email === me;
           var row = h('div', { class: 'member' });
-          row.appendChild(h('div', { class: 'row row-wrap' },
-            ui.avatar({ name: m.name || m.email, avatar_path: m.avatar_path }, 'sm'),
-            h('input', { type: 'text', value: m.name || '', placeholder: m.email.split('@')[0], 'aria-label': t('Display name of {email}', { email: m.email }), maxlength: '40', onchange: function (e) { store.updateMember(m.email, { name: e.target.value.trim() }); } }),
-            h('span', { class: 'row-main muted small' }, m.email + (mine ? ' (' + t('you') + ')' : '')),
-            mine ? h('span', { class: 'tag' }, ROLE_LABEL.admin) : ui.select(['admin', 'member', 'observer'].map(function (r) { return { value: r, label: ROLE_LABEL[r] }; }), m.role, { 'aria-label': t('Role'), onchange: function (e) {
+          // avatar, name, address (always whole), role, remove: on one line on a computer, on two on a phone
+          row.appendChild(h('div', { class: 'member-line' },
+            h('span', { class: 'member-av' }, ui.avatar({ name: m.name || m.email, avatar_path: m.avatar_path }, 'sm')),
+            h('input', { type: 'text', class: 'member-name', value: m.name || '', placeholder: m.email.split('@')[0], 'aria-label': t('Display name of {email}', { email: m.email }), maxlength: '40', onchange: function (e) { store.updateMember(m.email, { name: e.target.value.trim() }); } }),
+            h('span', { class: 'member-mail muted small' }, m.email + (mine ? ' (' + t('you') + ')' : '')),
+            mine ? h('span', { class: 'tag member-role' }, ROLE_LABEL.admin) : ui.select(['admin', 'member', 'observer'].map(function (r) { return { value: r, label: ROLE_LABEL[r] }; }), m.role, { 'aria-label': t('Role'), onchange: function (e) {
               var r = e.target.value;
               if (r === 'admin') return ui.confirm({ title: t('Make {email} an administrator?', { email: m.email }), text: t('They will be able to change the settings, manage accounts and erase the game. There can be several administrators.'), action: t('Confirm') })
                 .then(function (ok) { if (ok) store.updateMember(m.email, { role: 'admin', tabs: null }); else refresh(); });
               store.updateMember(m.email, { role: r, tabs: r === 'observer' ? (m.tabs || ['dashboard', 'chain', 'players']) : null });
-            } }),
-            mine ? null : h('button', { type: 'button', class: 'btn btn-danger', onclick: function () {
+            } , class: 'member-role' }),
+            mine ? null : h('button', { type: 'button', class: 'btn btn-danger member-rm', onclick: function () {
               ui.confirm({ title: t('Remove access?'), text: t('{email} will no longer be able to read or change anything.', { email: m.email }), action: t('Remove'), danger: true }).then(function (ok) { if (ok) store.removeMember(m.email); });
             } }, t('Remove'))));
           if (m.role === 'observer') {
