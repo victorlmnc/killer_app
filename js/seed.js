@@ -192,7 +192,18 @@
 
   K.seed.demo = function () {
     var n = 0, uid = function () { return 'demo-' + (++n); };
-    var years = ['2', '3', '4', '5'], depts = ['A', 'B'];
+    // classes as at INSA CVL: 2A (STPI, with a pre-orientation), then MRI, STI or ERE; options from the 4th year
+    var years = ['2A', '3A', '4A', '5A'], depts = ['MRI', 'STI', 'ERE'];
+    var OPTIONS = { MRI: ['GP', 'SA', 'ME'], ERE: ['IGR'], STI: [] }, OTHER_LANG = ['Espagnol', 'Allemand', 'Japonais', 'Italien'];
+    function classOf(i) {
+      var pick = function (salt, n) { var x = Math.sin((i + 1) * 12.9898 + salt * 78.233) * 43758.5453; return Math.floor((x - Math.floor(x)) * n); };   // the same each time
+      var y = years[i % 4], d = depts[(i >> 1) % 3], n = +y[0], td = 1 + pick(1, n === 2 ? 4 : n === 3 ? 3 : 2);
+      var tp = n === 5 ? '' : 'TP' + (2 * td - 1 + pick(2, 2));   // two TP groups per TD, as in the timetables
+      var opts = n >= 4 ? OPTIONS[d] : [], option = opts.length ? opts[pick(3, opts.length)] : '';
+      var lang = 'G' + (1 + pick(4, 12)) + (pick(5, 4) === 0 ? ', ' + OTHER_LANG[pick(6, 4)] : '');   // English groups, sometimes a second language
+      td = 'TD' + td;
+      return { year: y, dept: d, td: td, tp: tp, option: option, lang_group: lang };
+    }
     var streets = ['rue de la Paix', 'avenue de la République', 'rue des Écoles', 'boulevard Voltaire', 'rue Pasteur', 'avenue Jean Jaurès', 'rue Victor Hugo', 'rue du Port'];
     // Made-up addresses; two shared residences show how markers are grouped.
     function home(i) {
@@ -206,10 +217,9 @@
       return a;
     }
     var players = CAST.map(function (name, i) {
-      var y = years[i % 4], hm = home(i);
-      return { id: uid(), name: name, address: hm.address, address_type: hm.address_type, lat: hm.lat, lng: hm.lng, year: y, dept: depts[(i >> 1) % 2], td: 'TD' + (1 + (i % 3)), tp: y === '5' ? '' : 'TP' + (1 + (i % 5)),
-        option: i % 4 >= 2 ? ['Option A', 'Option B', 'Option C'][i % 3] : '', lang_group: 'G' + (1 + (i % 6)), notes: '', weapons: '', points: 0,
-        is_ally: i === 7 || i === 8 || i === 10 || i === 12, photo_path: null };
+      var hm = home(i);
+      return Object.assign({ id: uid(), name: name, address: hm.address, address_type: hm.address_type, lat: hm.lat, lng: hm.lng }, classOf(i), { notes: '', weapons: '', points: 0,
+        is_ally: i === 7 || i === 8 || i === 10 || i === 12, photo_path: null });
     });
     var easy = WEAPONS.filter(function (w) { return w[1] === 'facile'; }), hard = WEAPONS.filter(function (w) { return w[1] === 'difficile'; });
     players.forEach(function (p, i) { if (i % 3 !== 1) p.weapons = easy[(i * 7) % easy.length][0] + ', ' + hard[(i * 5) % hard.length][0]; });
@@ -254,7 +264,8 @@
     var tanneurs = { id: uid(), kind: 'residence', name: 'Résidence des Tanneurs', address: 'Résidence des Tanneurs', lat: 47.08712, lng: 2.39105, building: '', note: 'Badge nécessaire au portail après 22 h.' };
     players.filter(function (p) { return p.address === tanneurs.address; }).forEach(function (p, i) { p.home_id = tanneurs.id; if (i % 2 === 0) p.apartment = String(101 + i * 37); });
     var settings = JSON.parse(JSON.stringify(K.seed.settings));
-    settings.game_name = 'Killer (démo)'; settings.official_players = 48; settings.school_total = 440; settings.depts = ['A', 'B'];
+    settings.game_name = 'Killer (démo)'; settings.official_players = 48; settings.school_total = 440; settings.depts = depts.slice();
+    settings.years = [{ name: '2A', color: '#6FAE5A' }, { name: '3A', color: '#D9A520' }, { name: '4A', color: '#D9605F' }, { name: '5A', color: '#9B6BD9' }];
     settings.map_center = { lat: 47.0833, lng: 2.4 };
     // a few pieces of intel: one seen two hours ago at the canteen shows on the map
     var ago = function (h) { return new Date(now - h * 36e5).toISOString(); };
