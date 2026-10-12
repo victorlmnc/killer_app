@@ -192,14 +192,18 @@
 
   K.seed.demo = function () {
     var n = 0, uid = function () { return 'demo-' + (++n); };
-    // classes as at INSA CVL: 2A (STPI, with a pre-orientation), then MRI, STI or ERE; options from the 4th year
+    // classes as at INSA CVL: 2A (STPI, with a pre-orientation), then MRI, STI or ERE, each with its options by year
     var years = ['2A', '3A', '4A', '5A'], depts = ['MRI', 'STI', 'ERE'];
-    var OPTIONS = { MRI: ['GP', 'SA', 'ME'], ERE: ['IGR'], STI: [] }, OTHER_LANG = ['Espagnol', 'Allemand', 'Japonais', 'Italien'];
+    var OPTIONS = {
+      STI: { 4: ['SF', 'Big Data et IA', 'IoT'], 5: ['4AS', 'ASL-IA', '2SEC'] },   // 4A: in-depth courses, 5A: options
+      MRI: { 4: ['GP', 'SA', 'ME'], 5: ['SFEN', 'RAI', 'RE', 'RSI', 'STLR'] },        // 4A: the groups of the timetables, 5A: end-of-studies options
+      ERE: { 3: ['IGR', 'IQ', 'MEE'], 4: ['IGR', 'IQ', 'MEE'], 5: ['IGR', 'IQ', 'MEE'] }   // chosen from the first year of the cursus
+    }, OTHER_LANG = ['Espagnol', 'Allemand', 'Japonais', 'Italien'];
     function classOf(i) {
       var pick = function (salt, n) { var x = Math.sin((i + 1) * 12.9898 + salt * 78.233) * 43758.5453; return Math.floor((x - Math.floor(x)) * n); };   // the same each time
       var y = years[i % 4], d = depts[(i >> 1) % 3], n = +y[0], td = 1 + pick(1, n === 2 ? 4 : n === 3 ? 3 : 2);
       var tp = n === 5 ? '' : 'TP' + (2 * td - 1 + pick(2, 2));   // two TP groups per TD, as in the timetables
-      var opts = n >= 4 ? OPTIONS[d] : [], option = opts.length ? opts[pick(3, opts.length)] : '';
+      var opts = OPTIONS[d][n] || [], option = opts.length ? opts[pick(3, opts.length)] : '';
       var lang = 'G' + (1 + pick(4, 12)) + (pick(5, 4) === 0 ? ', ' + OTHER_LANG[pick(6, 4)] : '');   // English groups, sometimes a second language
       td = 'TD' + td;
       return { year: y, dept: d, td: td, tp: tp, option: option, lang_group: lang };
