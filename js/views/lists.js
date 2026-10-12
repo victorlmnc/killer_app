@@ -11,7 +11,7 @@
       /* Filters: who (all / alive / dead), one extra filter that combines with it, year, department, sort */
       var DEFAULT = { q: '', state: 'alive', extra: '', year: '', dept: '', sort: 'name' }, view = Object.assign({}, DEFAULT);
       var STATES = [['all', t('All')], ['alive', t('Alive')], ['dead', t('Dead')]];
-      var EXTRAS = [['allies', t('Alliance')], ['notarget', t('Unknown target')], ['weapons', t('Known weapons')], ['noaddress', t('Unknown address')], ['flagged', t('Special status')], ['timetable', t('With a timetable')]]
+      var EXTRAS = [['allies', t('Alliance')], ['notarget', t('Unknown target')], ['weapons', t('Known weapons')], ['noaddress', t('Unknown address')], ['flagged', t('Special status')], ['timetable', t('With a timetable')], ['nokiller', t('Unknown killer')]]
         .filter(function (x) { return !store.isObserver() || (x[0] !== 'allies' && x[0] !== 'flagged'); });   // an observer sees no alliance and no status
       var search = h('input', { type: 'search', placeholder: t('Search a name, a note, an address'), 'aria-label': t('Search a player'), oninput: function (e) { view.q = e.target.value; paint(); } });
       var filters = h('div', { class: 'filterbar' }), count = h('span', { class: 'muted small' }), list = h('div', { class: 'list' });
@@ -40,7 +40,7 @@
           }))));
         filters.appendChild(h('div', { class: 'filter-row' }, h('span', { class: 'filter-label' }, t('Filter')),
           h('div', { class: 'chips chips-wrap', role: 'group', 'aria-label': t('Filter') }, EXTRAS.map(function (x) {   // tap again to remove it
-            return h('button', { type: 'button', class: 'chip' + (view.extra === x[0] ? ' is-on' : ''), 'aria-pressed': String(view.extra === x[0]), onclick: function () { view.extra = view.extra === x[0] ? '' : x[0]; refresh(); } }, x[1]);
+            return h('button', { type: 'button', class: 'chip' + (view.extra === x[0] ? ' is-on' : ''), 'aria-pressed': String(view.extra === x[0]), onclick: function () { view.extra = view.extra === x[0] ? '' : x[0]; if (view.extra === 'nokiller' && view.state === 'alive') view.state = 'dead'; refresh(); } }, x[1]);   // the dead, of course
           }))));
         filters.appendChild(h('div', { class: 'filter-selects' },
           ui.chipSelect([{ value: '', label: t('All years') }].concat((s.years || []).map(function (y) { return y.name; })), view.year, { empty: t('Year'), prefix: t('Year'), 'aria-label': t('Year'), onchange: function (e) { view.year = e.target.value; refresh(); } }),
@@ -54,6 +54,7 @@
       function paint() {
         var st = store.state, dead = L.deadSet(st), round = L.currentRound(st), maps = round && L.linkMaps(st, round.id);
         var kills = new Map(); st.kills.forEach(function (k) { if (k.killer_id) kills.set(k.killer_id, (kills.get(k.killer_id) || 0) + 1); });
+        var nokiller = new Set(st.kills.filter(function (k) { return !k.killer_id && !k.admin_reason; }).map(function (k) { return k.victim_id; }));
         var targets = new Map();
         if (round) st.players.forEach(function (p) { if (!dead.has(p.id)) targets.set(p.id, L.resolveTarget(st, round.id, p.id, maps, dead).id); });
         var q = L.norm(view.q);
@@ -64,6 +65,7 @@
           if (view.extra === 'allies' && !p.is_ally) return false;
           if (view.extra === 'notarget' && (d || targets.get(p.id))) return false;
           if (view.extra === 'weapons' && (d || !p.weapons)) return false;
+          if (view.extra === 'nokiller' && !(d && nokiller.has(p.id))) return false;
           if (view.extra === 'flagged' && !p.status) return false;
           if (view.extra === 'timetable' && !store.calendarsFor(p).length) return false;
           if (view.extra === 'noaddress' && (p.is_ally || L.hasAddress(p))) return false;   // same scope as the dashboard statistics

@@ -399,7 +399,10 @@
           });
           var killers = board.filter(function (r) { return !r.admin; }).length;
           if (killers > 10) lb.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { showAllBoard = !showAllBoard; refresh(); } }, showAllBoard ? t('Show less') : t('Show all ({n})', { n: killers })));
-          lb.appendChild(h('p', { class: 'muted small' }, stats.unattributed ? t('{n} deaths without an identified killer: open their sheet to set one.', { n: stats.unattributed }) : t('Every death has an identified killer.')));
+          lb.appendChild(stats.unattributed
+            ? h('button', { type: 'button', class: 'nokiller-link', onclick: K.actions.unknownKillersDialog },
+                h('span', {}, K.n(stats.unattributed, '{n} death without an identified killer', '{n} deaths without an identified killer')), h('span', { class: 'nokiller-go' }, t('See them'), K.icon('chevron', 'ic-right')))
+            : h('p', { class: 'muted small' }, t('Every death has an identified killer.')));
         } else {
           var general = L.generalRanking(st);
           general.slice(0, showAllBoard ? general.length : 10).forEach(function (r) {

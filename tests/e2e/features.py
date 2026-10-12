@@ -512,6 +512,35 @@ with sync_playwright() as p:
     assert pg.locator('.carousel-track > .slide.is-current').count() == 1 and pg.locator('.carousel.is-swiping').count() == 0
     pg.evaluate("document.querySelector('.carousel-track').style.scrollSnapType = ''; localStorage.removeItem('killer.dash.slide')")
 
+    step('deaths without a known killer: a list from the leaderboard, the hunter suggested in one tap, a players filter')
+    unknown = lambda: pg.evaluate("K.store.state.kills.filter(k => !k.killer_id && !k.admin_reason).length")
+    n0 = unknown(); assert n0 >= 1
+    # give the first of them a hunter in the chain, to be suggested
+    vid, hid = pg.evaluate("""(() => { const st = K.store.state, k = st.kills.find(x => !x.killer_id && !x.admin_reason), r = k.round_id || K.logic.currentRound(st).id;
+      const dead = K.logic.deadSet(st), hunter = st.players.find(p => !dead.has(p.id) && !p.is_mystery && !st.links.some(l => l.round_id === r && l.hunter_id === p.id));
+      st.links.filter(l => l.round_id === r && l.target_id === k.victim_id).forEach(l => { st.links.splice(st.links.indexOf(l), 1); });
+      st.links.push({ id: 'l-test', round_id: r, hunter_id: hunter.id, target_id: k.victim_id, confidence: 'sur' }); K.store.emit(); return [k.victim_id, hunter.id]; })()""")
+    pg.goto(URL + '#/dashboard'); pg.wait_for_selector('.carousel.is-ready')
+    pg.locator('.carousel-tab', has_text='Classement').click(); pg.wait_for_timeout(600)
+    link = pg.locator('.nokiller-link'); expect(link).to_contain_text('%d mort' % n0); link.click()
+    dlg = pg.locator('dialog[open]').last; expect(dlg.locator('.nokiller-row')).to_have_count(n0)
+    vname, hname = pg.evaluate("ids => ids.map(id => K.store.player(id).name)", [vid, hid])
+    row = dlg.locator('.nokiller-row', has_text=vname); expect(row).to_contain_text('par ' + hname)
+    pts0 = pg.evaluate("id => K.store.player(id).points || 0", hid)
+    row.get_by_role('button', name='C\'était ' + hname.split(' ')[0]).click()
+    pg.locator('dialog[open]').last.get_by_role('button', name='Confirmer').click(); pg.wait_for_timeout(300)
+    assert pg.evaluate("id => K.store.state.kills.find(k => k.victim_id === id).killer_id", vid) == hid
+    assert pg.evaluate("id => K.store.player(id).points || 0", hid) >= pts0, 'the points of the kill'
+    expect(dlg.locator('.nokiller-row')).to_have_count(n0 - 1)   # left the list at once
+    if n0 > 1:
+        dlg.locator('.nokiller-row').first.get_by_role('button').last.click()   # someone else / set killer: the picker
+        expect(pg.locator('dialog[open]').last).to_contain_text('Qui a tué'); pg.keyboard.press('Escape')
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(200)
+    pg.goto(URL + '#/players'); pg.locator('.chips button', has_text='Killer inconnu').click(); pg.wait_for_timeout(200)
+    assert pg.locator('.filterbar .segmented button.is-on').inner_text() == 'Mort', 'switched to the dead'
+    expect(pg.locator('.row-player')).to_have_count(n0 - 1)
+    pg.locator('.chips button', has_text='Killer inconnu').click(); pg.locator('.filterbar .segmented button', has_text='Vivant').click()
+
     step('sharing a sheet waits for the timetable: copy and share are off while it loads')
     pg.evaluate("""() => { const p = K.store.state.players.find(x => !K.actions.isDead(x.id) && !x.is_mystery); window.__cal = K.store.calendarsFor; window.__ev = K.store.playerEvents;
       K.store.calendarsFor = () => [{}]; K.store.playerEvents = () => new Promise(r => { window.__go = () => r({ events: [] }); }); K.actions.shareSheet(p.id); }""")

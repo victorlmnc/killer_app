@@ -181,9 +181,21 @@
 
   /* The killer of a kill is set or changed: the points of the kill move from the former killer to the new one, and
      in the current loop the victim's weapons pass to the new killer (the former one gets theirs back). */
+  /* Who was hunting the victim in the loop of the kill: the likeliest killer when nobody saw it. */
+  act.suspectOf = function (kill) {
+    var roundId = kill.round_id || act.currentRoundId(); if (!roundId) return null;
+    var link = L.linkMaps(store.state, roundId).hunterOf.get(kill.victim_id), p = link && store.player(link.hunter_id);
+    return p && p.id !== kill.victim_id && !p.is_mystery ? p : null;
+  };
   act.editKill = function (kill) {
-    ui.pickPlayer({ title: t('Who killed {name}?', { name: name(kill.victim_id) }), filter: function (p) { return p.id !== kill.victim_id; }, extra: [{ label: t('Unknown killer'), value: null }] })
-      .then(function (v) {
+    var suspect = act.suspectOf(kill);
+    return ui.pickPlayer({ title: t('Who killed {name}?', { name: name(kill.victim_id) }), filter: function (p) { return p.id !== kill.victim_id; }, extra: [{ label: t('Unknown killer'), value: null }],
+      prefer: suspect ? function (p) { return p.id === suspect.id; } : null })   // the one who was hunting them, first
+      .then(function (v) { return act.assignKiller(kill, v); });
+  };
+  /* The killer of a recorded death, said (or changed) afterwards: points, weapons and the chain follow. v: a player id, or null for unknown. */
+  act.assignKiller = function (kill, v) {
+    return Promise.resolve().then(function () {
         if (v === undefined || (v === kill.killer_id && !kill.admin_reason)) return;
         var pts = kill.admin_reason ? 0 : kill.points || 0, victim = store.player(kill.victim_id), current = kill.round_id === act.currentRoundId();
         var old = kill.killer_id && store.player(kill.killer_id), neu = v && store.player(v), patches = new Map(), gains = new Map(), killPatch = { killer_id: v, admin_reason: null };
@@ -213,6 +225,36 @@
         store.log(neu ? t('{a} is the killer of {b}', { a: neu.name, b: name(kill.victim_id) }) + (pts ? ' (' + K.n(pts, '{n} pt', '{n} pts') + ')' : '') : t('Killer of {name} unknown again', { name: name(kill.victim_id) }));
         return Promise.all(jobs).then(function () { if (neu && pts) ui.toast(t('{name} gets the {n} points of this kill.', { name: neu.name, n: pts })); });
       });
+  };
+
+  /* The deaths whose killer nobody knows yet (the start of a game brings many): latest first, each with the player who
+     was hunting them as a one-tap guess, or anyone else. A row leaves the list as soon as its killer is set. */
+  act.unknownKillersDialog = function () {
+    var off = null, edit = store.canEdit();
+    function draw(body) {
+      ui.clear(body);
+      var st = store.state, list = st.kills.filter(function (k) { return !k.killer_id && !k.admin_reason && store.player(k.victim_id); })
+        .sort(function (a, b) { return Date.parse(b.happened_at) - Date.parse(a.happened_at); });
+      if (!list.length) { body.appendChild(h('p', { class: 'empty' }, t('Every death has an identified killer.'))); return; }
+      body.appendChild(h('p', { class: 'muted small' }, edit ? t('The player who was hunting them in the chain is suggested: one tap if it was them, "Someone else" otherwise.')
+        : t('The player who was hunting them in the chain is shown as the likeliest killer.')));
+      body.appendChild(h('div', { class: 'list nokiller-list' }, list.map(function (k) {
+        var v = store.player(k.victim_id), suspect = act.suspectOf(k);
+        return h('div', { class: 'row nokiller-row' },
+          h('button', { type: 'button', class: 'row row-btn nokiller-who', onclick: function () { act.openPlayer(v.id); } }, ui.avatar(v, 'sm'),
+            h('span', { class: 'row-main' }, h('span', { class: 'row-title' }, v.name),
+              h('span', { class: 'row-sub' }, [t('died {when}', { when: ui.ago(k.happened_at) }), k.weapon ? t('Weapon: {w}', { w: k.weapon }) : null].filter(Boolean).join(' · ')),
+              suspect ? h('span', { class: 'row-sub' }, t('Was hunted by {name}', { name: suspect.name })) : null), ui.yearTag(v)),
+          edit ? h('div', { class: 'nokiller-acts' },
+            suspect ? h('button', { type: 'button', class: 'btn btn-primary', onclick: function () {
+              ui.confirm({ title: t('{a} killed {b}?', { a: suspect.name, b: v.name }), text: t('They get the points of this kill and take over the target of {name}.', { name: v.name }), action: t('Confirm') })
+                .then(function (ok) { if (ok) act.assignKiller(k, suspect.id); });
+            } }, t('It was {name}', { name: suspect.name.split(' ')[0] })) : null,
+            h('button', { type: 'button', class: 'btn', onclick: function () { act.editKill(k); } }, suspect ? t('Someone else…') : t('Set killer'))) : null);
+      })));
+    }
+    var dlg = ui.dialog({ title: t('Deaths without a known killer'), onClose: function () { if (off) off(); }, render: function (body) { draw(body); } });
+    off = store.on(function () { if (dlg.el.open) draw(dlg.body); });
   };
   act.killAttribution = function (kill) {
     if (kill.admin_reason) return t('Administrative elimination: {reason}', { reason: t(kill.admin_reason === 'cheating' ? 'Cheating' : 'Other') });
