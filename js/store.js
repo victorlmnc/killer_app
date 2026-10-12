@@ -557,7 +557,10 @@
   store.boot = function (handlers) {
     bootHandlers = handlers;
     var cfg = window.KILLER_CONFIG || {};
-    if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) { store.mode = 'local'; return local.init().then(handlers.onReady); }
+    // "?demo" in the address opens the demo even on the deployed site (to show or film the app): fictional players,
+    // kept in this browser, the database is never contacted
+    store.forcedDemo = /(^|[?&])demo(=|&|$)/.test(location.search);
+    if (store.forcedDemo || !cfg.supabaseUrl || !cfg.supabaseAnonKey) { store.mode = 'local'; return local.init().then(handlers.onReady); }
     store.mode = 'supabase';
     // the database library is kept in the repository at a fixed version (vendor/), not fetched from a CDN
     var ready = window.supabase ? Promise.resolve() : loadScript('vendor/supabase-js-2.117.3/supabase.js');

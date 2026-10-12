@@ -484,6 +484,7 @@
   "Language group": "Groupe de langue",
   "Latest intel": "Dernières infos",
   "Leave empty for the French public geocoder. Any service returning GeoJSON features with a \"score\" works, once its address is also allowed in index.html (Content-Security-Policy, connect-src).": "Laisse vide pour le géocodeur public français. Tout service qui renvoie des features GeoJSON avec un « score » fonctionne, à condition d'autoriser aussi son adresse dans index.html (Content-Security-Policy, connect-src).",
+  "Leave the demo": "Quitter la démo",
   "leaves another flat or residence": "quitte une autre coloc ou résidence",
   "Lecture": "Cours magistral",
   "Link added but not readable yet ({err}): fill in who it applies to.": "Lien ajouté mais illisible pour l'instant ({err}) : indique à qui il s'applique.",

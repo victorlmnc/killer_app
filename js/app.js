@@ -75,7 +75,8 @@
     var main = h('main', { class: 'view', id: 'view', tabindex: '-1' });
     var offlineBar = h('p', { class: 'offline-bar', role: 'status', hidden: true });   // no connection: the last copy, read-only
     app.appendChild(h('div', { class: 'shell' },
-      h('aside', { class: 'side' }, brand('a', { href: '#/dashboard' }), game, nav, whoami, store.mode !== 'supabase' ? h('p', { class: 'demo-flag' }, t('Demo data, stored in this browser.')) : null),
+      h('aside', { class: 'side' }, brand('a', { href: '#/dashboard' }), game, nav, whoami, store.mode !== 'supabase' ? h('p', { class: 'demo-flag' }, t('Demo data, stored in this browser.'),
+        store.forcedDemo ? [' ', h('a', { href: location.pathname }, t('Leave the demo'))] : null) : null),
       h('div', { class: 'content' }, h('header', { class: 'topbar' }, h('div', { class: 'topbar-title' }, title, meTop), status), offlineBar, main)));
     shell = { nav: nav, title: title, main: main, game: game, status: status, whoami: whoami, meTop: meTop, offlineBar: offlineBar };
   }
