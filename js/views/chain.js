@@ -6,10 +6,10 @@
   K.views.chain = {
     title: t('Chain'),
     render: function (root) {
-      var view = { roundId: null, mode: 'current', scope: 'one', q: '' };
+      var view = { roundId: null, mode: 'current', scope: 'one', q: '', picked: [] };   // picked: the players tapped in "a selection" mode
       var frags = [], trayIds = [], drag = null, pending = false, justDragged = false, gone = false;
-      var bar = h('div', { class: 'toolbar' }), help = h('p', { class: 'chain-help muted small' }), body = h('div', { class: 'chain' });
-      root.appendChild(bar); root.appendChild(help); root.appendChild(body);
+      var bar = h('div', { class: 'toolbar' }), help = h('p', { class: 'chain-help muted small' }), pickBar = h('div', { class: 'pick-bar', hidden: true }), body = h('div', { class: 'chain' });
+      root.appendChild(bar); root.appendChild(help); root.appendChild(pickBar); root.appendChild(body);
 
       function names(ids) { return ids.map(function (id) { var p = store.player(id); return p ? p.name : '?'; }).join(', '); }
 
@@ -17,7 +17,7 @@
         var q = L.norm(view.q), match = q && L.norm(p.name).indexOf(q) >= 0;
         var el = h('button', { type: 'button', class: 'bubble' + (dead ? ' is-dead' : '') + (p.is_ally ? ' is-ally' : '') + (p.status ? ' is-' + p.status : '') + (match ? ' is-match' : '') + (q && !match ? ' is-dim' : ''),
           'data-drag': store.canEdit() ? 'bubble' : null, 'data-id': p.id, 'data-frag': String(fi), 'data-pos': String(pos), title: store.canEdit() ? t('Drag to move, click to open the sheet') : null,
-          onclick: function () { if (!justDragged) K.actions.openPlayer(p.id, { roundId: view.roundId }); } }, ui.avatar(p, 'lg'), h('span', { class: 'bubble-name' }, p.name, ui.statusTag(p) ? h('span', { class: 'sr-only' }, ' (' + ui.statusTag(p).textContent + ')') : null));
+          onclick: function () { if (justDragged) return; if (view.scope === 'pick' && store.canEdit()) pick(p.id, fi); else K.actions.openPlayer(p.id, { roundId: view.roundId }); } }, ui.avatar(p, 'lg'), h('span', { class: 'bubble-name' }, p.name, ui.statusTag(p) ? h('span', { class: 'sr-only' }, ' (' + ui.statusTag(p).textContent + ')') : null));
         return el;
       }
       function arrow(edge) {
@@ -26,11 +26,34 @@
           h('span', { class: 'thread-line', 'aria-hidden': 'true' }), edge.via && edge.via.length ? h('span', { class: 'thread-badge' }, '†' + edge.via.length) : null);
       }
 
+      /* ------------------------------------------------------------ a selection: several players in a row */
+      /* Tapping the first and the last of a group selects everything in between, in one fragment; the group then moves
+         as one (dragging any of its bubbles). Tapping a selected player again takes them out; another fragment starts over. */
+      function selection() {
+        if (!view.picked.length) return null;
+        var fi = frags.findIndex(function (f) { return f.ids.indexOf(view.picked[0]) >= 0; });
+        if (fi < 0) return null;
+        var f = frags[fi], pos = view.picked.map(function (id) { return f.ids.indexOf(id); }).filter(function (i) { return i >= 0; });
+        if (!pos.length) return null;
+        return { fi: fi, ids: f.ids.slice(Math.min.apply(null, pos), Math.max.apply(null, pos) + 1) };
+      }
+      function pick(id, fi) {
+        if (fi < 0) { ui.toast(t('In the tray, players are not linked: move them one by one.')); return; }
+        var sel = selection();
+        if (!sel || sel.fi !== fi) view.picked = [id];
+        else if (view.picked.indexOf(id) >= 0) view.picked = view.picked.filter(function (x) { return x !== id; });
+        else if (sel.ids.indexOf(id) >= 0) view.picked = [id];   // inside the group: start again from this one
+        else view.picked = view.picked.concat(id);
+        refresh();
+      }
+
       /* ------------------------------------------------------------ drag and drop (mouse, pen, touch) */
       function segmentFor(el, shift) {
         if (el.getAttribute('data-drag') === 'fragment') return frags[Number(el.getAttribute('data-frag'))].ids.slice();
         var fi = Number(el.getAttribute('data-frag')), pos = Number(el.getAttribute('data-pos')), id = el.getAttribute('data-id');
         if (fi < 0) return [id];
+        var sel = view.scope === 'pick' && selection();
+        if (sel && sel.ids.indexOf(id) >= 0) return sel.ids.slice();   // a bubble of the selection takes the whole group
         return view.scope === 'tail' || shift ? frags[fi].ids.slice(pos) : [id];
       }
       function clearMarks() { Array.prototype.forEach.call(body.querySelectorAll('.drop-before, .drop-after, .drop-here'), function (el) { el.classList.remove('drop-before', 'drop-after', 'drop-here'); }); }
@@ -76,7 +99,7 @@
         Array.prototype.forEach.call(body.querySelectorAll('.is-moving'), function (el) { el.classList.remove('is-moving'); });
         if (d.active) { justDragged = true; setTimeout(function () { justDragged = false; }, 0); }
         if (commit && d.active && d.hit) {
-          var done = function () { if (!gone) refresh(); };
+          var done = function () { view.picked = []; if (!gone) refresh(); };
           if (d.hit.dest.tray && d.seg.length > 1) askTray(d.seg).then(function (choice) { if (choice) K.actions.applyMove(view.roundId, view.mode, d.seg, { tray: true, disband: choice === 'split' }).then(done); else done(); });
           else K.actions.applyMove(view.roundId, view.mode, d.seg, d.hit.dest).then(done);
         }
@@ -135,18 +158,22 @@
           { class: 'tb-round', 'aria-label': t('Displayed round'), onchange: function (e) { view.roundId = e.target.value; refresh(); } }));
         function seg(label, key, options) {
           return h('div', { class: 'segmented', role: 'group', 'aria-label': label }, options.map(function (m) {
-            return h('button', { type: 'button', class: view[key] === m[0] ? 'is-on' : '', 'aria-pressed': String(view[key] === m[0]), title: m[2] || null, onclick: function () { view[key] = m[0]; refresh(); } }, m[1]);
+            return h('button', { type: 'button', class: view[key] === m[0] ? 'is-on' : '', 'aria-pressed': String(view[key] === m[0]), title: m[2] || null, onclick: function () { view[key] = m[0]; view.picked = []; refresh(); } }, m[1]);
           }));
         }
         bar.appendChild(seg(t('Display'), 'mode', [['current', t('Current')], ['complete', t('Complete')]]));
-        if (store.canEdit()) bar.appendChild(seg(t('What moves'), 'scope', [['one', t('One player'), t('Dragging a bubble moves only that player')], ['tail', t('With the rest'), t('Dragging a bubble also takes everyone after it (or hold Shift)')]]));
+        if (store.canEdit()) bar.appendChild(seg(t('What moves'), 'scope', [['one', t('One player'), t('Dragging a bubble moves only that player')],
+          ['pick', t('A selection'), t('Tap the first and the last player of a group, then drag it')],
+          ['tail', t('With the rest'), t('Dragging a bubble also takes everyone after it (or hold Shift)')]]));
         bar.appendChild(h('input', { type: 'search', class: 'tb-search', placeholder: t('Find someone'), value: view.q, 'aria-label': t('Find a player in the chain'), oninput: function (e) { view.q = e.target.value; paint(); } }));
         if (store.canEdit()) bar.appendChild(h('button', { type: 'button', class: 'btn btn-push tb-reroll', onclick: K.actions.newRound }, rounds.length ? t('New reroll') : t('Start the loop')));
-        help.textContent = store.canEdit() ? t('Drag a bubble to place it before or after a player (long press on a phone), or the handle to move a whole fragment. Click an arrow to set its reliability and source, or cut the link.') : t('Read-only view of the chain.');
+        help.textContent = store.canEdit() && view.scope === 'pick' ? t('Tap the first and the last player to move: everybody in between is selected. Then drag one of them (long press on a phone) to move the group.')
+          : store.canEdit() ? t('Drag a bubble to place it before or after a player (long press on a phone), or the handle to move a whole fragment. Click an arrow to set its reliability and source, or cut the link.') : t('Read-only view of the chain.');
         paint();
 
         function paint() {
           ui.clear(body);
+          drawPickBar();
           if (archived) body.appendChild(h('p', { class: 'banner' }, t('Archive: this round was replaced by a reroll. Alive and dead players are those of the time.')));
           var f = view.roundId ? L.fragments(st, view.roundId, view.mode) : { fragments: [], unplaced: st.players.filter(function (p) { return !L.deadSet(st).has(p.id); }).map(function (p) { return p.id; }) };
           var dead = view.roundId ? L.deadSet(st, view.roundId) : new Set();
@@ -170,11 +197,22 @@
                 store.canEdit() ? h('span', { class: 'grip', 'data-drag': 'fragment', 'data-frag': String(fi), title: t('Drag to move the whole fragment'), role: 'img', 'aria-label': t('Fragment handle') }, K.icon('grip')) : null,
                 h('h3', {}, fr.closed ? t('Closed loop of {n}', { n: fr.ids.length }) : fr.ids.length > 1 ? t('Fragment of {n}', { n: fr.ids.length }) : t('Isolated'))), flow));
           });
+          var sel = view.scope === 'pick' && selection();   // the group shows, and so does its count above the chain
+          if (sel) sel.ids.forEach(function (id, i) { var b = body.querySelector('.bubble[data-id="' + id + '"]'); if (b) { b.classList.add('is-picked'); if (i === 0) b.classList.add('is-pick-first'); if (i === sel.ids.length - 1) b.classList.add('is-pick-last'); } });
+          drawPickBar(sel);
           var tray = h('div', { class: 'flow flow-tray' });
           trayIds.map(store.player).sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); }).forEach(function (p) { tray.appendChild(h('span', { class: 'step' }, bubble(p, dead.has(p.id), -1, 0))); });
           body.appendChild(h('section', { class: 'fragment fragment-tray', 'data-tray': '1' },
             h('header', { class: 'fragment-head' }, h('h3', {}, trayIds.length ? t('{n} players not placed yet', { n: trayIds.length }) : t('Tray: drop a player here to take them out of the chain'))), tray));
         }
+      }
+      function drawPickBar(sel) {
+        ui.clear(pickBar); pickBar.hidden = !sel;
+        if (!sel) return;
+        var first = store.player(sel.ids[0]), last = store.player(sel.ids[sel.ids.length - 1]);
+        pickBar.appendChild(h('span', {}, h('strong', {}, K.n(sel.ids.length, '{n} player selected', '{n} players selected')),
+          sel.ids.length > 1 ? ' · ' + first.name + ' → ' + last.name : ''));
+        pickBar.appendChild(h('button', { type: 'button', class: 'linkish small', onclick: function () { view.picked = []; refresh(); } }, t('Clear the selection')));
       }
       refresh();
       refresh.destroy = function () { gone = true; endDrag(false); };

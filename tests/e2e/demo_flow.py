@@ -52,6 +52,17 @@ with sync_playwright() as p:
     fi = pg.evaluate("[...document.querySelectorAll('.fragment[data-frag]')].findIndex(s => s.textContent.includes('GRANDET'))")
     drag(None, 'ROULETABILLE', 0.85, locator=pg.locator('.fragment[data-frag="%d"] .grip' % fi)); assert any(x.endswith('ROULETABILLE>LUPIN>DANTÈS>VALJEAN>GRANDET>COUPEAU>SCAPIN>BOVARY') for x in chain()), chain()
     drag('AROUET', 'SCAPIN', 0.15); assert any(x.endswith('COUPEAU>AROUET>SCAPIN>BOVARY') for x in chain()), chain()
+    # a selection: three players in a row, in the middle of a fragment, move together and nobody else does
+    pg.get_by_role('button', name='Une sélection').click()
+    pg.locator('.bubble', has_text='DANTÈS').click(); pg.locator('.bubble', has_text='GRANDET').click(); pg.wait_for_timeout(100)
+    assert pg.locator('dialog[open]').count() == 0, 'a tap selects, it does not open the sheet'
+    expect(pg.locator('.pick-bar')).to_contain_text('3 joueurs sélectionnés'); assert pg.locator('.bubble.is-picked').count() == 3
+    drag('VALJEAN', 'BOVARY', 0.85); c = chain()
+    assert any('LUPIN>COUPEAU>AROUET>SCAPIN>BOVARY>DANTÈS>VALJEAN>GRANDET' in x for x in c), c
+    assert pg.locator('.pick-bar').is_hidden() and pg.locator('.bubble.is-picked').count() == 0, 'moved: the selection is cleared'
+    pg.locator('.bubble', has_text='GRANDET').click(); pg.locator('.bubble', has_text='DANTÈS').click()   # either order
+    drag('DANTÈS', 'COUPEAU', 0.15); assert any('LUPIN>DANTÈS>VALJEAN>GRANDET>COUPEAU>AROUET>SCAPIN>BOVARY' in x for x in chain()), chain()
+    pg.get_by_role('button', name='Un joueur').click()
     pg.locator('.fragment', has_text='COUPEAU').locator('.thread').last.click()
     dlg = pg.locator('dialog[open]'); dlg.locator('select').first.select_option('probable'); dlg.get_by_role('button', name='Enregistrer').click(); pg.wait_for_timeout(150)
     assert pg.locator('.thread-probable').count() >= 1
