@@ -11,3 +11,7 @@ kill3r_exemple_autre_site/
 __pycache__/
 node_modules/
 .DS_Store
+
+# Presentation videos, made by tools/record_demo.py
+video/
+record_demo.py
