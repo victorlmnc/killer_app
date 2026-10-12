@@ -298,7 +298,8 @@
           root.appendChild(h('section', { class: 'panel panel-empty' }, h('h2', {}, t('No players yet')),
             h('p', { class: 'prose' }, t('Import the list of registered players from a spreadsheet or add them one by one.')),
             edit ? h('div', { class: 'actions actions-start' }, h('button', { type: 'button', class: 'btn btn-primary', onclick: K.actions.importDialog }, t('Import players')),
-              h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editPlayer(null); } }, t('Add a player'))) : null));
+              h('button', { type: 'button', class: 'btn', onclick: function () { K.actions.editPlayer(null); } }, t('Add a player')),
+              store.mode !== 'supabase' ? h('button', { type: 'button', class: 'btn', onclick: function () { store.resetDemo().then(function () { ui.toast(t('Demo game reloaded.')); }); } }, t('Reload the demo')) : null) : null));   // the demo, emptied: back in one tap
           return;
         }
         var official = Number(set.official_players) || 0, school = Number(set.school_total) || 0;
