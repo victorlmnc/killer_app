@@ -371,14 +371,18 @@
         ui.clear(box);
         var c = geo.center();
         map = Lf.map(box, { zoomControl: true, attributionControl: true }).setView([c.lat, c.lng], 13);
-        // the IGN's Plan (open data, free, no key, made to be reused), from the server that already finds the addresses;
-        // OpenStreetMap's volunteer servers block apps they find too busy. Past zoom 18 it turns into the land registry: enlarged instead
-        Lf.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-          { maxZoom: 19, maxNativeZoom: 18, attribution: '© <a href="https://www.ign.fr/" target="_blank" rel="noopener noreferrer">IGN</a> – Plan IGN' })
-          .on('tileerror', function (e) {   // the server sometimes misses one: asked again twice, a little later, rather than a blank square
+        /* The game's map: OpenStreetMap. The demo (shown around, filmed, run by the tests) uses the IGN's Plan instead
+           (open data, free, no key, from the server that already finds the addresses): OpenStreetMap's volunteer
+           servers block an app that asks them too often. Past zoom 18 the IGN turns into the land registry: enlarged instead. */
+        var tiles = store.mode === 'supabase'
+          ? Lf.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, referrerPolicy: 'strict-origin-when-cross-origin',
+              attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>' })
+          : Lf.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+              { maxZoom: 19, maxNativeZoom: 18, attribution: '© <a href="https://www.ign.fr/" target="_blank" rel="noopener noreferrer">IGN</a> – Plan IGN' });
+        tiles.on('tileerror', function (e) {   // the server sometimes misses one: asked again twice, a little later, rather than a blank square
             var img = e.tile, n = (img.retries || 0) + 1;
             if (n > 2 || gone) return;
-            img.retries = n; setTimeout(function () { img.src = img.src.replace(/&retry=\d+$/, '') + '&retry=' + n; }, 700 * n);
+            img.retries = n; setTimeout(function () { var u = img.src.replace(/[?&]retry=\d+$/, ''); img.src = u + (u.indexOf('?') < 0 ? '?' : '&') + 'retry=' + n; }, 700 * n);
           }).addTo(map);
         busLayer = Lf.layerGroup().addTo(map);
         layer = Lf.layerGroup().addTo(map);

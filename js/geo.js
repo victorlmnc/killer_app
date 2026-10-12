@@ -2,7 +2,7 @@
    - Geocoding: the French public geocoder (IGN Géoplateforme, successor of api-adresse.data.gouv.fr). Only the address
      text is sent, never the player's name. Coordinates are stored on the player (lat, lng). Any other geocoder that
      speaks the same GeoJSON "features" format can be plugged in through settings.geocoder_url.
-   - Map: Leaflet, loaded on first use of the Map tab; tiles from the IGN's Plan (data.geopf.fr). */
+   - Map: Leaflet, loaded on first use of the Map tab; OpenStreetMap tiles (the IGN's Plan in the demo). */
 (function () {
   'use strict';
   var K = (window.K = window.K || {});
