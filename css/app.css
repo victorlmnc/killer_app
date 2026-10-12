@@ -248,9 +248,9 @@ select:disabled { opacity: .6; }
 .member-av { grid-area: av; display: flex; } .member-name { grid-area: name; min-width: 0; } .member-mail { grid-area: mail; overflow-wrap: anywhere; min-width: 0; }
 .member-role { grid-area: role; justify-self: start; } .member-rm { grid-area: rm; }
 @media (max-width: 640px) {   /* phone: the address under the name, never cut */
-  .member-line { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "av name name" "av mail mail" "av role rm"; align-items: center; row-gap: .4rem; }
+  .member-line { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "av name rm" "av mail mail" "av role role"; align-items: center; row-gap: .4rem; }   /* the role menu on a line of its own: its text in full */
   .member-av { align-self: start; margin-top: .3rem; } .member-name { width: 100%; } .member-mail { overflow-wrap: break-word; word-break: normal; }
-  select.member-role { justify-self: stretch; min-width: 0; } .member-rm { min-height: 40px; padding: .3rem .9rem; font-size: .88rem; }
+  select.member-role { justify-self: stretch; width: 100%; min-width: 0; } .member-rm { min-height: 40px; padding: .3rem .9rem; font-size: .88rem; }
 }
 .tab-picks { display: flex; flex-wrap: wrap; gap: .1rem 1rem; padding: 0 0 .5rem 2.4rem; }
 
