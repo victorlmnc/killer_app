@@ -14,7 +14,7 @@ window.L = (function () {
   return {
     map: function (el) { state.groups = 0; var handlers = {}; state.map = { el: el, setView: function (c, z) { state.views.push([c, z]); state.zoom = z; return state.map; }, getZoom: function () { return state.zoom || 13; },
         fitBounds: function (b) { state.fits.push(b); }, closePopup: function () {}, invalidateSize: function () { state.resized = (state.resized || 0) + 1; }, on: function (ev, fn) { handlers[ev] = fn; }, fire: function (ev, e) { handlers[ev](e); }, remove: function () { state.removed = true; } }; return state.map; },
-    tileLayer: function (url, o) { state.tile = { url: url, o: o }; return { addTo: function () {} }; },
+    tileLayer: function (url, o) { state.tile = { url: url, o: o }; return { on: function () { return this; }, addTo: function () {} }; },
     layerGroup: function () { var first = !state.groups; state.groups = (state.groups || 0) + 1; var key = first ? 'bus' : 'markers'; state[key] = [];
       return { addTo: function () { return this; }, clearLayers: function () { state[key] = []; }, addLayer: function (m) { state[key].push(m); } }; },
     Control: { extend: function (proto) { return function () { this.addTo = function (map) { map.el.appendChild(proto.onAdd.call(this, map)); return this; }; }; } },
@@ -50,7 +50,7 @@ with sync_playwright() as p:
     s = S(); names = ', '.join(s['titles'])
     assert all(x['name'] in names for x in located) and not any(x['name'] in names for x in players if not x['address'])
     assert s['n'] < len(located), 'les résidences partagées doivent être regroupées'
-    assert s['tile']['url'].startswith('https://tile.openstreetmap.org') and 'OpenStreetMap' in s['tile']['o']['attribution'] and s['fits'] == 1
+    assert s['tile']['url'].startswith('https://data.geopf.fr/wmts') and 'IGN' in s['tile']['o']['attribution'] and s['fits'] == 1
     expect(pg.locator('.view-map > section.panel').first).to_contain_text(f'Joueurs localisés {len(located)}')
     print('· list row centres the map and opens the popup: name, address, sheet')
     assert pg.locator('.panel.is-folded').count() == 4                                 # on a phone the lists under the map start folded
